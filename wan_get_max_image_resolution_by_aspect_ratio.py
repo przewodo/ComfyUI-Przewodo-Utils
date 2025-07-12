@@ -1,7 +1,7 @@
 import math
 import sys
 import os
-class WanGetMaxImageResolutionByAspectRatio
+class WanGetMaxImageResolutionByAspectRatio:
     def __init__(self):
         pass
 
