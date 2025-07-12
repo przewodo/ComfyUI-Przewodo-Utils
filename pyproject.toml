@@ -1,0 +1,15 @@
+[project]
+name = "ComfyUI-Przewodo-Utils"
+description = "Utilities to make it easy to develop advanced Workflows without having to use a lot of nodes for simple stuff."
+version = "1.0.0"
+license = { text = "MIT License" }
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/przewodo/ComfyUI-Przewodo-Utils"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = "Przewodo"
+DisplayName = "ComfyUI-Przewodo-Utils"
+Icon = "https://raw.githubusercontent.com/przewodo/ComfyUI-Przewodo-Utils/main/images/icon_564.png"
