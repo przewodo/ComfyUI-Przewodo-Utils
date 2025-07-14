@@ -23,8 +23,8 @@ class SwapAnyCondition:
 
         return {"optional": optional, "required": required}
 
-    RETURN_TYPES = (any,)
-    RETURN_NAMES = ("*",)
+    RETURN_TYPES = (any, any,)
+    RETURN_NAMES = ("input_a", "input_b")
     FUNCTION = "run"
     CATEGORY = "PrzewodoUtils"
 
@@ -36,8 +36,8 @@ class SwapAnyCondition:
         **kwargs
     ):
         if conditioning is False:
-            return (input_b,)
+            return (input_b, input_a,)
         else:
-            return (input_a,)
+            return (input_a, input_b)
         
-        return (input_a,)
+        return (input_a, input_b)
