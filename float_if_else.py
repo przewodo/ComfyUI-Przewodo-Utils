@@ -5,11 +5,6 @@ from .core import any
 
 class FloatIfElse:
     @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        # Always trigger recalculation/redraw when comparison_type changes
-        return True
-
-    @classmethod
     def INPUT_TYPES(cls, **kwargs):
 
         optional = {
@@ -23,8 +18,8 @@ class FloatIfElse:
 
         return {"optional": optional, "required": required}
 
-    RETURN_TYPES = ("FLOAT")
-    RETURN_NAMES = ("Output")
+    RETURN_TYPES = ("FLOAT",)
+    RETURN_NAMES = ("FLOAT",)
     FUNCTION = "run"
     CATEGORY = "PrzewodoUtils"
 

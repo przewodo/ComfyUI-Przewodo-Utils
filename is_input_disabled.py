@@ -5,11 +5,7 @@ from .core import COMPARE_FUNCTIONS, any
 
 class IsInputDisabled:
     @classmethod
-    def IS_CHANGED(cls):
-        return True
-
-    @classmethod
-    def INPUT_TYPES(cls, **kwargs):
+    def INPUT_TYPES(cls):
 
         required = {
             "invert_output": ("BOOLEAN", {"default": False, "label": "Invert Output" }),
