@@ -49,7 +49,7 @@ class WanFirstLastFirstFrameToVideo:
             # Fix the middle frame (the "end" frame)
             middle = length // 2
             image[middle:middle + end_image.shape[0]] = end_image
-            mask[:, :, middle:middle + end_image.shape[0]] = 0.0
+            mask[:, :, middle:middle + end_image.shape[0] + 3] = 0.0
 
             # Fix last frame (cycle closure)
             image[-start_image.shape[0]:] = start_image
