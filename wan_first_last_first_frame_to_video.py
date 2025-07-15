@@ -6,7 +6,7 @@ import comfy.utils
 import comfy.latent_formats
 import comfy.clip_vision
 
-class WanFirstLastFrameToVideo:
+class WanFirstLastFirstFrameToVideo:
     @classmethod
     def INPUT_TYPES(s):
         return {"required": {"positive": ("CONDITIONING", ),
@@ -104,7 +104,7 @@ class WanFirstLastFrameToVideo:
 
         elif (clip_vision_start_image is not None) and (clip_vision_end_image is None):
             clip_vision_output = clip_vision_start_image
-            
+
         elif (clip_vision_start_image is None) and (clip_vision_end_image is not None):
             clip_vision_output = clip_vision_end_image
 

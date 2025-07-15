@@ -20,7 +20,7 @@ NODE_CLASS_MAPPINGS = {
     "przewodo SwapAnyCondition": SwapAnyCondition,
     "przewodo SwapAnyComparison": SwapAnyComparison,
     "przewodo SwapImageComparison": SwapImageComparison,
-    "przewodo WanFirstLastFrameToVideo": WanFirstLastFrameToVideo,
+    "przewodo WanFirstLastFirstFrameToVideo": WanFirstLastFirstFrameToVideo,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -31,5 +31,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "przewodo SwapAnyCondition": "Swap any Two values in a condition",
     "przewodo SwapAnyComparison": "Swap any Two values in a comparison",
     "przewodo SwapImageComparison": "Swap Two Images in a comparison",
-    "przewodo WanFirstLastFrameToVideo": "WanFirstLastFrameToVideo",
+    "przewodo WanFirstLastFirstFrameToVideo": "WanFirstLastFirstFrameToVideo",
 }
