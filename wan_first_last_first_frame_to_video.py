@@ -42,23 +42,26 @@ class WanFirstLastFirstFrameToVideo:
         mask = torch.ones((1, 1, latent.shape[2] * 4, latent.shape[-2], latent.shape[-1]))
 
         if (start_image is not None) and (end_image is not None):
-            half = length // 2
-            for i in range(half):
-                alpha = i / max(half - 1, 1)
-                image[i] = (1 - alpha) * start_image + alpha * end_image
-            for i in range(half, length):
-                alpha = (i - half) / max(length - half - 1, 1)
-                image[i] = (1 - alpha) * end_image + alpha * start_image
             # Fix first frame
-            mask[:, :, :1 + 3] = 0.0
+            image[:start_image.shape[0]] = start_image
+            mask[:, :, :start_image.shape[0] + 3] = 0.0
+
             # Fix the middle frame (the "end" frame)
             middle = length // 2
-            mask[:, :, middle:middle + 1] = 0.0
+            image[middle:middle + end_image.shape[0]] = end_image
+            mask[:, :, middle:middle + end_image.shape[0]] = 0.0
+
             # Fix last frame (cycle closure)
-            mask[:, :, -1:] = 0.0        
-        elif (start_image is not None) and end_image is None:
-                image[:start_image.shape[0]] = start_image
-                mask[:, :, :start_image.shape[0] + 3] = 0.0
+            image[-start_image.shape[0]:] = start_image
+            mask[:, :, -start_image.shape[0]:] = 0.0
+
+        elif (start_image is not None) and (end_image is None):
+            image[:start_image.shape[0]] = start_image
+            mask[:, :, :start_image.shape[0] + 3] = 0.0
+
+        elif (start_image is None) and (end_image is not None):
+            image[-end_image.shape[0]:] = end_image
+            mask[:, :, -end_image.shape[0]:] = 0.0
 
 #        if start_image is not None:
 #            image[:start_image.shape[0]] = start_image
