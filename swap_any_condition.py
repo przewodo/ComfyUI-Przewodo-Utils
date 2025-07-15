@@ -5,16 +5,11 @@ from .core import any
 
 class SwapAnyCondition:
     @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        # Always trigger recalculation/redraw when comparison_type changes
-        return True
-
-    @classmethod
-    def INPUT_TYPES(cls, **kwargs):
+    def INPUT_TYPES(cls):
 
         optional = {
-            "input_a": (any),
-            "input_b": (any),
+            "input_a": (any, {"default": None}),
+            "input_b": (any, {"default": None}),
         }
 
         required = {
@@ -28,16 +23,8 @@ class SwapAnyCondition:
     FUNCTION = "run"
     CATEGORY = "PrzewodoUtils"
 
-    def run(
-        self,
-        input_a = None,
-        input_b = None,
-        conditioning=True,
-        **kwargs
-    ):
+    def run(self, input_a = None, input_b = None, conditioning=True):
         if conditioning is False:
             return (input_b, input_a,)
         else:
             return (input_a, input_b)
-        
-        return (input_a, input_b)
