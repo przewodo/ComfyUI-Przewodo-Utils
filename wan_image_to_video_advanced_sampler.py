@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import nodes
 import node_helpers
 import torch
@@ -10,22 +11,22 @@ class WanImageToVideoAdvancedSampler:
     @classmethod
     def INPUT_TYPES(s):
         return {
-            "required": {
-                "positive": 
-                    ("CONDITIONING", ),
-                    "negative": ("CONDITIONING", ),
-                    "vae": ("VAE", ),
-                    "width": ("INT", {"default": 832, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 16}),
-                    "height": ("INT", {"default": 480, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 16}),
-                    "length": ("INT", {"default": 81, "min": 1, "max": nodes.MAX_RESOLUTION, "step": 4}),
-                    "batch_size": ("INT", {"default": 1, "min": 1, "max": 4096}),
-                },
-                "optional": {
-                    "clip_vision_start_image": ("CLIP_VISION_OUTPUT", ),
-                    "clip_vision_end_image": ("CLIP_VISION_OUTPUT", ),
-                    "start_image": ("IMAGE", ),
-                    "end_image": ("IMAGE", ),
-                }}
+            "required": OrderedDict([
+                ("positive", ("CONDITIONING", )),
+                ("negative", ("CONDITIONING", )),
+                ("vae", ("VAE", )),
+                ("width", ("INT", {"default": 832, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 16})),
+                ("height", ("INT", {"default": 480, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 16})),
+                ("length", ("INT", {"default": 81, "min": 1, "max": nodes.MAX_RESOLUTION, "step": 4})),
+                ("batch_size", ("INT", {"default": 1, "min": 1, "max": 4096})),
+            ]),
+            "optional": OrderedDict([
+                ("clip_vision_start_image", ("CLIP_VISION_OUTPUT", )),
+                ("clip_vision_end_image", ("CLIP_VISION_OUTPUT", )),
+                ("start_image", ("IMAGE", )),
+                ("end_image", ("IMAGE", )),
+            ])
+        }
 
     RETURN_TYPES = ("CONDITIONING", "CONDITIONING", "LATENT")
     RETURN_NAMES = ("positive", "negative", "latent")
