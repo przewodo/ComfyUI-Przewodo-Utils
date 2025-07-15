@@ -7,6 +7,7 @@ try:
     from .swap_image_comparison import *
     from .wan_get_max_image_resolution_by_aspect_ratio import *
     from .wan_first_last_first_frame_to_video import *
+    from .wan_image_to_video_advanced_sampler import *
     
 except ImportError:
     print("\033[Przewodo Utils: \033[92mFailed to load Essential nodes\033[0m")
@@ -21,6 +22,7 @@ NODE_CLASS_MAPPINGS = {
     "przewodo SwapAnyComparison": SwapAnyComparison,
     "przewodo SwapImageComparison": SwapImageComparison,
     "przewodo WanFirstLastFirstFrameToVideo": WanFirstLastFirstFrameToVideo,
+    "przewodo WanImageToVideoAdvancedSampler": WanImageToVideoAdvancedSampler,    
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -32,4 +34,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "przewodo SwapAnyComparison": "Swap any Two values in a comparison",
     "przewodo SwapImageComparison": "Swap Two Images in a comparison",
     "przewodo WanFirstLastFirstFrameToVideo": "WanFirstLastFirstFrameToVideo",
+    "przewodo WanImageToVideoAdvancedSampler": "WanImageToVideoAdvancedSampler",    
 }

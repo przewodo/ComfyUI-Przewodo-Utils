@@ -20,7 +20,7 @@ class WanGetMaxImageResolutionByAspectRatio:
 
     FUNCTION = "run"
 
-    CATEGORY = "PrzewodoUtils"
+    CATEGORY = "PrzewodoUtils/Wan"
 
     def run(self, model_type, image, resolution_divisible_by):
         total_pixels = {

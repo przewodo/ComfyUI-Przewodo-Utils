@@ -6,30 +6,34 @@ import comfy.utils
 import comfy.latent_formats
 import comfy.clip_vision
 
-class WanFirstLastFirstFrameToVideo:
+class WanImageToVideoAdvancedSampler:
     @classmethod
     def INPUT_TYPES(s):
-        return {"required": {"positive": ("CONDITIONING", ),
-                             "negative": ("CONDITIONING", ),
-                             "vae": ("VAE", ),
-                             "width": ("INT", {"default": 832, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 16}),
-                             "height": ("INT", {"default": 480, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 16}),
-                             "length": ("INT", {"default": 81, "min": 1, "max": nodes.MAX_RESOLUTION, "step": 4}),
-                             "batch_size": ("INT", {"default": 1, "min": 1, "max": 4096}),
+        return {
+            "required": {
+                "positive": 
+                    ("CONDITIONING", ),
+                    "negative": ("CONDITIONING", ),
+                    "vae": ("VAE", ),
+                    "width": ("INT", {"default": 832, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 16}),
+                    "height": ("INT", {"default": 480, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 16}),
+                    "length": ("INT", {"default": 81, "min": 1, "max": nodes.MAX_RESOLUTION, "step": 4}),
+                    "batch_size": ("INT", {"default": 1, "min": 1, "max": 4096}),
                 },
-                "optional": {"clip_vision_start_image": ("CLIP_VISION_OUTPUT", ),
-                             "clip_vision_end_image": ("CLIP_VISION_OUTPUT", ),
-                             "start_image": ("IMAGE", ),
-                             "end_image": ("IMAGE", ),
+                "optional": {
+                    "clip_vision_start_image": ("CLIP_VISION_OUTPUT", ),
+                    "clip_vision_end_image": ("CLIP_VISION_OUTPUT", ),
+                    "start_image": ("IMAGE", ),
+                    "end_image": ("IMAGE", ),
                 }}
 
     RETURN_TYPES = ("CONDITIONING", "CONDITIONING", "LATENT")
     RETURN_NAMES = ("positive", "negative", "latent")
-    FUNCTION = "encode"
+    FUNCTION = "run"
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def encode(self, positive, negative, vae, width, height, length, batch_size, start_image=None, end_image=None, clip_vision_start_image=None, clip_vision_end_image=None):
+    def run(self, positive, negative, vae, width, height, length, batch_size, start_image=None, end_image=None, clip_vision_start_image=None, clip_vision_end_image=None):
         latent = torch.zeros([batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
 
         if start_image is not None:
