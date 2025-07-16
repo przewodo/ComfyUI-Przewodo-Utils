@@ -10,6 +10,7 @@ try:
     from .wan_image_to_video_advanced_sampler import *
     from .is_input_disabled import *
     from .float_if_else import *
+    from .has_input_value import *
     
 except ImportError:
     print("\033[Przewodo Utils: \033[92mFailed to load Essential nodes\033[0m")
@@ -27,6 +28,7 @@ NODE_CLASS_MAPPINGS = {
     "przewodo WanImageToVideoAdvancedSampler": WanImageToVideoAdvancedSampler,
     "przewodo IsInputDisabled": IsInputDisabled,
     "przewodo FloatIfElse": FloatIfElse,    
+    "przewodo HasInputvalue": HasInputvalue,    
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -41,4 +43,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "przewodo WanImageToVideoAdvancedSampler": "WanImageToVideoAdvancedSampler",    
     "przewodo IsInputDisabled": "IsInputDisabled",    
     "przewodo FloatIfElse": "FloatIfElse",    
+    "przewodo HasInputvalue": "HasInputvalue",    
 }
