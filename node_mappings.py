@@ -11,6 +11,7 @@ try:
     from .is_input_disabled import *
     from .float_if_else import *
     from .has_input_value import *
+    from .batch_images_from_path import *
     
 except ImportError:
     print("\033[Przewodo Utils: \033[92mFailed to load Essential nodes\033[0m")
@@ -29,6 +30,7 @@ NODE_CLASS_MAPPINGS = {
     "przewodo IsInputDisabled": IsInputDisabled,
     "przewodo FloatIfElse": FloatIfElse,    
     "przewodo HasInputvalue": HasInputvalue,    
+    "przewodo BatchImagesFromPath": BatchImagesFromPath,    
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -44,4 +46,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "przewodo IsInputDisabled": "IsInputDisabled",    
     "przewodo FloatIfElse": "FloatIfElse",    
     "przewodo HasInputvalue": "HasInputvalue",    
+    "przewodo BatchImagesFromPath": "BatchImagesFromPath",    
 }
