@@ -4,7 +4,6 @@ import glob
 from PIL import Image, ImageOps
 import numpy as np
 import folder_paths
-import comfy.utils
 
 class BatchImagesFromPath:
     @classmethod
@@ -24,6 +23,8 @@ class BatchImagesFromPath:
     RETURN_NAMES = ("image",)
     
     def run(self, path, pattern):
+        
+        path, _, _, _, _ = folder_paths.get_save_image_path("", path, 0, 0)
 
         print(path)
 
