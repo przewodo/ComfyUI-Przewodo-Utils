@@ -11,8 +11,8 @@ class BatchImagesFromPath:
     def INPUT_TYPES(self):
         return {
             "required": {
-                "path": ("STRING", {"default": '', "multiline": False}),
-                "pattern": ("STRING", {"default": '*.*', "multiline": False}),
+                "path": ("STRING", ("STRING", {"default": "",})),
+                "pattern": ("STRING", {"default": "",}),
             },
         }
 
@@ -24,7 +24,13 @@ class BatchImagesFromPath:
     RETURN_NAMES = ("image",)
     
     def run(self, path, pattern):
-        
+
+        print(path)
+
+        if os.path.isabs(path):
+            if not os.path.exists(path):
+                os.makedirs(path, exist_ok=True)
+
         if not os.path.exists(path):
             return (None, )
         
