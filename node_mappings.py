@@ -12,6 +12,7 @@ try:
     from .float_if_else import *
     from .has_input_value import *
     from .batch_images_from_path import *
+    from .append_to_any_list import *
     
 except ImportError:
     print("\033[Przewodo Utils: \033[92mFailed to load Essential nodes\033[0m")
@@ -30,7 +31,8 @@ NODE_CLASS_MAPPINGS = {
     "przewodo IsInputDisabled": IsInputDisabled,
     "przewodo FloatIfElse": FloatIfElse,    
     "przewodo HasInputvalue": HasInputvalue,    
-    "przewodo BatchImagesFromPath": BatchImagesFromPath,    
+    "przewodo BatchImagesFromPath": BatchImagesFromPath,
+    "przewodo AppendToAnyList": AppendToAnyList,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -43,8 +45,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "przewodo SwapImageComparison": "Swap Two Images in a comparison",
     "przewodo WanFirstLastFirstFrameToVideo": "WanFirstLastFirstFrameToVideo",
     "przewodo WanImageToVideoAdvancedSampler": "WanImageToVideoAdvancedSampler",    
-    "przewodo IsInputDisabled": "IsInputDisabled",    
-    "przewodo FloatIfElse": "FloatIfElse",    
-    "przewodo HasInputvalue": "HasInputvalue",    
-    "przewodo BatchImagesFromPath": "BatchImagesFromPath",    
+    "przewodo IsInputDisabled": "IsInputDisabled",
+    "przewodo FloatIfElse": "FloatIfElse",
+    "przewodo HasInputvalue": "HasInputvalue",
+    "przewodo BatchImagesFromPath": "BatchImagesFromPath",
+    "przewodo AppendToAnyList": "AppendToAnyList",
 }

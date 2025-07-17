@@ -48,7 +48,7 @@ class BatchImagesFromPath:
         return True
     
     def load_images(self, folder_path, pattern):
-        for file_name in glob.glob(os.path.join(glob.escape(folder_path), pattern), recursive=True):
+        for file_name in glob.glob(os.path.join(glob.escape(folder_path), pattern), recursive=False):
             abs_file_path = os.path.abspath(file_name)
             self.image_paths.append(abs_file_path)
 
