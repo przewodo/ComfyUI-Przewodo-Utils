@@ -80,8 +80,9 @@ class WanFirstLastFirstFrameToVideo:
             # New sequence: start → end → start
             states = torch.cat([start_hidden, end_hidden, start_hidden], dim=-2)
             
-            clip_vision_output = nodes.common_vision_conditioning({"vision_output": {"penultimate_hidden_states": states}})
-
+            clip_vision_output = comfy.clip_vision.Output()
+            clip_vision_output.penultimate_hidden_states = states
+            
         elif (clip_vision_start_image is not None) and (clip_vision_end_image is None):
             print("Running clipvision for start sequence")
             clip_vision_output = clip_vision_start_image
