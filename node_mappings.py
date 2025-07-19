@@ -13,6 +13,7 @@ try:
     from .has_input_value import *
     from .batch_images_from_path import *
     from .append_to_any_list import *
+    from .wan_model_type_selector import *
     
 except ImportError:
     print("\033[Przewodo Utils: \033[92mFailed to load Essential nodes\033[0m")
@@ -33,6 +34,7 @@ NODE_CLASS_MAPPINGS = {
     "przewodo HasInputvalue": HasInputvalue,    
     "przewodo BatchImagesFromPath": BatchImagesFromPath,
     "przewodo AppendToAnyList": AppendToAnyList,
+    "przewodo WanModelTypeSelector": WanModelTypeSelector,    
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -50,4 +52,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "przewodo HasInputvalue": "HasInputvalue",
     "przewodo BatchImagesFromPath": "BatchImagesFromPath",
     "przewodo AppendToAnyList": "AppendToAnyList",
+    "przewodo WanModelTypeSelector": "WanModelTypeSelector",
 }

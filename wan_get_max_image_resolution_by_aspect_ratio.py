@@ -1,6 +1,7 @@
 import math
 import sys
 import os
+from .core import *
 class WanGetMaxImageResolutionByAspectRatio:
     def __init__(self):
         pass
@@ -9,30 +10,24 @@ class WanGetMaxImageResolutionByAspectRatio:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model_type": (["Wan 480p","Wan 720p"],),
+                "model_type": (WAN_MODELS,),
                 "image": ("IMAGE",)
             }
         }
 
-    RETURN_TYPES = ("INT","INT",)
-    RETURN_NAMES = ("Width","Height",)
+    RETURN_TYPES = ("INT", "INT",)
+    RETURN_NAMES = ("Width", "Height",)
 
     FUNCTION = "run"
 
     CATEGORY = "PrzewodoUtils/Wan"
 
     def run(self, model_type, image):
-        # Define per-model target largest side and max pixel count
-        config = {
-            'Wan 480p': {'max_side': 832, 'max_pixels': 832 * 480},
-            'Wan 720p': {'max_side': 1280, 'max_pixels': 1280 * 720}
-        }
-
-        if model_type not in config:
+        if model_type not in WAN_MODELS_CONFIG:
             raise ValueError(f"Unknown model_type: {model_type}")
 
-        max_side = config[model_type]['max_side']
-        max_pixels = config[model_type]['max_pixels']
+        max_side = WAN_MODELS_CONFIG[model_type]['max_side']
+        max_pixels = WAN_MODELS_CONFIG[model_type]['max_pixels']
 
         width = image.shape[2]
         height = image.shape[1]
