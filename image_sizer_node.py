@@ -8,7 +8,7 @@ class ImageSizer:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model_type": (["SD","SDXL","Video 480p","Video 720p", "Flux Kontext"],),
+                "model_type": (["SD","SDXL","Video 480p","Video 720p", "Flux Kontext", "Flux 1D"],),
                 "aspect_ratio_width": ("INT",{
                     "default": 1,
                     "step":1,
@@ -36,7 +36,8 @@ class ImageSizer:
             'SDXL': 1024 * 1024,
             'Video 480p': 832 * 480,
             'Video 720p': 1280 * 720,
-            'Flux Kontext': 1024 * 1024
+            'Flux Kontext': 1024 * 1024,
+            'Flux 1D': 1536 * 1536
         }
         
         # Calculate the number of total pixels based on model type
