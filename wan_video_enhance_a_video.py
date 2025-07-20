@@ -25,11 +25,11 @@ class WanVideoEnhanceAVideo:
     CATEGORY = "PrzewodoUtils/Wan"
     EXPERIMENTAL = True
 
-    def enhance(self, model, weight, latent):
+    def enhance(self, model, weight, length):
         if weight == 0:
             return (model,)
         
-        num_frames = latent["samples"].shape[2]
+        num_frames = length
 
         print('Number of Frasmes: {num_frames}')
 
