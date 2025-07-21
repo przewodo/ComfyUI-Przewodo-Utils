@@ -16,6 +16,7 @@ try:
     from .wan_model_type_selector import *
     from .wan_video_enhance_a_video import WanVideoEnhanceAVideo
     from .debug_latent_shapes import *
+    from .wan_video_generation_mode_selector import *
     
 except ImportError:
     print("\033[Przewodo Utils: \033[92mFailed to load Essential nodes\033[0m")
@@ -39,6 +40,7 @@ NODE_CLASS_MAPPINGS = {
     "przewodo WanModelTypeSelector": WanModelTypeSelector,
     "przewodo WanVideoEnhanceAVideo": WanVideoEnhanceAVideo,
     "przewodo DebugLatentShapes": DebugLatentShapes,
+    "przewodo WanVideoGenerationModeSelector": WanVideoGenerationModeSelector,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -59,4 +61,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "przewodo WanModelTypeSelector": "WanModelTypeSelector",
     "przewodo WanVideoEnhanceAVideo": "WanVideoEnhanceAVideo",
     "przewodo DebugLatentShapes": "DebugLatentShapes",
+    "przewodo WanVideoGenerationModeSelector": "WanVideoGenerationModeSelector",
 }

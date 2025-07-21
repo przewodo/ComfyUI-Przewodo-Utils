@@ -1,28 +1,20 @@
-import math
-import sys
-import os
 from .core import COMPARE_FUNCTIONS, any
 
 class SwapImageComparison:
     @classmethod
-    def IS_CHANGED(cls, comparison_type=None, **kwargs):
-        # Always trigger recalculation/redraw when comparison_type changes
-        return True
-
-    @classmethod
-    def INPUT_TYPES(cls, **kwargs):
+    def INPUT_TYPES(cls):
 
         compare_functions = list(COMPARE_FUNCTIONS.keys())
 
         optional = {
-            "input_a": ("IMAGE"),
-            "input_b": ("IMAGE"),
+            "input_a": ("IMAGE",),
+            "input_b": ("IMAGE",),
         }
 
         required = {
             "comparison": (compare_functions, {"default": "a == b"}),
-            "value_a": (any),
-            "value_b": (any),
+            "value_a": (any,),
+            "value_b": (any,),
         }
 
         return {"optional": optional, "required": required}
