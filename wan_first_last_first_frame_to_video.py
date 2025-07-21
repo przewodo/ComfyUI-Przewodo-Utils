@@ -18,6 +18,7 @@ class WanFirstLastFirstFrameToVideo:
                 "height": ("INT", {"default": 480, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 16}),
                 "length": ("INT", {"default": 81, "min": 1, "max": nodes.MAX_RESOLUTION, "step": 4}),
                 "first_end_frame_shift": ("INT", {"default": 3, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1}),
+                "first_end_frame_denoise": ("FLOAT", {"default": 0, "min": 0, "max": 1, "step": 0.0001}),
                 "batch_size": ("INT", {"default": 1, "min": 1, "max": 4096}),
             },
             "optional": {
@@ -34,7 +35,7 @@ class WanFirstLastFirstFrameToVideo:
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def encode(self, positive, negative, vae, width, height, length, batch_size, start_image=None, end_image=None, clip_vision_start_image=None, clip_vision_end_image=None, first_end_frame_shift=3):
+    def encode(self, positive, negative, vae, width, height, length, batch_size, start_image=None, end_image=None, clip_vision_start_image=None, clip_vision_end_image=None, first_end_frame_shift=3, first_end_frame_denoise=0):
         latent = torch.zeros([batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
 
         if start_image is not None:
@@ -49,24 +50,24 @@ class WanFirstLastFirstFrameToVideo:
         if (start_image is not None) and (end_image is not None):
             # Fix first frame
             image[:start_image.shape[0]] = start_image
-            mask[:, :, :start_image.shape[0] + first_end_frame_shift] = 0.0
+            mask[:, :, :start_image.shape[0] + first_end_frame_shift] = first_end_frame_denoise
 
             # Fix the middle frame (the "end" frame)
             middle = length // 2
             image[middle:middle + end_image.shape[0]] = end_image
-            mask[:, :, middle:middle + end_image.shape[0]] = 0.0
+            mask[:, :, middle:middle + end_image.shape[0]] = first_end_frame_denoise
 
             # Fix last frame (cycle closure)
             image[-start_image.shape[0]:] = start_image
-            mask[:, :, -start_image.shape[0] - first_end_frame_shift:] = 0.0
+            mask[:, :, -start_image.shape[0] - first_end_frame_shift:] = first_end_frame_denoise
 
         elif (start_image is not None) and (end_image is None):
             image[-start_image.shape[0]:] = start_image
-            mask[:, :, :start_image.shape[0] + first_end_frame_shift] = 0.0
+            mask[:, :, :start_image.shape[0] + first_end_frame_shift] = first_end_frame_denoise
 
         elif (start_image is None) and (end_image is not None):
             image[-end_image.shape[0]:] = end_image
-            mask[:, :, -end_image.shape[0] - first_end_frame_shift:] = 0.0
+            mask[:, :, -end_image.shape[0] - first_end_frame_shift:] = first_end_frame_denoise
 
         concat_latent_image = vae.encode(image[:, :, :, :3])
         mask = mask.view(1, mask.shape[2] // 4, 4, mask.shape[3], mask.shape[4]).transpose(1, 2)
