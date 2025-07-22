@@ -13,7 +13,7 @@ class SwapAnyCondition:
         }
 
         required = {
-            "conditioning": ("BOOLEAN", {"default": True}),
+            "invert_values": ("BOOLEAN", {"default": True}),
         }
 
         return {"optional": optional, "required": required}
@@ -23,8 +23,8 @@ class SwapAnyCondition:
     FUNCTION = "run"
     CATEGORY = "PrzewodoUtils"
 
-    def run(self, input_a = None, input_b = None, conditioning=True):
-        if conditioning is False:
+    def run(self, input_a = None, input_b = None, invert_values=True):
+        if invert_values is True:
             return (input_b, input_a,)
         else:
-            return (input_a, input_b)
+            return (input_a, input_b,)

@@ -36,6 +36,6 @@ class SwapImageComparison:
         if COMPARE_FUNCTIONS[comparison](value_a, value_b):
             return (input_b, input_a,)
         else:
-            return (input_a, input_b)
+            return (input_a, input_b,)
         
         return (input_a, input_b)
