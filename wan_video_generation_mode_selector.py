@@ -16,4 +16,4 @@ class WanVideoGenerationModeSelector:
     CATEGORY = "PrzewodoUtils/Wan"
 
     def encode(self, generation_mode=START_IMAGE):
-        return (generation_mode)
+        return (generation_mode,)

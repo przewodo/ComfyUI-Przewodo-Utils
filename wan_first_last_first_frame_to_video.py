@@ -54,8 +54,8 @@ class WanFirstLastFirstFrameToVideo:
         if start_image is not None or end_image is not None:
             if (generation_mode == START_TO_END_TO_START_IMAGE and start_image is not None and end_image is not None):
                 # Fix first frame
-                image[first_end_frame_shift:first_end_frame_shift + start_image.shape[0]] = start_image
-                mask[:, :, first_end_frame_shift:first_end_frame_shift + start_image.shape[0]] = 0
+                image[:start_image.shape[0] + first_end_frame_shift] = start_image
+                mask[:, :, :start_image.shape[0] + first_end_frame_shift] = 0
 
                 # Fix the middle frame (the "end" frame)
                 middle = length // 2
@@ -63,34 +63,36 @@ class WanFirstLastFirstFrameToVideo:
                 mask[:, :, middle:middle + end_image.shape[0]] = first_end_frame_denoise
 
                 # Fix last frame (cycle closure)
-                image[:-first_end_frame_shift - start_image.shape[0]:] = start_image
-                mask[:, :, :-first_end_frame_shift - start_image.shape[0]] = 0
+                image[-start_image.shape[0] - first_end_frame_shift:] = start_image
+                mask[:, :, -start_image.shape[0] - first_end_frame_shift:] = 0
 
             elif (generation_mode == START_END_IMAGE and start_image is not None and end_image is not None):
                 # Fix first frame
-                image[first_end_frame_shift:first_end_frame_shift + start_image.shape[0]] = start_image
-                mask[:, :, first_end_frame_shift:first_end_frame_shift + start_image.shape[0]] = 0
+                image[:start_image.shape[0] + first_end_frame_shift] = start_image
+                mask[:, :, :start_image.shape[0] + first_end_frame_shift] = 0
 
-                # Fix last frame
-                image[-first_end_frame_shift - end_image.shape[0]:] = end_image
-                mask[:, :, -first_end_frame_shift - end_image.shape[0]:] = 0
+                # Fix last frame (cycle closure)
+                image[-end_image.shape[0]:] = end_image
+                mask[:, :, -end_image.shape[0]:] = 0
 
             elif (generation_mode == END_TO_START_IMAGE and start_image is not None and end_image is not None):
                 # Fix first frame
-                image[first_end_frame_shift:first_end_frame_shift + end_image.shape[0]] = end_image
-                mask[:, :, first_end_frame_shift:first_end_frame_shift + end_image.shape[0]] = 0
+                image[:end_image.shape[0] + first_end_frame_shift] = end_image
+                mask[:, :, :end_image.shape[0] + first_end_frame_shift] = 0
 
-                # Fix last frame
-                image[-first_end_frame_shift - start_image.shape[0]:] = start_image
-                mask[:, :, -first_end_frame_shift - start_image.shape[0]:] = 0
+                # Fix last frame (cycle closure)
+                image[-start_image.shape[0]:] = start_image
+                mask[:, :, -start_image.shape[0]:] = 0
 
             elif (generation_mode == START_IMAGE and start_image is not None):
-                image[first_end_frame_shift:first_end_frame_shift + start_image.shape[0]] = start_image
-                mask[:, :, first_end_frame_shift:first_end_frame_shift + start_image.shape[0]] = 0
+                # Fix first frame
+                image[:start_image.shape[0] + first_end_frame_shift] = start_image
+                mask[:, :, :start_image.shape[0] + first_end_frame_shift] = 0
 
             elif (generation_mode == END_IMAGE and end_image is not None):
-                image[-first_end_frame_shift:-first_end_frame_shift - end_image.shape[0]:] = end_image
-                mask[:, :, -first_end_frame_shift:-first_end_frame_shift - end_image.shape[0]] = 0
+                # Fix last frame (cycle closure)
+                image[-end_image.shape[0]:] = end_image
+                mask[:, :, -end_image.shape[0]:] = 0
 
         concat_latent_image = vae.encode(image[:, :, :, :3])
         mask = mask.view(1, mask.shape[2] // 4, 4, mask.shape[3], mask.shape[4]).transpose(1, 2)
