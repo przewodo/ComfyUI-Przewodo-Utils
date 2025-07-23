@@ -6,7 +6,7 @@ import comfy.model_management
 import comfy.utils
 import comfy.latent_formats
 import comfy.clip_vision
-from .core import START_IMAGE, END_IMAGE, START_END_IMAGE, END_TO_START_IMAGE, START_TO_END_TO_START_IMAGE, WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE
+from .core import START_IMAGE, END_IMAGE, START_END_IMAGE, END_TO_START_IMAGE, START_TO_END_TO_START_IMAGE, WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, CYAN, RESET
 
 class WanFirstLastFirstFrameToVideo:
     @classmethod
@@ -40,22 +40,26 @@ class WanFirstLastFirstFrameToVideo:
     CATEGORY = "PrzewodoUtils/Wan"
 
     def encode(self, positive, negative, vae, width, height, length, batch_size, start_image=None, end_image=None, clip_vision_start_image=None, clip_vision_end_image=None, first_end_frame_shift=3, first_end_frame_denoise=0, fill_denoise=0.5, generation_mode=START_IMAGE):
-        latent = torch.zeros([batch_size, 16, ((length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
-
+        
         if start_image is not None:
             start_image = comfy.utils.common_upscale(start_image[:length].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
 
         if end_image is not None:
             end_image = comfy.utils.common_upscale(end_image[-length:].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
 
-        image = torch.ones((length, height, width, 3)) * fill_denoise
+        total_shift = first_end_frame_shift * 2
+
+        latent = torch.zeros([batch_size, 16, ((length + total_shift - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
+        image = torch.ones((length + total_shift, height, width, 3)) * fill_denoise
         mask = torch.ones((1, 1, latent.shape[2] * 4, latent.shape[-2], latent.shape[-1]))
 
         if start_image is not None or end_image is not None:
             if (generation_mode == START_TO_END_TO_START_IMAGE and start_image is not None and end_image is not None):
+                print(f"{RESET+CYAN}" f"Generating start -> end -> start frame sequence" f"{RESET}")
+
                 # Fix first frame
-                image[:start_image.shape[0] + first_end_frame_shift] = start_image
-                mask[:, :, :start_image.shape[0] + first_end_frame_shift] = 0
+                image[:start_image.shape[0] + first_end_frame_shift + 1] = start_image
+                mask[:, :, :start_image.shape[0] + first_end_frame_shift + 1] = 0
 
                 # Fix the middle frame (the "end" frame)
                 middle = length // 2
@@ -63,36 +67,40 @@ class WanFirstLastFirstFrameToVideo:
                 mask[:, :, middle:middle + end_image.shape[0]] = first_end_frame_denoise
 
                 # Fix last frame (cycle closure)
-                image[-start_image.shape[0] - first_end_frame_shift:] = start_image
-                mask[:, :, -start_image.shape[0] - first_end_frame_shift:] = 0
+                image[-start_image.shape[0] + first_end_frame_shift + 1:] = start_image
+                mask[:, :, -start_image.shape[0] + first_end_frame_shift + 1:] = 0
 
             elif (generation_mode == START_END_IMAGE and start_image is not None and end_image is not None):
+                print(f"{RESET+CYAN}" f"Generating start -> end frame sequence" f"{RESET}")
                 # Fix first frame
-                image[:start_image.shape[0] + first_end_frame_shift] = start_image
-                mask[:, :, :start_image.shape[0] + first_end_frame_shift] = 0
+                image[:start_image.shape[0] + first_end_frame_shift + 1] = start_image
+                mask[:, :, :start_image.shape[0] + first_end_frame_shift + 1] = 0
 
                 # Fix last frame (cycle closure)
-                image[-end_image.shape[0]:] = end_image
-                mask[:, :, -end_image.shape[0]:] = 0
+                image[-end_image.shape[0] + first_end_frame_shift + 1:] = end_image
+                mask[:, :, -end_image.shape[0] + first_end_frame_shift + 1:] = 0
 
             elif (generation_mode == END_TO_START_IMAGE and start_image is not None and end_image is not None):
+                print(f"{RESET+CYAN}" f"Generating end -> start frame sequence" f"{RESET}")
                 # Fix first frame
-                image[:end_image.shape[0] + first_end_frame_shift] = end_image
-                mask[:, :, :end_image.shape[0] + first_end_frame_shift] = 0
+                image[:end_image.shape[0] + first_end_frame_shift + 1] = end_image
+                mask[:, :, :end_image.shape[0] + first_end_frame_shift + 1] = 0
 
                 # Fix last frame (cycle closure)
-                image[-start_image.shape[0]:] = start_image
-                mask[:, :, -start_image.shape[0]:] = 0
+                image[-start_image.shape[0] + first_end_frame_shift + 1:] = start_image
+                mask[:, :, -start_image.shape[0] + first_end_frame_shift + 1:] = 0
 
             elif (generation_mode == START_IMAGE and start_image is not None):
+                print(f"{RESET+CYAN}" f"Generating start frame sequence" f"{RESET}")
                 # Fix first frame
-                image[:start_image.shape[0] + first_end_frame_shift] = start_image
-                mask[:, :, :start_image.shape[0] + first_end_frame_shift] = 0
+                image[:start_image.shape[0] + total_shift + 1] = start_image
+                mask[:, :, :start_image.shape[0] + total_shift + 1] = 0
 
             elif (generation_mode == END_IMAGE and end_image is not None):
+                print(f"{RESET+CYAN}" f"Generating end frame sequence" f"{RESET}")
                 # Fix last frame (cycle closure)
-                image[-end_image.shape[0]:] = end_image
-                mask[:, :, -end_image.shape[0]:] = 0
+                image[-end_image.shape[0] + total_shift + 1:] = end_image
+                mask[:, :, -end_image.shape[0] + total_shift + 1:] = 0
 
         concat_latent_image = vae.encode(image[:, :, :, :3])
         mask = mask.view(1, mask.shape[2] // 4, 4, mask.shape[3], mask.shape[4]).transpose(1, 2)
@@ -101,7 +109,7 @@ class WanFirstLastFirstFrameToVideo:
 
         if (clip_vision_start_image is not None or clip_vision_end_image is not None):
             if (generation_mode == START_TO_END_TO_START_IMAGE and clip_vision_start_image is not None and clip_vision_end_image is not None):
-                print(f"Running clipvision for start -> end -> start sequence")
+                print(f"{RESET+CYAN}" f"Running clipvision for start -> end -> start sequence" f"{RESET}")
                 start_hidden = clip_vision_start_image.penultimate_hidden_states
                 end_hidden = clip_vision_end_image.penultimate_hidden_states
 
@@ -112,7 +120,7 @@ class WanFirstLastFirstFrameToVideo:
                 clip_vision_output.penultimate_hidden_states = states
 
             elif (generation_mode == START_END_IMAGE and clip_vision_start_image is not None and clip_vision_end_image is not None):
-                print(f"Running clipvision for start -> end sequence")
+                print(f"{RESET+CYAN}" f"Running clipvision for start -> end sequence" f"{RESET}")
                 start_hidden = clip_vision_start_image.penultimate_hidden_states
                 end_hidden = clip_vision_end_image.penultimate_hidden_states
 
@@ -123,7 +131,7 @@ class WanFirstLastFirstFrameToVideo:
                 clip_vision_output.penultimate_hidden_states = states
 
             elif (generation_mode == END_TO_START_IMAGE and clip_vision_start_image is not None and clip_vision_end_image is not None):
-                print(f"Running clipvision for end -> start sequence")
+                print(f"{RESET+CYAN}" f"Running clipvision for end -> start sequence" f"{RESET}")
                 start_hidden = clip_vision_start_image.penultimate_hidden_states
                 end_hidden = clip_vision_end_image.penultimate_hidden_states
 
@@ -134,11 +142,11 @@ class WanFirstLastFirstFrameToVideo:
                 clip_vision_output.penultimate_hidden_states = states
 
             elif (generation_mode == START_IMAGE and clip_vision_start_image is not None):
-                print("Running clipvision for start sequence")
+                print(f"{RESET+CYAN}" f"Running clipvision for start sequence" f"{RESET}")
                 clip_vision_output = clip_vision_start_image
 
             elif (generation_mode == END_IMAGE and clip_vision_end_image is not None):
-                print("Running clipvision for end sequence")
+                print(f"{RESET+CYAN}" f"Running clipvision for end sequence" f"{RESET}")
                 clip_vision_output = clip_vision_end_image
 
             if clip_vision_output is not None:
