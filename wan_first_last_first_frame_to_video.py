@@ -67,15 +67,15 @@ class WanFirstLastFirstFrameToVideo:
         if start_image is not None or end_image is not None:
             start_shift = (total_shift // 2) + 1 if first_end_frame_shift != 0 else 0
             end_shift = (total_shift // 2) + 1 if first_end_frame_shift != 0 else 0
-            middle_start = (total_length // 2) - (start_shift // 2) if first_end_frame_shift != 0 else (total_length // 2) - 2
-            middle_end = (total_length // 2) + (end_shift // 2) if first_end_frame_shift != 0 else (total_length // 2) + 2
+            middle_start = (total_length // 2) - ((total_length // 3) // 2)
+            middle_end = (total_length // 2) + ((total_length // 3) // 2)
 
             if (generation_mode == START_TO_END_TO_START_IMAGE and start_image is not None and end_image is not None):
                 output_to_terminal("Generating start -> end -> start frame sequence")
 
                 # Fix first section (start frames)
                 image[0:middle_start] = start_image
-                mask[:, :, 0:middle_start] = 0
+                mask[:, :, 0:middle_start] = first_end_frame_denoise
                 output_to_terminal(f"Start sequence: frames 0-{middle_start - 1} ({middle_start} frames)")
 
                 # Fix the middle frame (the "end" frame)
@@ -85,40 +85,56 @@ class WanFirstLastFirstFrameToVideo:
 
                 # Fix last section (return to start frames)
                 image[middle_end:total_length - middle_end] = start_image
-                mask[:, :, middle_end:total_length - middle_end] = 0
+                mask[:, :, middle_end:total_length - middle_end] = first_end_frame_denoise
                 output_to_terminal(f"End sequence: frames {middle_end}-{total_length - 1} ({total_length - middle_end} frames)")
 
             elif (generation_mode == START_END_IMAGE and start_image is not None and end_image is not None):
                 output_to_terminal("Generating start -> end frame sequence")
                 # Fix first frame
                 image[:start_image.shape[0]] = start_image
-                mask[:, :, :start_image.shape[0]] = 0
+                mask[:, :, :start_image.shape[0]] = first_end_frame_denoise
 
                 # Fix last frame (cycle closure)
                 image[-end_image.shape[0]:] = end_image
-                mask[:, :, -end_image.shape[0]:] = 0
+                mask[:, :, -end_image.shape[0]:] = first_end_frame_denoise
 
             elif (generation_mode == END_TO_START_IMAGE and start_image is not None and end_image is not None):
                 output_to_terminal("Generating end -> start frame sequence")
                 # Fix first frame
                 image[:end_image.shape[0]] = end_image
-                mask[:, :, :end_image.shape[0]] = 0
+                mask[:, :, :end_image.shape[0]] = first_end_frame_denoise
 
                 # Fix last frame (cycle closure)
                 image[-start_image.shape[0]:] = start_image
-                mask[:, :, -start_image.shape[0]:] = 0
+                mask[:, :, -start_image.shape[0]:] = first_end_frame_denoise
 
             elif (generation_mode == START_IMAGE and start_image is not None):
                 output_to_terminal("Generating start frame sequence")
                 # Fix first frame
                 image[:start_image.shape[0]] = start_image
-                mask[:, :, :start_image.shape[0]] = 0
+                mask[:, :, :start_image.shape[0]] = first_end_frame_denoise
 
             elif (generation_mode == END_IMAGE and end_image is not None):
                 output_to_terminal("Generating end frame sequence")
                 # Fix last frame (cycle closure)
                 image[-end_image.shape[0]:] = end_image
-                mask[:, :, -end_image.shape[0]:] = 0
+                mask[:, :, -end_image.shape[0]:] = first_end_frame_denoise
+
+            # Force the first frame to not be denoised
+            if first_end_frame_denoise > 0:
+                mask[:, :, start_shift-1:start_shift] = 0
+
+            # Force the middle frame to not be denoised
+            if first_end_frame_denoise > 0:
+                mask[:, :, (total_length // 2)-1:(total_length // 2)] = 0
+
+            # Force the last frame to not be denoised
+            if first_end_frame_denoise > 0:
+                mask[:, :, total_length - end_shift - 1:total_length - end_shift] = 0
+
+            output_to_terminal(f"First KeyFrame: {start_shift-1}-{start_shift} ({(start_shift) - (start_shift - 1)} frames)")
+            output_to_terminal(f"Middle KeyFrame: {(total_length // 2)-1}-{(total_length // 2)} ({(total_length // 2) - ((total_length // 2) - 1)} frames)")
+            output_to_terminal(f"End KeyFrame: {total_length - end_shift -1}-{total_length - end_shift} ({(total_length - end_shift) - (total_length - end_shift - 1)} frames)")
 
         concat_latent_image = vae.encode(image[:, :, :, :3])
         mask = mask.view(1, mask.shape[2] // 4, 4, mask.shape[3], mask.shape[4]).transpose(1, 2)

@@ -22,70 +22,44 @@ class WanVideoVaeDecode:
 
         out_images = None
         samples = latent["samples"]
+        out_images = vae.decode(samples)
+        if len(out_images.shape) == 5:
+            out_images = out_images.reshape(-1, out_images.shape[-3], out_images.shape[-2], out_images.shape[-1])
 
-        if (first_end_frame_shift == 0):
-            print(f"{RESET+CYAN}" f"Decoding without first_end_frame_shift" f"{RESET}")
-            out_images = vae.decode(samples)
-            if len(out_images.shape) == 5: #Combine batches
-                out_images = out_images.reshape(-1, out_images.shape[-3], out_images.shape[-2], out_images.shape[-1])
-            return (out_images,)
-        
         total_shift = (first_end_frame_shift * 4)
-        start_shift = 0 if first_end_frame_shift == 0 else (total_shift // 2)
-        end_shift = 0 if first_end_frame_shift == 0 else (total_shift // 2)
+        start_shift = (total_shift // 2)
+        end_shift = (total_shift // 2) + 1
 
         if (generation_mode == START_TO_END_TO_START_IMAGE):
             print(f"{RESET+CYAN}" f"Decoding start -> end -> start frame sequence" f"{RESET}")
-            # Remove first_end_frame_shift frames from beginning and end
-            if samples.shape[2] > total_shift and total_shift > 0:  # Ensure we don't remove more frames than available
-                new_samples = samples[:, :, start_shift:-end_shift, :, :]
-                new_latent = {"samples": new_samples}
-            else:
-                new_latent = latent  # Keep original if not enough frames to remove
-            out_images = vae.decode(new_latent["samples"])
+            # Remove first start_shift frames and last end_shift frames from decoded images
+            if out_images.shape[0] > (start_shift + end_shift) and (start_shift + end_shift) > 0:
+                out_images = out_images[start_shift:-end_shift]
 
         elif (generation_mode == START_END_IMAGE):
             print(f"{RESET+CYAN}" f"Decoding start -> end frame sequence" f"{RESET}")
-            # Remove first_end_frame_shift frames from beginning and end
-            if samples.shape[2] > total_shift and total_shift > 0:
-                new_samples = samples[:, :, start_shift:-end_shift, :, :]
-                new_latent = {"samples": new_samples}
-            else:
-                new_latent = latent
-            out_images = vae.decode(new_latent["samples"])
+            # Remove first start_shift frames and last end_shift frames from decoded images
+            if out_images.shape[0] > (start_shift + end_shift) and (start_shift + end_shift) > 0:
+                out_images = out_images[start_shift:-end_shift]
 
         elif (generation_mode == END_TO_START_IMAGE):
             print(f"{RESET+CYAN}" f"Decoding end -> start frame sequence" f"{RESET}")
-            # Remove first_end_frame_shift frames from beginning and end
-            if samples.shape[2] > total_shift and total_shift > 0:
-                new_samples = samples[:, :, start_shift:-end_shift, :, :]
-                new_latent = {"samples": new_samples}
-            else:
-                new_latent = latent
-                
-            out_images = vae.decode(new_latent["samples"])
+            # Remove first start_shift frames and last end_shift frames from decoded images
+            if out_images.shape[0] > (start_shift + end_shift) and (start_shift + end_shift) > 0:
+                out_images = out_images[start_shift:-end_shift]
 
         elif (generation_mode == START_IMAGE):
             print(f"{RESET+CYAN}" f"Decoding start frame sequence" f"{RESET}")
-            # Remove 2*first_end_frame_shift frames from beginning only
-            if samples.shape[2] > total_shift and total_shift > 0:
-                new_samples = samples[:, :, total_shift:, :, :]
-                new_latent = {"samples": new_samples}
-            else:
-                new_latent = latent
-            out_images = vae.decode(new_latent["samples"])
+            # Remove total_shift frames from beginning only
+            if out_images.shape[0] > (total_shift) and (total_shift) > 0:
+                out_images = out_images[total_shift:]
 
         elif (generation_mode == END_IMAGE):
             print(f"{RESET+CYAN}" f"Decoding end frame sequence" f"{RESET}")
-            # Remove 2*first_end_frame_shift frames from end only
-            if samples.shape[2] > total_shift and total_shift > 0:
-                new_samples = samples[:, :, :-total_shift, :, :]
-                new_latent = {"samples": new_samples}
-            else:
-                new_latent = latent
-            out_images = vae.decode(new_latent["samples"])
+            if out_images.shape[0] > (total_shift) and (total_shift) > 0:
+                out_images = out_images[:-total_shift]
 
-        if len(out_images.shape) == 5: #Combine batches
+        if len(out_images.shape) == 5:
             out_images = out_images.reshape(-1, out_images.shape[-3], out_images.shape[-2], out_images.shape[-1])
 
         return (out_images,)
