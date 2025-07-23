@@ -17,8 +17,6 @@ class WanVideoEnhanceAVideo:
                 "weight": ("FLOAT", {"default": 2.0, "min": 0.0, "max": 10.0, "step": 0.001, "tooltip": "Strength of the enhance effect"}),
                 "length": ("INT", {"tooltip": "Number of frames in the video", "default": 16, "min": 1, "max": 1000}),
                 "first_end_frame_shift": ("INT", {"default": 0, "min": 0, "max": 80, "step": 1}),
-                "width": ("INT",),
-                "height": ("INT",),
            }
         }
     
@@ -28,16 +26,14 @@ class WanVideoEnhanceAVideo:
     CATEGORY = "PrzewodoUtils/Wan"
     EXPERIMENTAL = True
 
-    def enhance(self, model, weight, length, first_end_frame_shift, width, height):
+    def enhance(self, model, weight, length, first_end_frame_shift):
         if weight == 0:
             return (model,)
         
         total_shift = (first_end_frame_shift * 4)
         total_length = length + total_shift
         
-        latent = torch.zeros([total_length, 16, ((total_length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
-       
-        num_frames = latent.shape[2]
+        num_frames = ((total_length - 1) // 4) + 1
 
         model_clone = model.clone()
         if 'transformer_options' not in model_clone.model_options:

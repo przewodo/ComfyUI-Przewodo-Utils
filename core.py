@@ -1,3 +1,4 @@
+from colorama import Fore, Style, init
 import math
 import sys
 import os
@@ -32,6 +33,17 @@ END_TO_START_IMAGE = "End to Start Image"
 START_TO_END_TO_START_IMAGE = "Start to End to Start Image"
 WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE = [START_IMAGE, END_IMAGE, START_END_IMAGE, END_TO_START_IMAGE, START_TO_END_TO_START_IMAGE]
 
-BLUE = "\033[1;34m"
-CYAN = "\033[36m"
-RESET = "\033[0m"
+BLACK = '\033[30m'
+RED = '\033[31m'
+GREEN = '\033[32m'
+YELLOW = '\033[33m'
+BLUE = '\033[34m'
+MAGENTA = '\033[35m'
+CYAN = '\033[36m'
+WHITE = '\033[37m'
+RESET = '\033[0m'
+
+def output_to_terminal(text: str):
+    print(f"{RESET+CYAN+text+RESET}")
+
+init()
