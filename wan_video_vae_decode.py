@@ -1,13 +1,5 @@
-from shapely import length
 import nodes
-import node_helpers
-import torch
-import comfy.model_management
-import comfy.utils
-import comfy.latent_formats
-import comfy.clip_vision
 from .core import START_IMAGE, END_IMAGE, START_END_IMAGE, END_TO_START_IMAGE, START_TO_END_TO_START_IMAGE, WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, CYAN, RESET
-
 class WanVideoVaeDecode:
     @classmethod
     def INPUT_TYPES(s):
@@ -32,13 +24,15 @@ class WanVideoVaeDecode:
         if (first_end_frame_shift == 0):
             print(f"{RESET+CYAN}" f"Decoding without first_end_frame_shift" f"{RESET}")
             out_images = vae.decode(latent["samples"])
+
+        total_shift = (first_end_frame_shift * 16)    
         
         if (generation_mode == START_TO_END_TO_START_IMAGE):
             print(f"{RESET+CYAN}" f"Decoding start -> end -> start frame sequence" f"{RESET}")
             # Remove first_end_frame_shift frames from beginning and end
             samples = latent["samples"]
-            if samples.shape[2] > 2 * first_end_frame_shift:  # Ensure we don't remove more frames than available
-                new_samples = samples[:, :, first_end_frame_shift:-first_end_frame_shift, :, :]
+            if samples.shape[2] > total_shift:  # Ensure we don't remove more frames than available
+                new_samples = samples[:, :, (total_shift // 2):-(total_shift // 2), :, :]
                 new_latent = {"samples": new_samples}
             else:
                 new_latent = latent  # Keep original if not enough frames to remove
@@ -48,8 +42,8 @@ class WanVideoVaeDecode:
             print(f"{RESET+CYAN}" f"Decoding start -> end frame sequence" f"{RESET}")
             # Remove first_end_frame_shift frames from beginning and end
             samples = latent["samples"]
-            if samples.shape[2] > 2 * first_end_frame_shift:
-                new_samples = samples[:, :, first_end_frame_shift:-first_end_frame_shift, :, :]
+            if samples.shape[2] > total_shift:
+                new_samples = samples[:, :, (total_shift // 2):-(total_shift // 2), :, :]
                 new_latent = {"samples": new_samples}
             else:
                 new_latent = latent
@@ -59,8 +53,8 @@ class WanVideoVaeDecode:
             print(f"{RESET+CYAN}" f"Decoding end -> start frame sequence" f"{RESET}")
             # Remove first_end_frame_shift frames from beginning and end
             samples = latent["samples"]
-            if samples.shape[2] > 2 * first_end_frame_shift:
-                new_samples = samples[:, :, first_end_frame_shift:-first_end_frame_shift, :, :]
+            if samples.shape[2] > total_shift:
+                new_samples = samples[:, :, (total_shift // 2):-(total_shift // 2), :, :]
                 new_latent = {"samples": new_samples}
             else:
                 new_latent = latent
@@ -70,7 +64,7 @@ class WanVideoVaeDecode:
             print(f"{RESET+CYAN}" f"Decoding start frame sequence" f"{RESET}")
             # Remove 2*first_end_frame_shift frames from beginning only
             samples = latent["samples"]
-            frames_to_remove = 2 * first_end_frame_shift
+            frames_to_remove = total_shift
             if samples.shape[2] > frames_to_remove:
                 new_samples = samples[:, :, frames_to_remove:, :, :]
                 new_latent = {"samples": new_samples}
@@ -82,7 +76,7 @@ class WanVideoVaeDecode:
             print(f"{RESET+CYAN}" f"Decoding end frame sequence" f"{RESET}")
             # Remove 2*first_end_frame_shift frames from end only
             samples = latent["samples"]
-            frames_to_remove = 2 * first_end_frame_shift
+            frames_to_remove = total_shift
             if samples.shape[2] > frames_to_remove:
                 new_samples = samples[:, :, :-frames_to_remove, :, :]
                 new_latent = {"samples": new_samples}

@@ -1,10 +1,8 @@
-from shapely import length
 import nodes
 import node_helpers
 import torch
 import comfy.model_management
 import comfy.utils
-import comfy.latent_formats
 import comfy.clip_vision
 from .core import START_IMAGE, END_IMAGE, START_END_IMAGE, END_TO_START_IMAGE, START_TO_END_TO_START_IMAGE, WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, CYAN, RESET
 
@@ -19,7 +17,7 @@ class WanFirstLastFirstFrameToVideo:
                 "width": ("INT", {"default": 832, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 16}),
                 "height": ("INT", {"default": 480, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 16}),
                 "length": ("INT", {"default": 81, "min": 1, "max": nodes.MAX_RESOLUTION, "step": 4}),
-                "first_end_frame_shift": ("INT", {"default": 3, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1}),
+                "first_end_frame_shift": ("INT", {"default": 0, "min": 0, "max": 80, "step": 1}),
                 "first_end_frame_denoise": ("FLOAT", {"default": 0, "min": 0, "max": 1, "step": 0.0001}),
                 "fill_denoise": ("FLOAT", {"default": 0.5, "min": 0, "max": 1, "step": 0.01}),
                 "generation_mode": (WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, {"default": START_IMAGE}),
@@ -41,16 +39,19 @@ class WanFirstLastFirstFrameToVideo:
 
     def encode(self, positive, negative, vae, width, height, length, batch_size, start_image=None, end_image=None, clip_vision_start_image=None, clip_vision_end_image=None, first_end_frame_shift=3, first_end_frame_denoise=0, fill_denoise=0.5, generation_mode=START_IMAGE):
         
-        total_shift = first_end_frame_shift * 2
-        
+        total_shift = (first_end_frame_shift * 4)
+        total_length = length + total_shift
+
+        print(f"{RESET+CYAN}" f"Generating {length} frames with a padding of {total_shift}. Total Frames: {total_length}" f"{RESET}")
+
         if start_image is not None:
-            start_image = comfy.utils.common_upscale(start_image[:length + total_shift].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+            start_image = comfy.utils.common_upscale(start_image[:total_length].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
 
         if end_image is not None:
-            end_image = comfy.utils.common_upscale(end_image[-length - total_shift:].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+            end_image = comfy.utils.common_upscale(end_image[-total_length:].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
 
-        latent = torch.zeros([batch_size, 16, ((length + total_shift - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
-        image = torch.ones((length + total_shift, height, width, 3)) * fill_denoise
+        latent = torch.zeros([batch_size, 16, ((total_length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
+        image = torch.ones((total_length, height, width, 3)) * fill_denoise
         mask = torch.ones((1, 1, latent.shape[2] * 4, latent.shape[-2], latent.shape[-1]))
 
         if start_image is not None or end_image is not None:
@@ -58,37 +59,37 @@ class WanFirstLastFirstFrameToVideo:
                 print(f"{RESET+CYAN}" f"Generating start -> end -> start frame sequence" f"{RESET}")
 
                 # Fix first frame
-                image[:start_image.shape[0] + first_end_frame_shift + 1] = start_image
-                mask[:, :, :start_image.shape[0] + first_end_frame_shift + 1] = 0
+                image[:start_image.shape[0] + (total_shift // 2) + 1] = start_image
+                mask[:, :, :start_image.shape[0] + (total_shift // 2) + 1] = 0
 
                 # Fix the middle frame (the "end" frame)
-                middle = length // 2
+                middle = total_length // 2
                 image[middle:middle + end_image.shape[0]] = end_image
                 mask[:, :, middle:middle + end_image.shape[0]] = first_end_frame_denoise
 
                 # Fix last frame (cycle closure)
-                image[-start_image.shape[0] + first_end_frame_shift + 1:] = start_image
-                mask[:, :, -start_image.shape[0] + first_end_frame_shift + 1:] = 0
+                image[-start_image.shape[0] + (total_shift // 2) + 1:] = start_image
+                mask[:, :, -start_image.shape[0] + (total_shift // 2) + 1:] = 0
 
             elif (generation_mode == START_END_IMAGE and start_image is not None and end_image is not None):
                 print(f"{RESET+CYAN}" f"Generating start -> end frame sequence" f"{RESET}")
                 # Fix first frame
-                image[:start_image.shape[0] + first_end_frame_shift + 1] = start_image
-                mask[:, :, :start_image.shape[0] + first_end_frame_shift + 1] = 0
+                image[:start_image.shape[0] + (total_shift // 2) + 1] = start_image
+                mask[:, :, :start_image.shape[0] + (total_shift // 2) + 1] = 0
 
                 # Fix last frame (cycle closure)
-                image[-end_image.shape[0] + first_end_frame_shift + 1:] = end_image
-                mask[:, :, -end_image.shape[0] + first_end_frame_shift + 1:] = 0
+                image[-end_image.shape[0] + (total_shift // 2) + 1:] = end_image
+                mask[:, :, -end_image.shape[0] + (total_shift // 2) + 1:] = 0
 
             elif (generation_mode == END_TO_START_IMAGE and start_image is not None and end_image is not None):
                 print(f"{RESET+CYAN}" f"Generating end -> start frame sequence" f"{RESET}")
                 # Fix first frame
-                image[:end_image.shape[0] + first_end_frame_shift + 1] = end_image
-                mask[:, :, :end_image.shape[0] + first_end_frame_shift + 1] = 0
+                image[:end_image.shape[0] + (total_shift // 2) + 1] = end_image
+                mask[:, :, :end_image.shape[0] + (total_shift // 2) + 1] = 0
 
                 # Fix last frame (cycle closure)
-                image[-start_image.shape[0] + first_end_frame_shift + 1:] = start_image
-                mask[:, :, -start_image.shape[0] + first_end_frame_shift + 1:] = 0
+                image[-start_image.shape[0] + (total_shift // 2) + 1:] = start_image
+                mask[:, :, -start_image.shape[0] + (total_shift // 2) + 1:] = 0
 
             elif (generation_mode == START_IMAGE and start_image is not None):
                 print(f"{RESET+CYAN}" f"Generating start frame sequence" f"{RESET}")
