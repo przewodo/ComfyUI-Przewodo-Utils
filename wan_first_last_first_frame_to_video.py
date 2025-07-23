@@ -41,13 +41,13 @@ class WanFirstLastFirstFrameToVideo:
 
     def encode(self, positive, negative, vae, width, height, length, batch_size, start_image=None, end_image=None, clip_vision_start_image=None, clip_vision_end_image=None, first_end_frame_shift=3, first_end_frame_denoise=0, fill_denoise=0.5, generation_mode=START_IMAGE):
         
+        total_shift = first_end_frame_shift * 2
+        
         if start_image is not None:
-            start_image = comfy.utils.common_upscale(start_image[:length].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+            start_image = comfy.utils.common_upscale(start_image[:length + total_shift].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
 
         if end_image is not None:
-            end_image = comfy.utils.common_upscale(end_image[-length:].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
-
-        total_shift = first_end_frame_shift * 2
+            end_image = comfy.utils.common_upscale(end_image[-length - total_shift:].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
 
         latent = torch.zeros([batch_size, 16, ((length + total_shift - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
         image = torch.ones((length + total_shift, height, width, 3)) * fill_denoise
