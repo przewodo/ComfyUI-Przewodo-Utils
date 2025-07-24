@@ -1,5 +1,6 @@
 import sys
 import os
+from comfy.ldm.wan import vae
 import nodes
 import node_helpers
 import torch
@@ -67,8 +68,8 @@ class WanFirstLastFirstFrameToVideo:
         if start_image is not None or end_image is not None:
             start_shift = (total_shift // 2) + 1 if first_end_frame_shift != 0 else 0
             end_shift = (total_shift // 2) + 1 if first_end_frame_shift != 0 else 0
-            middle_start = (total_length // 2) - ((total_length // 3) // 2)
-            middle_end = (total_length // 2) + ((total_length // 3) // 2)
+            middle_start = (total_length // 2) - ((total_length // 5) // 2)
+            middle_end = (total_length // 2) + ((total_length // 5) // 2)
 
             if (generation_mode == START_TO_END_TO_START_IMAGE and start_image is not None and end_image is not None):
                 output_to_terminal("Generating start -> end -> start frame sequence")
@@ -136,7 +137,8 @@ class WanFirstLastFirstFrameToVideo:
             output_to_terminal(f"Middle KeyFrame: {(total_length // 2)-1}-{(total_length // 2)} ({(total_length // 2) - ((total_length // 2) - 1)} frames)")
             output_to_terminal(f"End KeyFrame: {total_length - end_shift -1}-{total_length - end_shift} ({(total_length - end_shift) - (total_length - end_shift - 1)} frames)")
 
-        concat_latent_image = vae.encode(image[:, :, :, :3])
+        concat_latent_image = vae.encode_tiled(image[:,:,:,:3], 512, 512, 64, 64, 8)
+#        concat_latent_image = vae.encode(image[:, :, :, :3])
         mask = mask.view(1, mask.shape[2] // 4, 4, mask.shape[3], mask.shape[4]).transpose(1, 2)
         positive = node_helpers.conditioning_set_values(positive, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
         negative = node_helpers.conditioning_set_values(negative, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
