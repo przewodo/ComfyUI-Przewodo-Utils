@@ -1,7 +1,7 @@
 import math
 import sys
 import os
-from .core import COMPARE_FUNCTIONS, any
+from .core import COMPARE_FUNCTIONS, any_type
 
 class CompareNumbersToCombo:
     def __init__(self):
@@ -20,7 +20,7 @@ class CompareNumbersToCombo:
             }
         }
 
-    RETURN_TYPES = (any,)
+    RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("*",)
 
     FUNCTION = "run"

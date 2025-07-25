@@ -1,19 +1,19 @@
-from .core import any
+from .core import any_type
 
 class AppendToAnyList:
     @classmethod
     def INPUT_TYPES(self):
         return {
             "required": {
-                "any_list": (any,),
-                "any": (any,),
+                "any_list": (any_type,),
+                "any": (any_type,),
             },
         }
 
     FUNCTION = "run"
     CATEGORY = "PrzewodoUtils"
 
-    RETURN_TYPES = (any,)
+    RETURN_TYPES = (any_type,)
     OUTPUT_IS_LIST = (True,)
     INPUT_IS_LIST = (True, False)
     RETURN_NAMES = ("list",)

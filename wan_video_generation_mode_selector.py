@@ -1,4 +1,4 @@
-from .core import START_IMAGE, END_IMAGE, START_END_IMAGE, END_TO_START_IMAGE, START_TO_END_TO_START_IMAGE, WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, any
+from .core import *
 
 class WanVideoGenerationModeSelector:
     @classmethod
@@ -9,7 +9,7 @@ class WanVideoGenerationModeSelector:
             },
         }
 
-    RETURN_TYPES = (any,)
+    RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("Generation Mode",)
     FUNCTION = "encode"
 

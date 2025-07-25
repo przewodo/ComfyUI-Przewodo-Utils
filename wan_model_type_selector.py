@@ -10,7 +10,7 @@ class WanModelTypeSelector:
             },
         }
 
-    RETURN_TYPES = (any,)
+    RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("Model Type",)
     FUNCTION = "run"
 

@@ -1,7 +1,7 @@
 import math
 import sys
 import os
-from .core import COMPARE_FUNCTIONS, any
+from .core import COMPARE_FUNCTIONS, any_type
 
 class IsInputDisabled:
     @classmethod
@@ -12,7 +12,7 @@ class IsInputDisabled:
         }
 
         optional = {
-            "input": (any, {"default": None, "label": "Input", "optional": True}),
+            "input": (any_type, {"default": None, "label": "Input", "optional": True}),
         }
 
         return {"optional": optional, "required": required}

@@ -1,4 +1,4 @@
-from .core import any
+from .core import any_type
 from comfy.ldm.modules import attention as comfy_attention
 import logging
 import comfy.model_patcher
@@ -19,7 +19,7 @@ class DebugLatentShapes:
             },
         }
 
-    RETURN_TYPES = (any,)
+    RETURN_TYPES = (any_type,)
     RETURN_NAMES = ("*",)
     FUNCTION = "run"
 

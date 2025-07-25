@@ -1,14 +1,14 @@
 import math
 import sys
 import os
-from .core import any
+from .core import any_type
 
 class HasInputvalue:
     @classmethod
     def INPUT_TYPES(cls):
 
         optional = {
-            "input": (any, {"default": None, "label": "Input"}),
+            "input": (any_type, {"default": None, "label": "Input"}),
         }
 
         return {"optional": optional}

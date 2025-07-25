@@ -1,4 +1,4 @@
-from .core import COMPARE_FUNCTIONS, any
+from .core import COMPARE_FUNCTIONS, any_type
 
 class SwapAnyComparison:
     @classmethod
@@ -7,19 +7,19 @@ class SwapAnyComparison:
         compare_functions = list(COMPARE_FUNCTIONS.keys())
 
         optional = {
-            "input_a": (any,),
-            "input_b": (any,),
+            "input_a": (any_type,),
+            "input_b": (any_type,),
         }
 
         required = {
             "comparison": (compare_functions, {"default": "a == b"}),
-            "value_a": (any,),
-            "value_b": (any,),
+            "value_a": (any_type,),
+            "value_b": (any_type,),
         }
 
         return {"optional": optional, "required": required}
 
-    RETURN_TYPES = (any, any,)
+    RETURN_TYPES = (any_type, any_type,)
     RETURN_NAMES = ("input_a", "input_b")
     FUNCTION = "run"
     CATEGORY = "PrzewodoUtils"

@@ -1,4 +1,4 @@
-from .core import COMPARE_FUNCTIONS, any
+from .core import COMPARE_FUNCTIONS, any_type
 
 class SwapImageComparison:
     @classmethod
@@ -13,8 +13,8 @@ class SwapImageComparison:
 
         required = {
             "comparison": (compare_functions, {"default": "a == b"}),
-            "value_a": (any,),
-            "value_b": (any,),
+            "value_a": (any_type,),
+            "value_b": (any_type,),
         }
 
         return {"optional": optional, "required": required}

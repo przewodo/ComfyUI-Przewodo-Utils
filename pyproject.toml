@@ -3,7 +3,9 @@ name = "przewodo-utils"
 description = "Utilities to make it easy to develop advanced Workflows without having to use a lot of nodes for simple stuff."
 version = "1.0.4"
 license = { text = "MIT License" }
-dependencies = []
+dependencies = [
+    "teacache>=1.7.0"
+]
 
 [project.urls]
 Repository = "https://github.com/przewodo/ComfyUI-Przewodo-Utils"

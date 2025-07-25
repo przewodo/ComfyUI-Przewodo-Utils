@@ -1,7 +1,7 @@
 import math
 import sys
 import os
-from .core import any
+from .core import any_type
 
 class FloatIfElse:
     @classmethod

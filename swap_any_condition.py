@@ -1,15 +1,15 @@
 import math
 import sys
 import os
-from .core import any
+from .core import any_type
 
 class SwapAnyCondition:
     @classmethod
     def INPUT_TYPES(cls):
 
         optional = {
-            "input_a": (any, {"default": None}),
-            "input_b": (any, {"default": None}),
+            "input_a": (any_type, {"default": None}),
+            "input_b": (any_type, {"default": None}),
         }
 
         required = {
@@ -18,7 +18,7 @@ class SwapAnyCondition:
 
         return {"optional": optional, "required": required}
 
-    RETURN_TYPES = (any, any,)
+    RETURN_TYPES = (any_type, any_type,)
     RETURN_NAMES = ("input_a", "input_b")
     FUNCTION = "run"
     CATEGORY = "PrzewodoUtils"
