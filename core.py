@@ -2,6 +2,7 @@ from colorama import Fore, Style, init, just_fix_windows_console
 import math
 import sys
 import os
+import importlib.util
 
 # Initialize colorama with specific settings for ComfyUI
 # This ensures colors work even when stdout/stderr are redirected
@@ -284,5 +285,160 @@ def test_all_colors():
     print("If not, try setting FORCE_COLOR=1 environment variable.")
     print("="*60 + "\n")
 
+
+def import_nodes(paths, nodes):
+    """
+    Import custom nodes dynamically from ComfyUI custom_nodes directory.
+    
+    Args:
+        paths (list): Array of strings containing the path components for the custom node
+                     Example: ["teacache"] or ["comfyui-kjnodes", "nodes"] 
+        nodes (list): Array of strings containing the class names to import
+                     Example: ["TeaCache"] or ["SkipLayerGuidanceWanVideo", "UnetLoaderGGUF"]
+    
+    Returns:
+        dict: Dictionary mapping node class names to the imported classes (or None if failed)
+              Example: {"TeaCache": <class>, "SkipLayerGuidanceWanVideo": None}
+    """
+    result = {}
+    
+    try:
+        # Build the path to the custom node
+        custom_nodes_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "custom_nodes")
+        node_path = os.path.join(custom_nodes_path, *paths)
+        
+        # Determine the module file to import
+        module_file = None
+        package_name = None
+        is_package = False
+        
+        # Strategy 1: If the last path component is a .py file
+        if paths[-1].endswith('.py'):
+            module_file = node_path
+            package_name = ".".join(paths[:-1]) if len(paths) > 1 else None
+        # Strategy 2: If it's a directory, look for nodes.py
+        elif os.path.isdir(node_path):
+            module_file = os.path.join(node_path, "nodes.py")
+            package_name = ".".join(paths)
+            is_package = True
+        # Strategy 3: If it's a path component that should be a file
+        else:
+            # Try adding .py extension
+            module_file = node_path + ".py"
+            if not os.path.exists(module_file):
+                # Try looking for nodes.py in the directory
+                if os.path.isdir(os.path.dirname(node_path)):
+                    module_file = os.path.join(os.path.dirname(node_path), "nodes.py")
+                    package_name = ".".join(paths[:-1]) if len(paths) > 1 else None
+        
+        if not module_file or not os.path.exists(module_file):
+            # Try alternative locations for common custom node structures
+            alternatives = []
+            base_path = os.path.join(custom_nodes_path, paths[0])
+            
+            if os.path.isdir(base_path):
+                # Common file names to try
+                common_files = ["nodes.py", "__init__.py", f"{paths[0]}.py"]
+                for filename in common_files:
+                    alt_file = os.path.join(base_path, filename)
+                    if os.path.exists(alt_file):
+                        alternatives.append(alt_file)
+                        package_name = paths[0]
+                        is_package = True
+                        break
+            
+            if alternatives:
+                module_file = alternatives[0]
+            else:
+                raise ImportError(f"Module file not found. Tried: {module_file}, alternatives in {base_path}")
+        
+        # Create a unique module name to avoid conflicts
+        module_name = "_".join(paths).replace("-", "_").replace("/", "_").replace("", "_") + "_import"
+        
+        # For packages with relative imports, we need to set up the package structure
+        if is_package and package_name:
+            # First, make sure the package directory is in sys.path temporarily
+            package_dir = os.path.dirname(module_file)
+            if package_dir not in sys.path:
+                sys.path.insert(0, package_dir)
+                path_added = True
+            else:
+                path_added = False
+            
+            try:
+                # Import the package as a module with proper name
+                package_module_name = package_name.replace("-", "_")
+                
+                # Load the module with the package context
+                spec = importlib.util.spec_from_file_location(package_module_name, module_file, submodule_search_locations=[])
+                if spec is None:
+                    raise ImportError(f"Could not create module spec for {module_file}")
+                
+                module = importlib.util.module_from_spec(spec)
+                if module is None:
+                    raise ImportError(f"Could not create module from spec for {module_file}")
+                
+                # Set up the module as a package if it has relative imports
+                module.__package__ = package_module_name
+                module.__path__ = [package_dir]
+                
+                # Add the module to sys.modules before execution to handle relative imports
+                sys.modules[package_module_name] = module
+                
+                try:
+                    spec.loader.exec_module(module)
+                except Exception as e:
+                    # Clean up sys.modules on failure
+                    if package_module_name in sys.modules:
+                        del sys.modules[package_module_name]
+                    raise ImportError(f"Failed to execute module {module_file}: {e}")
+                
+            finally:
+                # Clean up sys.path
+                if path_added and package_dir in sys.path:
+                    sys.path.remove(package_dir)
+        else:
+            # Simple module import (no relative imports expected)
+            spec = importlib.util.spec_from_file_location(module_name, module_file)
+            if spec is None:
+                raise ImportError(f"Could not create module spec for {module_file}")
+            
+            module = importlib.util.module_from_spec(spec)
+            if module is None:
+                raise ImportError(f"Could not create module from spec for {module_file}")
+            
+            # Add the module to sys.modules temporarily
+            sys.modules[module_name] = module
+            
+            try:
+                spec.loader.exec_module(module)
+            except Exception as e:
+                # Clean up sys.modules on failure
+                if module_name in sys.modules:
+                    del sys.modules[module_name]
+                raise ImportError(f"Failed to execute module {module_file}: {e}")
+        
+        # Import the requested node classes
+        success_count = 0
+        for node_class in nodes:
+            if hasattr(module, node_class):
+                result[node_class] = getattr(module, node_class)
+                output_to_terminal_successful(f"{node_class} imported successfully from {'/'.join(paths)}!")
+                success_count += 1
+            else:
+                result[node_class] = None
+                output_to_terminal_error(f"Warning: {node_class} not found in {'/'.join(paths)}")
+        
+        # Clean up sys.modules after successful import (but keep the package if it's needed)
+        if not is_package and module_name in sys.modules:
+            del sys.modules[module_name]
+            
+    except (ImportError, AttributeError, OSError) as e:
+        # If import fails, set all nodes to None
+        for node_class in nodes:
+            result[node_class] = None
+        output_to_terminal_error(f"Warning: Failed to import from {'/'.join(paths)} ({e}). Please check installation.")
+    
+    return result
 # Re-initialize colorama at the end to ensure proper setup
 init(autoreset=True, convert=True, strip=False)

@@ -20,8 +20,8 @@ try:
     from .wan_video_vae_decode import *
     
 except ImportError:
-    print("\033[Przewodo Utils: \033[92mFailed to load Essential nodes\033[0m")
-
+    output_to_terminal_error("Failed to load Essential nodes")
+    raise ImportError("[Przewodo UTILS] Essential nodes could not be loaded. Please check your installation.")
 
 NODE_CLASS_MAPPINGS = {
     "przewodo CompareNumbersToCombo": CompareNumbersToCombo,
