@@ -84,10 +84,13 @@ class WanImageToVideoAdvancedSampler:
         output_image = None
         model = self.load_model(GGUF, Diffusor, Use_Model_Type, Diffusor_weight_dtype)
         output_to_terminal_successful("Loading VAE...")
-        vae = nodes.VAELoader().load_vae(vae)
+        vae, = nodes.VAELoader().load_vae(vae)
 
         output_to_terminal_successful("Loading CLIP...")
-        clip, = nodes.CLIPLoader().load_clip(clip_name=clip, type=clip_type, device=clip_device)
+        clip, = nodes.CLIPLoader().load_clip(clip, clip_type, clip_device)
+        clip_set_last_layer = nodes.CLIPSetLastLayer()
+        clip, = clip_set_last_layer.set_last_layer(clip, -1)  # Use all layers but truncate tokens
+
         tea_cache = None
         sage_attention = None
         slg_wanvideo = None
@@ -141,30 +144,29 @@ class WanImageToVideoAdvancedSampler:
 
     def postprocess(self, model, vae, clip, positive, negative, tea_cache, sage_attention, slg_wanvideo, model_shift):
         output_image = None
+        working_model = model.clone()
         k_sampler_high = nodes.KSamplerAdvanced()
-        positive_clip = nodes.CLIPTextEncode()
-        negative_clip = nodes.CLIPTextEncode()
+        text_encode = nodes.CLIPTextEncode()
         wan_image_to_video = WanFirstLastFirstFrameToVideo()
         wan_video_vae_decode = WanVideoVaeDecode()
-        working_model = model.clone()
         in_latent = None
         out_latent = None
 
-        output_to_terminal_successful("Postprocessing started...")
+        output_to_terminal_successful("Generation Started started...")
         output_to_terminal_successful("Encoding Positive CLIP text...")
-        temp_positive_clip, = positive_clip.encode_text(positive, clip)
+        temp_positive_clip, = text_encode.encode(clip, positive)
 
         output_to_terminal_successful("Encoding Negative CLIP text...")
-        temp_negative_clip, = negative_clip.encode_text(negative, clip)
+        temp_negative_clip, = text_encode.encode(clip, negative)
 
         output_to_terminal_successful("Wan Image to Video started...")
-        in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, 512, 512, (16 * 2) + 1, None, None, None, None, 0, 0, 1, 0.5, START_IMAGE)
+        temp_positive_clip, temp_negative_clip, in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, 512, 512, (16 * 2) + 1, None, None, None, None, 0, 0, 1, 0.5, START_IMAGE)
 
         output_to_terminal_successful("High KSampler started...")
-        out_latent, = k_sampler_high.sample(working_model, "enable", 123456789, 15, 1.2, "uni_pc", "simple", positive_clip, negative_clip, in_latent, 8, 1000, "enabled", 1)
+        out_latent, = k_sampler_high.sample(working_model, "enable", 123456789, 15, 1.2, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 8, 1000, "enabled", 1)
 
         output_to_terminal_successful("Vae Decode started...")
-        output_image = wan_image_to_video.decode(out_latent, vae, START_IMAGE)
+        output_image = wan_video_vae_decode.decode(out_latent, vae, 0, START_IMAGE)
 
         return output_image
    
