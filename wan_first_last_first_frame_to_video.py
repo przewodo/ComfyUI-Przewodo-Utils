@@ -56,10 +56,10 @@ class WanFirstLastFirstFrameToVideo:
         print(f"{RESET+CYAN}" f"Generating {length} frames with a padding of {total_shift}. Total Frames: {total_length}" f"{RESET}")
 
         if start_image is not None:
-            start_image = comfy.utils.common_upscale(start_image[:total_length].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+            start_image = comfy.utils.common_upscale(start_image[:total_length].movedim(-1, 1), width, height, "lanczos", "center").movedim(1, -1)
 
         if end_image is not None:
-            end_image = comfy.utils.common_upscale(end_image[-total_length:].movedim(-1, 1), width, height, "bilinear", "center").movedim(1, -1)
+            end_image = comfy.utils.common_upscale(end_image[-total_length:].movedim(-1, 1), width, height, "lanczos", "center").movedim(1, -1)
 
         latent = torch.zeros([batch_size, 16, ((total_length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
         image = torch.ones((total_length, height, width, 3)) * fill_denoise
@@ -138,7 +138,6 @@ class WanFirstLastFirstFrameToVideo:
             output_to_terminal(f"End KeyFrame: {total_length - end_shift -1}-{total_length - end_shift} ({(total_length - end_shift) - (total_length - end_shift - 1)} frames)")
 
         concat_latent_image = vae.encode_tiled(image[:,:,:,:3], 512, 512, 64, 64, 8)
-#        concat_latent_image = vae.encode(image[:, :, :, :3])
         mask = mask.view(1, mask.shape[2] // 4, 4, mask.shape[3], mask.shape[4]).transpose(1, 2)
         positive = node_helpers.conditioning_set_values(positive, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
         negative = node_helpers.conditioning_set_values(negative, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
@@ -177,7 +176,7 @@ class WanFirstLastFirstFrameToVideo:
             elif (generation_mode == END_TO_START_IMAGE and clip_vision_start_image is not None and clip_vision_end_image is not None):
                 output_to_terminal("Running clipvision for end -> start sequence")
                 start_hidden = clip_vision_start_image.penultimate_hidden_states
-                end_hidden = clip_vision_end_image.penultimate_hidden_states
+                end_hidden = clip_vision_end_image.penultimate_hidden_states 
 
                 # Strengthen CLIP vision influence
                 start_hidden = start_hidden * clip_vision_strength
@@ -191,13 +190,19 @@ class WanFirstLastFirstFrameToVideo:
 
             elif (generation_mode == START_IMAGE and clip_vision_start_image is not None):
                 output_to_terminal("Running clipvision for start sequence")
-                start_hidden = clip_vision_start_image.penultimate_hidden_states * clip_vision_strength
+                start_hidden = clip_vision_start_image.penultimate_hidden_states
+
+                start_hidden = start_hidden * clip_vision_strength
+
                 clip_vision_output = comfy.clip_vision.Output()
                 clip_vision_output.penultimate_hidden_states = start_hidden
 
             elif (generation_mode == END_IMAGE and clip_vision_end_image is not None):
                 output_to_terminal("Running clipvision for end sequence")
-                end_hidden = clip_vision_end_image.penultimate_hidden_states * clip_vision_strength
+                end_hidden = clip_vision_end_image.penultimate_hidden_states
+
+                end_hidden = end_hidden * clip_vision_strength
+
                 clip_vision_output = comfy.clip_vision.Output()
                 clip_vision_output.penultimate_hidden_states = end_hidden
 

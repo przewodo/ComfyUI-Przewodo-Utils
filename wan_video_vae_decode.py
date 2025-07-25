@@ -21,8 +21,6 @@ class WanVideoVaeDecode:
     def encode(self, latent, vae, first_end_frame_shift, generation_mode):
 
         out_images = self.vae_decode(vae, latent, 512, 64, 64, 8)
-#        samples = latent["samples"]
-#        out_images = vae.decode(samples)
 
         total_shift = (first_end_frame_shift * 4)
         start_shift = (total_shift // 2)
@@ -74,7 +72,7 @@ class WanVideoVaeDecode:
 
         return (out_images,)
     
-    def vae_decode(self, vae, samples, tile_size, overlap=64, temporal_size=64, temporal_overlap=8):
+    def vae_decode(self, vae, latent, tile_size, overlap=64, temporal_size=64, temporal_overlap=8):
         if tile_size < overlap * 4:
             overlap = tile_size // 4
         if temporal_size < temporal_overlap * 2:
@@ -88,7 +86,8 @@ class WanVideoVaeDecode:
             temporal_overlap = None
 
         compression = vae.spacial_compression_decode()
-        images = vae.decode_tiled(samples["samples"], tile_x=tile_size // compression, tile_y=tile_size // compression, overlap=overlap // compression, tile_t=temporal_size, overlap_t=temporal_overlap)
+        images = vae.decode_tiled(latent["samples"], tile_size // compression, tile_size // compression, overlap // compression, temporal_size, temporal_overlap)
+
         if len(images.shape) == 5: #Combine batches
             images = images.reshape(-1, images.shape[-3], images.shape[-2], images.shape[-1])
-        return (images,)    
+        return images    
