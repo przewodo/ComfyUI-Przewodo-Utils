@@ -2,31 +2,28 @@ from collections import OrderedDict
 from comfy_extras.nodes_model_advanced import ModelSamplingSD3
 import nodes
 import folder_paths
+import gc
 from .core import *
 from .wan_first_last_first_frame_to_video import WanFirstLastFirstFrameToVideo
 from .wan_video_vae_decode import WanVideoVaeDecode
 
 # Import external custom nodes using the centralized import function
 imported_nodes = {}
-
-# Import TeaCache from teacache custom node
 teacache_imports = import_nodes(["teacache"], ["TeaCache"])
-
-# Import SkipLayerGuidanceWanVideo from comfyui-kjnodes custom node
 kjnodes_imports = import_nodes(["comfyui-kjnodes", "nodes", "model_optimization_nodes"], ["SkipLayerGuidanceWanVideo", "PathchSageAttentionKJ"])
-
-# Import UnetLoaderGGUF from ComfyUI-GGUF custom node
 gguf_imports = import_nodes(["ComfyUI-GGUF"], ["UnetLoaderGGUF"])
-
+wanblockswap = import_nodes(["wanblockswap"], ["WanVideoBlockSwap"])
 
 imported_nodes.update(teacache_imports)
 imported_nodes.update(kjnodes_imports)
 imported_nodes.update(gguf_imports)
+imported_nodes.update(wanblockswap)
 
 TeaCache = imported_nodes.get("TeaCache")
 SkipLayerGuidanceWanVideo = imported_nodes.get("SkipLayerGuidanceWanVideo")
 UnetLoaderGGUF = imported_nodes.get("UnetLoaderGGUF")
 SageAttention = imported_nodes.get("PathchSageAttentionKJ")
+WanVideoBlockSwap = imported_nodes.get("WanVideoBlockSwap")
 
 class WanImageToVideoAdvancedSampler:
     @classmethod
@@ -95,6 +92,7 @@ class WanImageToVideoAdvancedSampler:
         sage_attention = None
         slg_wanvideo = None
         model_shift = None
+        block_swap = WanVideoBlockSwap()
 
         # Create TeaCache node if available
         if TeaCache is not None and use_tea_cache:
@@ -138,11 +136,13 @@ class WanImageToVideoAdvancedSampler:
             model_shift = None
             output_to_terminal_successful("Model Shift disabled")
 
-        output_image = self.postprocess(model, vae, clip, positive, negative, tea_cache, sage_attention, slg_wanvideo, model_shift)
+        output_image = self.postprocess(model, vae, clip, positive, negative, tea_cache, sage_attention, slg_wanvideo, model_shift, block_swap)
         
         return (output_image,)
 
-    def postprocess(self, model, vae, clip, positive, negative, tea_cache, sage_attention, slg_wanvideo, model_shift):
+    def postprocess(self, model, vae, clip, positive, negative, tea_cache, sage_attention, slg_wanvideo, model_shift, block_swap):
+        output_to_terminal_successful("Generation Started started...")
+
         output_image = None
         working_model = model.clone()
         k_sampler_high = nodes.KSamplerAdvanced()
@@ -152,7 +152,9 @@ class WanImageToVideoAdvancedSampler:
         in_latent = None
         out_latent = None
 
-        output_to_terminal_successful("Generation Started started...")
+        output_to_terminal_successful("Seetting block swap...")
+        working_model, = block_swap.set_callback(working_model, 35, True, True, True)
+
         output_to_terminal_successful("Encoding Positive CLIP text...")
         temp_positive_clip, = text_encode.encode(clip, positive)
 
@@ -162,7 +164,7 @@ class WanImageToVideoAdvancedSampler:
         output_to_terminal_successful("Wan Image to Video started...")
         temp_positive_clip, temp_negative_clip, in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, 512, 512, (16 * 2) + 1, None, None, None, None, 0, 0, 1, 0.5, START_IMAGE)
 
-        output_to_terminal_successful("High KSampler started...")
+        output_to_terminal_successful("High CFG KSampler started...")
         out_latent, = k_sampler_high.sample(working_model, "enable", 123456789, 15, 1.2, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 8, 1000, "enabled", 1)
 
         output_to_terminal_successful("Vae Decode started...")
