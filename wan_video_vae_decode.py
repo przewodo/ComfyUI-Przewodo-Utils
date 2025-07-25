@@ -14,11 +14,11 @@ class WanVideoVaeDecode:
 
     RETURN_TYPES = ("IMAGE",)
     RETURN_NAMES = ("IMAGE",)
-    FUNCTION = "encode"
+    FUNCTION = "decode"
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def encode(self, latent, vae, first_end_frame_shift, generation_mode):
+    def decode(self, latent, vae, first_end_frame_shift, generation_mode):
 
         out_images = self.vae_decode(vae, latent, 512, 64, 64, 8)
 

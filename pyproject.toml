@@ -5,7 +5,7 @@ version = "1.0.4"
 license = { text = "MIT License" }
 dependencies = [
     "teacache>=1.7.0",
-    "comfyui-kjnodes>=1.0.0"
+    "comfyui-kjnodes>=1.0.0",
     "comfyui-gguf>=1.0.0"
 ]
 
