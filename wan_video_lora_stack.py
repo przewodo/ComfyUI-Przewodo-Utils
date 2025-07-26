@@ -32,6 +32,6 @@ class WanVideoLoraStack:
         if (previous_lora is None):
             previous_lora = []
 
-        previous_lora.append({"name": lora_name, "strength_model": strength_model, "strength_clip": strength_clip})
+        previous_lora.append([lora_name, strength_model, strength_clip])
 
         return (previous_lora,)

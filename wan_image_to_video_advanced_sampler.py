@@ -82,10 +82,10 @@ class WanImageToVideoAdvancedSampler:
                 ("low_cfg", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01})),
                 ("total_steps", ("INT", {"default": 15, "min": 1, "max": 90, "step":1, "advanced": True,})),
                 ("total_steps_high_cfg", ("INT", {"default": 5, "min": 1, "max": 90, "step":1, "advanced": True,})),
-                ("causvid_lora", ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "control_after_generate": True})),
+                ("noise_seed", ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "control_after_generate": True})),
+                ("causvid_lora", (lora_names, {"default": NONE,})),
                 ("high_cfg_causvid_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step":0.01})),
                 ("low_cfg_causvid_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step":0.01})),
-                ("image_generation_mode", (lora_names, {"default": NONE})),                
                 ("use_TAEHV_preview", ("BOOLEAN", {"default": True, "advanced": True})),                
             ]),
             "optional": OrderedDict([
@@ -114,7 +114,7 @@ class WanImageToVideoAdvancedSampler:
             use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0,
             lora_stack=None, start_image=None, start_image_clip_vision_enabled=True,
             end_image=None, end_image_clip_vision_enabled=True, use_TAEHV_preview=True,
-            causvid_lora=0, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0):
+            causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0):
 
         #variables
         output_image = None
@@ -311,9 +311,9 @@ class WanImageToVideoAdvancedSampler:
             for lora_entry in lora_stack:
                 lora_count += 1
 
-                lora_name = lora_entry.name if lora_entry.name != NONE else None
-                model_strength = lora_entry.strength_model
-                clip_strength = lora_entry.strength_clip
+                lora_name = lora_entry[0] if lora_entry[0] != NONE else None
+                model_strength = lora_entry[1]
+                clip_strength = lora_entry[2]
 
                 if lora_name and lora_name != NONE:
                     output_to_terminal_successful(f"Applying LoRA {lora_count}/{len(lora_stack)}: {lora_name} (model: {model_strength}, clip: {clip_strength})")
@@ -325,7 +325,7 @@ class WanImageToVideoAdvancedSampler:
 
         if (ModelPatchTorchSettings is not None):
             output_to_terminal_successful("Applying Model Patch Torch Settings...")
-            working_model, ModelPatchTorchSettings.patch(working_model, True)
+            working_model, = ModelPatchTorchSettings.patch(working_model, True)
         else:
             output_to_terminal_error("Model Patch Torch Settings not available, skipping...")
 
