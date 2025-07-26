@@ -1,4 +1,5 @@
 import nodes
+import torch
 from .core import *
 class WanVideoVaeDecode:
     @classmethod
@@ -21,51 +22,51 @@ class WanVideoVaeDecode:
     def decode(self, latent, vae, first_end_frame_shift, generation_mode):
 
         out_images = self.vae_decode(vae, latent, 512, 64, 64, 8)
-
+        
         total_shift = (first_end_frame_shift * 4)
         start_shift = (total_shift // 2)
         end_shift = (total_shift // 2)
 
         if (generation_mode == START_TO_END_TO_START_IMAGE):
-            print(f"{RESET+CYAN}" f"Decoding start -> end -> start frame sequence" f"{RESET}")
+            output_to_terminal_successful("Decoding start -> end -> start frame sequence")
             # Remove first start_shift frames and last end_shift frames from decoded images
             if (start_shift + end_shift) > 0:
-                output_to_terminal(f"Removing first {start_shift} and last {end_shift + 1} frames")
+                output_to_terminal_successful(f"Removing first {start_shift} and last {end_shift + 1} frames")
                 out_images = out_images[start_shift:-end_shift - 1]
             else:
                 out_images = out_images[:-1]
 
         elif (generation_mode == START_END_IMAGE):
-            print(f"{RESET+CYAN}" f"Decoding start -> end frame sequence" f"{RESET}")
+            output_to_terminal_successful("Decoding start -> end frame sequence")
             # Remove first start_shift frames and last end_shift frames from decoded images
             if (start_shift + end_shift) > 0:
-                output_to_terminal(f"Removing first {start_shift} and last {end_shift + 1} frames")
+                output_to_terminal_successful(f"Removing first {start_shift} and last {end_shift + 1} frames")
                 out_images = out_images[start_shift:-end_shift - 1]
             else:
                 out_images = out_images[:-1]
 
         elif (generation_mode == END_TO_START_IMAGE):
-            print(f"{RESET+CYAN}" f"Decoding end -> start frame sequence" f"{RESET}")
+            output_to_terminal_successful("Decoding end -> start frame sequence")
             # Remove first start_shift frames and last end_shift frames from decoded images
             if (start_shift + end_shift) > 0:
-                output_to_terminal(f"Removing first {start_shift} and last {end_shift + 1} frames")
+                output_to_terminal_successful(f"Removing first {start_shift} and last {end_shift + 1} frames")
                 out_images = out_images[start_shift:-end_shift - 1]
             else:
                 out_images = out_images[:-1]
 
         elif (generation_mode == START_IMAGE):
-            print(f"{RESET+CYAN}" f"Decoding start frame sequence" f"{RESET}")
+            output_to_terminal_successful("Decoding start frame sequence")
             # Remove total_shift frames from beginning only
             if (total_shift) > 0:
-                output_to_terminal(f"Removing first {total_shift + 1} frames")
+                output_to_terminal_successful(f"Removing first {total_shift + 1} frames")
                 out_images = out_images[total_shift:-1]
             else:
                 out_images = out_images[:-1]
 
         elif (generation_mode == END_IMAGE):
-            print(f"{RESET+CYAN}" f"Decoding end frame sequence" f"{RESET}")
+            output_to_terminal_successful("Decoding end frame sequence")
             if (total_shift) > 0:
-                output_to_terminal(f"Removing last {total_shift + 1} frames")
+                output_to_terminal_successful(f"Removing last {total_shift + 1} frames")
                 out_images = out_images[:-total_shift - 1]
             else:
                 out_images = out_images[:-1]

@@ -1,18 +1,34 @@
 import os
 from collections import OrderedDict
 from comfy_extras.nodes_model_advanced import ModelSamplingSD3
+from comfy_extras.nodes_cfg import CFGZeroStar
 import nodes
 import folder_paths
 from .core import *
 from .wan_first_last_first_frame_to_video import WanFirstLastFirstFrameToVideo
 from .wan_video_vae_decode import WanVideoVaeDecode
 from .wan_get_max_image_resolution_by_aspect_ratio import WanGetMaxImageResolutionByAspectRatio
+from .wan_video_enhance_a_video import WanVideoEnhanceAVideo
+
+# Try to import optional dependencies for downloading
+try:
+    import requests
+    REQUESTS_AVAILABLE = True
+except ImportError:
+    REQUESTS_AVAILABLE = False
+
+try:
+    import urllib.request
+    import urllib.error
+    URLLIB_AVAILABLE = True
+except ImportError:
+    URLLIB_AVAILABLE = False
 
 # Import external custom nodes using the centralized import function
 imported_nodes = {}
 teacache_imports = import_nodes(["teacache"], ["TeaCache"])
 # Import nodes from different custom node packages
-kjnodes_imports = import_nodes(["comfyui-kjnodes"], ["SkipLayerGuidanceWanVideo", "PathchSageAttentionKJ", "ImageResizeKJv2", "ModelPatchTorchSettings"])
+kjnodes_imports = import_nodes(["comfyui-kjnodes"], ["SkipLayerGuidanceWanVideo", "PathchSageAttentionKJ", "ImageResizeKJv2", "ModelPatchTorchSettings", "ColorMatch"])
 gguf_imports = import_nodes(["ComfyUI-GGUF"], ["UnetLoaderGGUF"])
 wanblockswap = import_nodes(["wanblockswap"], ["WanVideoBlockSwap"])
 
@@ -28,6 +44,7 @@ SageAttention = imported_nodes.get("PathchSageAttentionKJ")
 WanVideoBlockSwap = imported_nodes.get("WanVideoBlockSwap")
 ImageResizeKJv2 = imported_nodes.get("ImageResizeKJv2")
 ModelPatchTorchSettings = imported_nodes.get("ModelPatchTorchSettings")
+ColorMatch = imported_nodes.get("ColorMatch")
 
 
 class WanImageToVideoAdvancedSampler:
@@ -146,7 +163,7 @@ class WanImageToVideoAdvancedSampler:
                 output_to_terminal_successful("SkipLayerGuidanceWanVideo disabled")
         else:
             tea_cache = None
-            output_to_terminal_error("TeaCache not available - continuing without caching optimization")
+            output_to_terminal_error("TeaCache disabled")
 
         if (SageAttention is not None) and use_sage_attention:
             if sage_attention_mode == "disabled":
@@ -157,7 +174,7 @@ class WanImageToVideoAdvancedSampler:
                 output_to_terminal_successful(f"SageAttention enabled with mode: {sage_attention_mode}")
         else:
             sage_attention = None
-            output_to_terminal_successful("SageAttention disabled")
+            output_to_terminal_error("SageAttention disabled")
 
         if (ModelSamplingSD3 is not None) and use_shift:
             model_shift = ModelSamplingSD3()
@@ -165,9 +182,9 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_successful(f"Model Shift enabled with shift: {shift}")
         else:
             model_shift = None
-            output_to_terminal_successful("Model Shift disabled")
+            output_to_terminal_error("Model Shift disabled")
 
-        output_image = self.postprocess(
+        output_image, = self.postprocess(
             model, 
             vae, 
             clip,
@@ -303,6 +320,9 @@ class WanImageToVideoAdvancedSampler:
         clip_vision_end_image = None
         total_frames = (total_video_seconds * 16) + 1
         lora_loader = nodes.LoraLoader()
+        wanVideoEnhanceAVideo = WanVideoEnhanceAVideo()
+        cfgZeroStar = CFGZeroStar()
+        colorMatch = ColorMatch();
 
         if (lora_stack is not None and len(lora_stack) > 0):
             output_to_terminal_successful("Loading Lora Stack...")
@@ -325,7 +345,7 @@ class WanImageToVideoAdvancedSampler:
 
         if (ModelPatchTorchSettings is not None):
             output_to_terminal_successful("Applying Model Patch Torch Settings...")
-            working_model, = ModelPatchTorchSettings.patch(working_model, True)
+            working_model, = ModelPatchTorchSettings().patch(working_model, True)
         else:
             output_to_terminal_error("Model Patch Torch Settings not available, skipping...")
 
@@ -410,6 +430,13 @@ class WanImageToVideoAdvancedSampler:
         else:
             output_to_terminal_error("Block swap disabled, skipping...")
 
+        output_to_terminal_successful("Applying Wan Video Enhance...")
+        working_model, = wanVideoEnhanceAVideo.enhance(working_model, 2, total_frames, 0)
+
+        output_to_terminal_successful("Applying CFG Zero Star Patch...")
+        working_model, = cfgZeroStar.patch(working_model)
+        
+
         output_to_terminal_successful("Encoding Positive CLIP text...")
         temp_positive_clip, = text_encode.encode(clip, positive)
 
@@ -423,31 +450,35 @@ class WanImageToVideoAdvancedSampler:
             model_high_cfg = working_model.clone()
             model_low_cfg = working_model.clone()
 
-            if (causvid_lora is not None and high_cfg_causvid_strength > 0.0):
+            if (causvid_lora != NONE and high_cfg_causvid_strength > 0.0):
                 output_to_terminal_successful(f"Applying CausVid LoRA for High CFG with strength: {high_cfg_causvid_strength}")
-                model_high_cfg, = lora_loader.load_lora(model_high_cfg, clip, causvid_lora, 1.0, high_cfg_causvid_strength)
+                model_high_cfg,_, = lora_loader.load_lora(model_high_cfg, clip, causvid_lora, 1.0, high_cfg_causvid_strength)
 
             output_to_terminal_successful("High CFG KSampler started...")
             out_latent, = k_sampler.sample(model_high_cfg, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, total_steps_high_cfg, "enabled", 1)
 
-            if (causvid_lora is not None and low_cfg_causvid_strength > 0.0):
+            if (causvid_lora != NONE and low_cfg_causvid_strength > 0.0):
                 output_to_terminal_successful(f"Applying CausVid LoRA for Low CFG with strength: {low_cfg_causvid_strength}")
-                model_low_cfg, = lora_loader.load_lora(model_low_cfg, clip, causvid_lora, 1.0, low_cfg_causvid_strength)
+                model_low_cfg,_, = lora_loader.load_lora(model_low_cfg, clip, causvid_lora, 1.0, low_cfg_causvid_strength)
 
             output_to_terminal_successful("Low CFG KSampler started...")
             out_latent, = k_sampler.sample(model_low_cfg, "enable", noise_seed, total_steps, low_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, out_latent, total_steps_high_cfg, 1000, "enabled", 1)
         else:
-            if (causvid_lora is not None and high_cfg_causvid_strength > 0.0):
+            if (causvid_lora != NONE and high_cfg_causvid_strength > 0.0):
                 output_to_terminal_successful(f"Applying CausVid LoRA with strength: {high_cfg_causvid_strength}")
-                working_model, = lora_loader.load_lora(working_model, clip, causvid_lora, 1.0, high_cfg_causvid_strength)
+                working_model,_, = lora_loader.load_lora(working_model, clip, causvid_lora, 1.0, high_cfg_causvid_strength)
 
             output_to_terminal_successful("KSampler started...")
             out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, 1000, "enabled", 1)
 
         output_to_terminal_successful("Vae Decode started...")
-        output_image = wan_video_vae_decode.decode(out_latent, vae, 0, START_IMAGE)
+        output_image, = wan_video_vae_decode.decode(out_latent, vae, 0, image_generation_mode)
 
-        return output_image
+        if (start_image is not None):
+            output_to_terminal_successful("Applying color match to images...")
+            output_image, = colorMatch.colormatch(start_image, output_image, "hm-mvgd-hm", strength=1.0)
+
+        return (output_image,)
    
     def load_model(self, GGUF, Diffusor, Use_Model_Type, Diffusor_weight_dtype):
         """
@@ -485,69 +516,175 @@ class WanImageToVideoAdvancedSampler:
 
     def setup_taesd_preview(self, clip_type, model):
         """
-        TAESD preview setup for Wan2.1 models using TAEHV integration.
+        TAESD preview setup for Wan2.1 models using proper TAESD architecture.
         
         This method sets up proper TAESD preview support for Wan2.1 models by:
-        1. Loading TAEHV (Tiny AutoEncoder for Hunyuan Video) for Wan2.1 models
-        2. Auto-downloading TAEHV models if they don't exist
-        3. Installing TAEHV as the preview decoder in the latent format
-        4. Falling back to RGB previews if TAEHV is not available
+        1. Loading/creating a TAESD decoder specifically for Wan2.1's 16-channel latent space
+        2. Using the original TAESD architecture adapted for 16 channels
+        3. Installing it as the preview decoder in ComfyUI's latent preview system
+        4. Falling back to RGB previews if TAESD setup fails
         
-        TAEHV is specifically designed for Wan2.1's 16-channel latent space
-        and provides proper video preview functionality.
+        This is a proper TAESD implementation, not a wrapper around TAEHV.
         """
+        output_to_terminal_successful(f"Setting up TAESD preview for clip_type: {clip_type}")
+        
         # Only handle Wan2.1 models, let KSampler deal with everything else
         if clip_type != CLIP_WAN:
+            output_to_terminal_successful("Not a Wan2.1 model, skipping TAESD setup")
             return
             
         # Check if this is a Wan2.1 model
         if hasattr(model, 'model') and hasattr(model.model, 'latent_format'):
             latent_format = model.model.latent_format
+            output_to_terminal_successful(f"Model latent format found: channels={getattr(latent_format, 'latent_channels', 'N/A')}, dimensions={getattr(latent_format, 'latent_dimensions', 'N/A')}")
+            
             if (hasattr(latent_format, 'latent_channels') and 
                 latent_format.latent_channels == 16 and
                 hasattr(latent_format, 'latent_dimensions') and 
                 latent_format.latent_dimensions == 3):
                 
-                # Set taesd_decoder_name to None to disable TAESD and use RGB fallback
-                # This prevents the startswith error with TAEHVPreviewer objects
-                latent_format.taesd_decoder_name = None
-                output_to_terminal_successful("Using RGB fallback previews for Wan2.1 models")
+                output_to_terminal_successful("Detected Wan2.1 model with 16-channel 3D latent format")
                 
-                # Note: TAEHV integration is temporarily disabled to prevent errors
-                # The original TAEHV code can be re-enabled once the integration
-                # is properly fixed to work with ComfyUI's preview system
-                
+                # Try to setup TAESD for Wan2.1 models
+                if self.setup_wan21_taesd_preview(latent_format):
+                    output_to_terminal_successful("TAESD preview system enabled for Wan2.1 models")
+                else:
+                    # Fallback: disable TAESD and use RGB previews
+                    latent_format.taesd_decoder_name = None
+                    output_to_terminal_error("TAESD setup failed - using RGB fallback previews for Wan2.1 models")
+            else:
+                output_to_terminal_successful("Not a 16-channel 3D latent format, skipping TAESD setup")
+        else:
+            output_to_terminal_successful("Model does not have latent_format attribute, skipping TAESD setup")
         return
+
+    def setup_wan21_taesd_preview(self, latent_format):
+        """Setup TAESD preview for Wan2.1 using proper TAESD architecture."""
+        try:
+            # Try relative import first (when running as ComfyUI custom node)
+            try:
+                from .taesd_wan21 import get_wan21_taesd_decoder
+            except ImportError:
+                # Fallback to absolute import (when running standalone)
+                from taesd_wan21 import get_wan21_taesd_decoder
+            import folder_paths
+            
+            # Get vae_approx directory
+            vae_approx_paths = folder_paths.get_folder_paths("vae_approx")
+            if not vae_approx_paths:
+                output_to_terminal_error("vae_approx folder not found in ComfyUI")
+                return False
+            
+            vae_approx_dir = vae_approx_paths[0]
+            
+            # Get the TAESD decoder for Wan2.1
+            taesd_decoder = get_wan21_taesd_decoder(vae_approx_dir)
+            
+            if taesd_decoder is not None:
+                # Install the TAESD decoder in ComfyUI's preview system
+                self.install_wan21_taesd_decoder(latent_format, taesd_decoder)
+                return True
+            else:
+                output_to_terminal_error("Failed to load TAESD Wan2.1 decoder")
+                return False
+                
+        except Exception as e:
+            output_to_terminal_error(f"Failed to setup TAESD Wan2.1 preview: {e}")
+            return False
+
+    def install_wan21_taesd_decoder(self, latent_format, taesd_decoder):
+        """Install TAESD Wan2.1 decoder in ComfyUI's preview system."""
+        try:
+            import comfy.model_management as mm
+            import torch
+            
+            # Move decoder to appropriate device
+            device = mm.unet_offload_device()
+            taesd_decoder = taesd_decoder.to(device=device, dtype=torch.float16)
+            taesd_decoder.eval()
+            
+            # Set the decoder name to indicate TAESD is available
+            latent_format.taesd_decoder_name = "taesd_wan21"
+            
+            # Store the decoder for use by the preview system
+            latent_format.taesd_decoder = taesd_decoder
+            
+            # Patch ComfyUI's preview system to use our TAESD decoder
+            self.patch_preview_system_for_wan21_taesd()
+            
+            output_to_terminal_successful(f"TAESD Wan2.1 decoder installed on {device}")
+            
+        except Exception as e:
+            output_to_terminal_error(f"Failed to install TAESD Wan2.1 decoder: {e}")
+            latent_format.taesd_decoder_name = None
+
+    def patch_preview_system_for_wan21_taesd(self):
+        """Patch ComfyUI's latent preview system to use TAESD for Wan2.1 models."""
+        try:
+            import comfy.latent_preview
+            
+            # Store the original get_previewer function
+            if not hasattr(comfy.latent_preview, '_original_get_previewer'):
+                comfy.latent_preview._original_get_previewer = comfy.latent_preview.get_previewer
+            
+            def get_previewer_with_wan21_taesd(device, latent_format):
+                # Check if this is a Wan2.1 16-channel format with TAESD
+                if (hasattr(latent_format, 'latent_channels') and 
+                    latent_format.latent_channels == 16 and
+                    hasattr(latent_format, 'taesd_decoder_name') and
+                    latent_format.taesd_decoder_name == "taesd_wan21" and
+                    hasattr(latent_format, 'taesd_decoder')):
+                    
+                    output_to_terminal_successful("Using TAESD decoder for Wan2.1 preview")
+                    return latent_format.taesd_decoder
+                else:
+                    # Fall back to the original function for other formats
+                    return comfy.latent_preview._original_get_previewer(device, latent_format)
+            
+            # Monkey patch the get_previewer function
+            comfy.latent_preview.get_previewer = get_previewer_with_wan21_taesd
+            output_to_terminal_successful("Preview system patched for TAESD Wan2.1 support")
+            
+        except Exception as e:
+            output_to_terminal_error(f"Failed to patch preview system: {e}")
 
     def load_taehv_model(self):
         """
-        Load TAEHV model for Wan2.1 video previews.
+        Load TAEHV model for potential fallback use in TAESD creation.
         
-        Searches for TAEHV models in the vae_approx folder and loads the first compatible one.
-        Returns the loaded TAEHV model or None if not found.
+        This is kept for potential weight adaptation but not used directly in the preview system.
+        The actual preview system now uses proper TAESD architecture.
         """
         try:
             import folder_paths
-            from .taehv_simple import TAEHV
+            # Try relative import first (when running as ComfyUI custom node)
+            try:
+                from .taehv_simple import TAEHV
+            except ImportError:
+                # Fallback to absolute import (when running standalone)
+                from taehv_simple import TAEHV
             
-            # Look for TAEHV models (prefer safetensors like WanVideoWrapper)
+            # Look for TAEHV models (prefer pth files from GitHub repository)
             vae_approx_files = folder_paths.get_filename_list("vae_approx")
+            output_to_terminal_successful(f"Checking vae_approx folder, found {len(vae_approx_files)} files")
             
-            # Priority order: safetensors first, then other formats
+            # Priority order: pth files from GitHub repository
             taehv_candidates = []
             for f in vae_approx_files:
-                if any(keyword in f.lower() for keyword in ['taehv', 'taew2_1', 'wan2.1', 'hunyuan']):
-                    if f.endswith('.safetensors'):
-                        taehv_candidates.insert(0, f)  # Prioritize safetensors
-                    else:
-                        taehv_candidates.append(f)
+                if any(keyword in f.lower() for keyword in ['taehv', 'taew2_1', 'wan2.1', 'hunyuan', 'taecvx', 'taeos1_3']):
+                    if f.endswith('.pth'):
+                        taehv_candidates.insert(0, f)  # Prioritize pth files
+                    elif f.endswith('.safetensors'):
+                        taehv_candidates.append(f)  # Fallback to safetensors if available
+            
+            output_to_terminal_successful(f"Found {len(taehv_candidates)} TAEHV candidates: {taehv_candidates}")
             
             if not taehv_candidates:
                 output_to_terminal_error("No TAEHV models found in vae_approx folder")
-                output_to_terminal_error("Download models like 'taew2_1.safetensors' to ComfyUI/models/vae_approx/")
+                output_to_terminal_error("Download models like 'taew2_1.pth' to ComfyUI/models/vae_approx/")
                 return None
             
-            # Try to load each candidate (prioritizing safetensors)
+            # Try to load each candidate
             for model_name in taehv_candidates:
                 try:
                     model_path = folder_paths.get_full_path("vae_approx", model_name)
@@ -558,8 +695,8 @@ class WanImageToVideoAdvancedSampler:
                     from comfy.utils import load_torch_file
                     state_dict = load_torch_file(model_path, safe_load=True)
                     
-                    # Create TAEHV model using simplified approach
-                    taehv_model = TAEHV(state_dict)
+                    # Create TAEHV model using the official implementation
+                    taehv_model = TAEHV(state_dict=state_dict)
                     
                     # Move to device
                     import comfy.model_management as mm
@@ -584,17 +721,37 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_error(f"TAEHV loading error: {e}")
             return None
 
+    def _test_url_availability(self, url):
+        """Test if a URL is accessible."""
+        try:
+            if REQUESTS_AVAILABLE:
+                response = requests.head(url, timeout=10)
+                return response.status_code == 200
+            elif URLLIB_AVAILABLE:
+                import urllib.request
+                import urllib.error
+                urllib.request.urlopen(url, timeout=10)
+                return True
+        except Exception as e:
+            output_to_terminal_error(f"URL test failed for {url}: {e}")
+            return False
+        return False
+
     def download_taehv_models(self):
         """
         Download TAEHV models automatically if they don't exist.
         
-        Downloads TAEHV models from HuggingFace to the vae_approx directory.
+        Downloads TAEHV models from GitHub to the vae_approx directory.
         Returns True if at least one model was downloaded successfully, False otherwise.
         """
-        try:
-            import requests
-            from tqdm import tqdm
+        if not (REQUESTS_AVAILABLE or URLLIB_AVAILABLE):
+            output_to_terminal_error("Neither 'requests' nor 'urllib' available for downloading")
+            output_to_terminal_error("Manual installation:")
+            output_to_terminal_error("1. Download TAEHV models from https://github.com/madebyollin/taehv/")
+            output_to_terminal_error("2. Place them in ComfyUI/models/vae_approx/")
+            return False
             
+        try:
             # Get vae_approx directory
             vae_approx_paths = folder_paths.get_folder_paths("vae_approx")
             if not vae_approx_paths:
@@ -604,27 +761,42 @@ class WanImageToVideoAdvancedSampler:
             vae_approx_dir = vae_approx_paths[0]
             os.makedirs(vae_approx_dir, exist_ok=True)
             
-            # Define TAEHV models to download (prioritize safetensors)
+            # Define TAEHV models to download (prioritize pth files)
             models = [
                 {
-                    "name": "taew2_1.safetensors",
-                    "url": "https://huggingface.co/madebyollin/taehv/resolve/main/taew2_1.safetensors",
-                    "description": "TAEHV for Wan 2.1 (safetensors)"
+                    "name": "taew2_1.pth",
+                    "url": "https://github.com/madebyollin/taehv/raw/main/taew2_1.pth",
+                    "description": "TAEHV for Wan 2.1 (pth)"                    
                 },
                 {
-                    "name": "taehv.safetensors",
-                    "url": "https://huggingface.co/madebyollin/taehv/resolve/main/taehv.safetensors",
-                    "description": "TAEHV for Hunyuan Video (safetensors)"
+                    "name": "taehv.pth",
+                    "url": "https://github.com/madebyollin/taehv/raw/main/taehv.pth",
+                    "description": "TAEHV for Hunyuan Video (pth)"
                 },
                 {
-                    "name": "taew2_1.pth", 
-                    "url": "https://huggingface.co/madebyollin/taehv/resolve/main/taew2_1.pth",
-                    "description": "TAEHV for Wan 2.1 (pth)"
+                    "name": "taecvx.pth", 
+                    "url": "https://github.com/madebyollin/taehv/raw/main/taecvx.pth",
+                    "description": "TAEHV for CogVideoX (pth)"
+                },
+                {
+                    "name": "taeos1_3.pth", 
+                    "url": "https://github.com/madebyollin/taehv/raw/main/taeos1_3.pth",
+                    "description": "TAEHV for Open-Sora 1.3 (pth)"
                 }
             ]
             
             output_to_terminal_successful("Downloading TAEHV models for Wan2.1 preview support...")
             output_to_terminal_successful(f"Target directory: {vae_approx_dir}")
+            output_to_terminal_successful(f"Available download methods: requests={REQUESTS_AVAILABLE}, urllib={URLLIB_AVAILABLE}")
+            
+            # Test first URL to check connectivity
+            test_url = models[0]["url"]
+            output_to_terminal_successful(f"Testing connectivity to: {test_url}")
+            if not self._test_url_availability(test_url):
+                output_to_terminal_error("Cannot connect to GitHub. Check your internet connection.")
+                return False
+            else:
+                output_to_terminal_successful("GitHub connectivity confirmed")
             
             success_count = 0
             
@@ -639,7 +811,13 @@ class WanImageToVideoAdvancedSampler:
                 
                 try:
                     output_to_terminal_successful(f"Downloading {model['name']}...")
-                    self._download_file_with_progress(model["url"], filepath, model["description"])
+                    
+                    # Try requests first, fallback to urllib
+                    if REQUESTS_AVAILABLE:
+                        self._download_file_with_requests(model["url"], filepath, model["description"])
+                    else:
+                        self._download_file_with_urllib(model["url"], filepath, model["description"])
+                        
                     output_to_terminal_successful(f"✓ {model['name']} downloaded successfully")
                     success_count += 1
                     
@@ -649,28 +827,21 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_successful(f"Download complete: {success_count}/{len(models)} models")
             
             if success_count > 0:
-                output_to_terminal_successful("🎉 TAEHV models are now available for Wan2.1 preview support!")
+                output_to_terminal_successful("TAEHV models are now available for Wan2.1 preview support!")
                 return True
             else:
-                output_to_terminal_error("❌ No models were downloaded successfully.")
+                output_to_terminal_error("No models were downloaded successfully.")
                 return False
                 
-        except ImportError as e:
-            output_to_terminal_error(f"Required modules not available for downloading: {e}")
-            output_to_terminal_error("Please install manually or run: pip install requests tqdm")
-            return False
         except Exception as e:
             output_to_terminal_error(f"Download error: {e}")
             output_to_terminal_error("Manual installation:")
-            output_to_terminal_error("1. Download TAEHV models from https://huggingface.co/madebyollin/taehv")
+            output_to_terminal_error("1. Download TAEHV models from https://github.com/madebyollin/taehv/")
             output_to_terminal_error("2. Place them in ComfyUI/models/vae_approx/")
             return False
 
-    def _download_file_with_progress(self, url, filepath, description="Downloading"):
-        """Download a file with progress tracking."""
-        import requests
-        from tqdm import tqdm
-        
+    def _download_file_with_requests(self, url, filepath, description="Downloading"):
+        """Download a file using requests with progress tracking."""
         response = requests.get(url, stream=True)
         response.raise_for_status()
         
@@ -686,6 +857,25 @@ class WanImageToVideoAdvancedSampler:
                     file.write(chunk)
                     downloaded += len(chunk)
                     # Simple progress indicator every 10MB
-                    if downloaded % (10 * 1024 * 1024) == 0:
-                        progress = (downloaded / total_size * 100) if total_size > 0 else 0
+                    if total_size > 0 and downloaded % (10 * 1024 * 1024) == 0:
+                        progress = (downloaded / total_size * 100)
                         output_to_terminal_successful(f"Progress: {progress:.1f}%")
+
+    def _download_file_with_urllib(self, url, filepath, description="Downloading"):
+        """Download a file using urllib as fallback."""
+        import urllib.request
+        import urllib.error
+        
+        def show_progress(block_num, block_size, total_size):
+            downloaded = block_num * block_size
+            if total_size > 0 and downloaded % (10 * 1024 * 1024) == 0:  # Every 10MB
+                progress = (downloaded / total_size * 100)
+                output_to_terminal_successful(f"Progress: {progress:.1f}%")
+        
+        try:
+            output_to_terminal_successful(f"{description} - Starting download with urllib...")
+            urllib.request.urlretrieve(url, filepath, reporthook=show_progress)
+        except urllib.error.URLError as e:
+            raise Exception(f"urllib download failed: {e}")
+        except Exception as e:
+            raise Exception(f"Download failed: {e}")
