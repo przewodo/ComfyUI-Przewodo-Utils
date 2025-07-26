@@ -48,4 +48,4 @@ class WanGetMaxImageResolutionByAspectRatio:
             new_width = int(round(new_width * reduction_scale))
             new_height = int(round(new_height * reduction_scale))
 
-        return (new_width, new_height)
+        return (new_width, new_height,)

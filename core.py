@@ -423,11 +423,11 @@ def import_nodes(paths, nodes):
         for node_class in nodes:
             if hasattr(module, node_class):
                 result[node_class] = getattr(module, node_class)
-                output_to_terminal_successful(f"{node_class} imported successfully from {'/'.join(paths)}!")
+                output_to_terminal_successful(f"{node_class} imported successfully from {paths[0]}!")
                 success_count += 1
             else:
                 result[node_class] = None
-                output_to_terminal_error(f"Warning: {node_class} not found in {'/'.join(paths)}")
+                output_to_terminal_error(f"Warning: {node_class} not found in {paths[0]}")
         
         # Clean up sys.modules after successful import (but keep the package if it's needed)
         if not is_package and module_name in sys.modules:
@@ -437,8 +437,8 @@ def import_nodes(paths, nodes):
         # If import fails, set all nodes to None
         for node_class in nodes:
             result[node_class] = None
-        output_to_terminal_error(f"Warning: Failed to import from {'/'.join(paths)} ({e}). Please check installation.")
-    
+            output_to_terminal_error(f"Warning: Failed to import from {paths[0]} ({e}). Please check installation.")
+
     return result
 # Re-initialize colorama at the end to ensure proper setup
 init(autoreset=True, convert=True, strip=False)
