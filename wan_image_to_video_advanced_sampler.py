@@ -773,15 +773,10 @@ class WanImageToVideoAdvancedSampler:
         Returns:
             The loaded CLIP vision model or None if not specified
         """
-        if (clip_vision_model != NONE and self.clip_vision_model is None and self.clip_vision_model != clip_vision_model):
+        if (clip_vision_model != NONE):
             output_to_terminal_successful("Loading clip vision model...")
             clip_vision, = CLIPVisionLoader.load_clip(clip_vision_model)
-            self.clip_vision_model = clip_vision_model
-            self.clip_vision = clip_vision
-            return self.clip_vision
-        elif (self.clip_vision is not None):
-            output_to_terminal_successful("Loading clip vision model...")
-            return self.clip_vision
+            return clip_vision
         else:
             output_to_terminal_error("No clip vision model selected, skipping...")
             return None

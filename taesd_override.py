@@ -171,25 +171,37 @@ class TAESD(nn.Module):
             nn.Conv2d(64, 3, 3, padding=1),
         )
     
-    def decode_latent_to_preview_image(self, format, latents):
+    def decode_latent_to_preview_image(self, preview_format, x0):
         """
-        Decode latent to preview image - ComfyUI interface method
+        ComfyUI LatentPreviewer interface method
+        Returns: (format, preview_image, max_resolution)
         """
-        return self.decode(latents)
+        try:
+            preview_image = self.decode_latent_to_preview(x0)
+            # Import here to avoid circular imports
+            from comfy.cli_args import args
+            MAX_PREVIEW_RESOLUTION = args.preview_size
+            return (preview_format, preview_image, MAX_PREVIEW_RESOLUTION)
+        except Exception as e:
+            output_to_terminal_error(f"TAESD preview failed: {e}")
+            # Return fallback
+            from PIL import Image
+            fallback_image = Image.new('RGB', (64, 64), color=(128, 128, 128))
+            return (preview_format, fallback_image, 64)
     
-    def decode(self, latents):
+    def decode_latent_to_preview(self, x0):
         """
-        Decode latents to preview image
+        ComfyUI LatentPreviewer interface method  
+        Returns: PIL Image
         """
         try:
             # Handle different tensor shapes
-            if len(latents.shape) == 5:  # Video: [batch, channels, frames, height, width]
+            if len(x0.shape) == 5:  # Video: [batch, channels, frames, height, width]
                 # Take first frame for preview
-                latents = latents[:, :, 0, :, :]
-            
-            # Ensure we have 4D tensor: [batch, channels, height, width]
-            if len(latents.shape) != 4:
-                raise ValueError(f"Unexpected latent shape: {latents.shape}")
+                latents = x0[:1, :, 0, :, :]
+            else:
+                # Take first sample for preview
+                latents = x0[:1]
             
             # Move to same device as decoder
             device = next(self.decoder.parameters()).device
@@ -205,24 +217,31 @@ class TAESD(nn.Module):
                 # Decode
                 decoded = self.decoder(latents)
                 
-                # Convert to 0-255 range
-                decoded = (decoded * 0.5 + 0.5).clamp(0, 1)
-                decoded = (decoded * 255).round().clamp(0, 255).to(torch.uint8)
+                # Move channels to last dimension: [batch, channels, height, width] -> [batch, height, width, channels]
+                decoded = decoded[0].movedim(0, 2)  # Take first batch, move channels to end
                 
-                # Convert from [batch, channels, height, width] to [batch, height, width, channels]
-                decoded = decoded.permute(0, 2, 3, 1)
+                # Use ComfyUI's preview_to_image function for consistency
+                def preview_to_image(latent_image):
+                    latents_ubyte = (((latent_image + 1.0) / 2.0).clamp(0, 1)  # change scale from -1..1 to 0..1
+                                        .mul(0xFF)  # to 0..255
+                                        )
+                    import comfy.model_management
+                    if comfy.model_management.directml_enabled:
+                        latents_ubyte = latents_ubyte.to(dtype=torch.uint8)
+                    latents_ubyte = latents_ubyte.to(device="cpu", dtype=torch.uint8, non_blocking=comfy.model_management.device_supports_non_blocking(latent_image.device))
+                    
+                    from PIL import Image
+                    return Image.fromarray(latents_ubyte.numpy())
                 
-                # Return single image if batch size is 1
-                if decoded.shape[0] == 1:
-                    decoded = decoded[0]
-                
-                return decoded
+                return preview_to_image(decoded)
                 
         except Exception as e:
             output_to_terminal_error(f"TAESD decode failed: {e}")
-            # Return a simple fallback
-            batch_size = latents.shape[0] if len(latents.shape) > 3 else 1
-            return torch.zeros(64, 64, 3, dtype=torch.uint8)
+            import traceback
+            output_to_terminal_error(f"Traceback: {traceback.format_exc()}")
+            # Return a simple fallback PIL image
+            from PIL import Image
+            return Image.new('RGB', (64, 64), color=(128, 128, 128))
 
 def download_taesd_models():
     """Download TAESD models from official repository"""
