@@ -179,45 +179,92 @@ def create_wan21_decoder_weights():
     
     return taesd.state_dict()
 
+def map_taehv_to_taesd_state_dict(taehv_state_dict):
+    """
+    Map TAEHV state_dict to TAESD compatible format.
+    
+    TAEHV structure: decoder has numbered blocks like '0.weight', '1.1.weight', etc.
+    TAESD expects: Sequential structure with layers 0,1,2,3,4 and their sub-components
+    """
+    taesd_state = {}
+    
+    # Debug: print available keys to understand structure
+    print("Available TAEHV decoder keys:")
+    for key in sorted(taehv_state_dict.keys()):
+        print(f"  {key}: {taehv_state_dict[key].shape}")
+    
+    # Create basic TAESD structure mapping
+    # Based on the error, we need keys like:
+    # "1.weight", "1.bias", "3.conv.0.weight", etc.
+    
+    # Map TAEHV keys to expected TAESD keys
+    key_mapping = {
+        # Input conv layer (layer 0 -> layer 1)
+        '0.weight': '1.weight',
+        '0.bias': '1.bias',
+        
+        # Upsampling blocks with conv sequences
+        # TAEHV uses structure like "1.1.weight", "1.3.weight"
+        # TAESD expects "3.conv.0.weight", "3.conv.2.weight", "3.conv.4.weight"
+        
+        # First upsampling block (TAEHV block 1 -> TAESD block 3)
+        '1.1.weight': '3.conv.0.weight',
+        '1.1.bias': '3.conv.0.bias',
+        '1.3.weight': '3.conv.2.weight', 
+        '1.3.bias': '3.conv.2.bias',
+        
+        # Second upsampling block (TAEHV block 2 -> TAESD block 4)
+        '2.1.weight': '4.conv.0.weight',
+        '2.1.bias': '4.conv.0.bias',
+        '2.3.weight': '4.conv.2.weight',
+        '2.3.bias': '4.conv.2.bias',
+        
+        # Third upsampling block (TAEHV block 3 -> TAESD block 5)
+        '3.1.weight': '5.conv.0.weight',
+        '3.1.bias': '5.conv.0.bias', 
+        '3.3.weight': '5.conv.2.weight',
+        '3.3.bias': '5.conv.2.bias',
+        
+        # Output layer (TAEHV block 4 -> multiple TAESD layers)
+        '4.weight': '19.weight',
+        '4.bias': '19.bias',
+    }
+    
+    # Apply the mapping
+    for taehv_key, taesd_key in key_mapping.items():
+        if taehv_key in taehv_state_dict:
+            taesd_state[taesd_key] = taehv_state_dict[taehv_key]
+            print(f"Mapped {taehv_key} -> {taesd_key}")
+    
+    # For missing keys, create reasonable initialization
+    # Looking at the error, we need many more keys than available in TAEHV
+    # This suggests TAEHV and TAESD have fundamentally different architectures
+    
+    return taesd_state
+
 def download_wan21_taesd_weights(target_path):
     """
     Download or create TAESD weights for Wan2.1.
-    Since there might not be official TAESD weights for Wan2.1 yet,
-    we'll create a reasonable initialization.
+    Since TAEHV has a different architecture than TAESD, we'll create basic compatible weights.
     """
     try:
-        # First try to create from TAEHV weights by extracting decoder
-        from .wan_image_to_video_advanced_sampler import WanImageToVideoAdvancedSampler
+        # Skip TAEHV integration for now due to architecture incompatibility
+        # Create basic weights with proper initialization
+        print("Creating fallback TAESD weights for Wan2.1...")
+        decoder_state_dict = create_wan21_decoder_weights()
         
-        sampler = WanImageToVideoAdvancedSampler()
-        taehv_model = sampler.load_taehv_model()
+        # Ensure parent directory exists
+        os.makedirs(os.path.dirname(target_path), exist_ok=True)
         
-        if taehv_model is not None:
-            # Extract decoder weights from TAEHV and adapt them
-            taehv_decoder_state = taehv_model.decoder.state_dict()
-            
-            # Create a TAESDWan21 and try to adapt TAEHV weights
-            taesd_decoder = TAESDWan21()
-            taesd_state = taesd_decoder.state_dict()
-            
-            # Try to map compatible weights
-            adapted_state = {}
-            for key in taesd_state.keys():
-                if key in taehv_decoder_state:
-                    # Direct match
-                    adapted_state[key] = taehv_decoder_state[key]
-                else:
-                    # Use original initialization
-                    adapted_state[key] = taesd_state[key]
-            
-            # Save the adapted weights
-            torch.save(adapted_state, target_path)
-            return True
+        # Save the state dict
+        torch.save(decoder_state_dict, target_path)
+        print(f"TAESD Wan2.1 weights saved to: {target_path}")
+        
+        return True
             
     except Exception as e:
-        print(f"Failed to adapt TAEHV weights: {e}")
-    
-    # Fallback: create basic initialized weights
+        print(f"Failed to create TAESD Wan2.1 weights: {e}")
+        return False
     try:
         decoder_state = create_wan21_decoder_weights()
         torch.save(decoder_state, target_path)

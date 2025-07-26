@@ -19,7 +19,12 @@ def test_comfyui_integration():
     
     try:
         # Import the main sampler class
-        from wan_image_to_video_advanced_sampler import WanImageToVideoAdvancedSampler
+        # Remove relative import attempts from this test - they won't work in standalone mode
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        
+        import wan_image_to_video_advanced_sampler
+        WanImageToVideoAdvancedSampler = wan_image_to_video_advanced_sampler.WanImageToVideoAdvancedSampler
         
         print("✓ Successfully imported WanImageToVideoAdvancedSampler")
         
@@ -67,7 +72,8 @@ def test_download_system():
     print("\nTesting download system...")
     
     try:
-        from wan_image_to_video_advanced_sampler import WanImageToVideoAdvancedSampler
+        import wan_image_to_video_advanced_sampler
+        WanImageToVideoAdvancedSampler = wan_image_to_video_advanced_sampler.WanImageToVideoAdvancedSampler
         
         sampler = WanImageToVideoAdvancedSampler()
         
@@ -106,7 +112,8 @@ def test_preview_patching():
     print("\nTesting preview system patching...")
     
     try:
-        from wan_image_to_video_advanced_sampler import WanImageToVideoAdvancedSampler
+        import wan_image_to_video_advanced_sampler
+        WanImageToVideoAdvancedSampler = wan_image_to_video_advanced_sampler.WanImageToVideoAdvancedSampler
         
         sampler = WanImageToVideoAdvancedSampler()
         
@@ -126,7 +133,8 @@ def test_preview_patching():
         
         # Test that the preview patching doesn't crash
         try:
-            from taesd_wan21 import get_wan21_taesd_decoder
+            import taesd_wan21
+            get_wan21_taesd_decoder = taesd_wan21.get_wan21_taesd_decoder
             
             # Create a temporary directory for testing
             import tempfile
