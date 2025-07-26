@@ -367,7 +367,7 @@ def override_comfyui_taesd():
     """Override ComfyUI's TAESD system with our implementation"""
     try:
         # Import ComfyUI's latent preview module (done here to avoid import issues)
-        import comfy.latent_preview as latent_preview
+        import latent_preview
         
         # Store original function
         if not hasattr(latent_preview, '_original_get_previewer'):
