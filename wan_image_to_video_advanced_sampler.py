@@ -103,7 +103,7 @@ class WanImageToVideoAdvancedSampler:
                 ("causvid_lora", (lora_names, {"default": NONE,})),
                 ("high_cfg_causvid_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step":0.01})),
                 ("low_cfg_causvid_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step":0.01})),
-                ("use_TAEHV_preview", ("BOOLEAN", {"default": True, "advanced": True})),                
+                ("use_taesd_preview", ("BOOLEAN", {"default": True, "advanced": True})),                
             ]),
             "optional": OrderedDict([
                 ("lora_stack", (any_type, {"default": None, "advanced": True})),
@@ -130,7 +130,7 @@ class WanImageToVideoAdvancedSampler:
             total_video_seconds=1, clip_vision_model=NONE, clip_vision_strength=1.0,
             use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0,
             lora_stack=None, start_image=None, start_image_clip_vision_enabled=True,
-            end_image=None, end_image_clip_vision_enabled=True, use_TAEHV_preview=True,
+            end_image=None, end_image_clip_vision_enabled=True, use_taesd_preview=True,
             causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0):
 
         #variables
@@ -233,7 +233,7 @@ class WanImageToVideoAdvancedSampler:
             total_steps,
             total_steps_high_cfg,
             noise_seed,
-            use_TAEHV_preview,
+            use_taesd_preview,
             lora_stack,
             causvid_lora,
             high_cfg_causvid_strength,
@@ -292,7 +292,7 @@ class WanImageToVideoAdvancedSampler:
                     total_steps,
                     total_steps_high_cfg,
                     noise_seed,
-                    use_TAEHV_preview,
+                    use_taesd_preview,
                     lora_stack,
                     causvid_lora,
                     high_cfg_causvid_strength,
@@ -349,7 +349,7 @@ class WanImageToVideoAdvancedSampler:
         else:
             output_to_terminal_error("Model Patch Torch Settings not available, skipping...")
 
-        if (use_TAEHV_preview):
+        if (use_taesd_preview):
             output_to_terminal_successful("Setting up TAESD for Wan2.1...")
             self.setup_taesd_preview(clip_type, working_model)
         else:
@@ -720,6 +720,30 @@ class WanImageToVideoAdvancedSampler:
         except Exception as e:
             output_to_terminal_error(f"TAEHV loading error: {e}")
             return None
+
+    def test_internet_connectivity(self):
+        """Test internet connectivity by checking GitHub availability."""
+        test_urls = [
+            "https://github.com",
+            "https://raw.githubusercontent.com",
+            "https://github.com/madebyollin/taehv"
+        ]
+        
+        for url in test_urls:
+            try:
+                if REQUESTS_AVAILABLE:
+                    response = requests.get(url, timeout=5)
+                    if response.status_code == 200:
+                        return True
+                elif URLLIB_AVAILABLE:
+                    import urllib.request
+                    import urllib.error
+                    urllib.request.urlopen(url, timeout=5)
+                    return True
+            except Exception:
+                continue
+        
+        return False
 
     def _test_url_availability(self, url):
         """Test if a URL is accessible."""
