@@ -68,10 +68,16 @@ class TAESDWan21(nn.Module):
         self.encoder = Encoder(latent_channels=16)
         self.decoder = Decoder(latent_channels=16)
         
+        # Determine the target device (prefer GPU if available)
+        target_device = "cuda" if torch.cuda.is_available() else "cpu"
+        
         if encoder_path is not None and os.path.exists(encoder_path):
-            self.encoder.load_state_dict(torch.load(encoder_path, map_location="cpu", weights_only=True))
+            self.encoder.load_state_dict(torch.load(encoder_path, map_location=target_device, weights_only=True))
         if decoder_path is not None and os.path.exists(decoder_path):
-            self.decoder.load_state_dict(torch.load(decoder_path, map_location="cpu", weights_only=True))
+            self.decoder.load_state_dict(torch.load(decoder_path, map_location=target_device, weights_only=True))
+        
+        # Move the entire model to the target device
+        self.to(target_device)
 
     @staticmethod
     def scale_latents(x):
@@ -98,7 +104,7 @@ class TAESDWan21(nn.Module):
                 if x.dtype != target_dtype:
                     x = x.to(dtype=target_dtype)
             else:
-                # Fallback: convert to float16 and move to cuda if available
+                # Fallback: convert to float16 and move to GPU if available
                 if x.dtype == torch.float32:
                     x = x.to(dtype=torch.float16)
                 if x.device.type == 'cpu' and torch.cuda.is_available():
@@ -109,6 +115,9 @@ class TAESDWan21(nn.Module):
             # Emergency fallback: ensure at least basic compatibility
             if x.dtype == torch.float32:
                 x = x.to(dtype=torch.float16)
+            # Force GPU if available
+            if x.device.type == 'cpu' and torch.cuda.is_available():
+                x = x.to(device='cuda')
             
         return self.encoder(x)
     
@@ -128,7 +137,7 @@ class TAESDWan21(nn.Module):
                 if x.dtype != target_dtype:
                     x = x.to(dtype=target_dtype)
             else:
-                # Fallback: convert to float16 and move to cuda if available
+                # Fallback: convert to float16 and move to GPU if available
                 if x.dtype == torch.float32:
                     x = x.to(dtype=torch.float16)
                 if x.device.type == 'cpu' and torch.cuda.is_available():
@@ -139,6 +148,9 @@ class TAESDWan21(nn.Module):
             # Emergency fallback: ensure at least basic compatibility
             if x.dtype == torch.float32:
                 x = x.to(dtype=torch.float16)
+            # Force GPU if available
+            if x.device.type == 'cpu' and torch.cuda.is_available():
+                x = x.to(device='cuda')
             
         return self.decoder(x).clamp(0, 1)
     
@@ -162,7 +174,7 @@ class TAESDWan21(nn.Module):
                 if x.dtype != target_dtype:
                     x = x.to(dtype=target_dtype)
             else:
-                # Fallback: convert to float16 and move to cuda if available
+                # Fallback: convert to float16 and move to GPU if available
                 if x.dtype == torch.float32:
                     x = x.to(dtype=torch.float16)
                 if x.device.type == 'cpu' and torch.cuda.is_available():
@@ -173,6 +185,9 @@ class TAESDWan21(nn.Module):
             # Emergency fallback: ensure at least basic compatibility
             if x.dtype == torch.float32:
                 x = x.to(dtype=torch.float16)
+            # Force GPU if available
+            if x.device.type == 'cpu' and torch.cuda.is_available():
+                x = x.to(device='cuda')
         
         return self.decode(x)
     
@@ -207,7 +222,7 @@ class TAESDWan21(nn.Module):
                     if x.dtype != target_dtype:
                         x = x.to(dtype=target_dtype)
                 else:
-                    # Fallback: convert to float16 and move to cuda if available
+                    # Fallback: convert to float16 and move to GPU if available
                     if x.dtype == torch.float32:
                         x = x.to(dtype=torch.float16)
                     if x.device.type == 'cpu' and torch.cuda.is_available():
@@ -218,6 +233,9 @@ class TAESDWan21(nn.Module):
                 # Emergency fallback: ensure at least basic compatibility
                 if x.dtype == torch.float32:
                     x = x.to(dtype=torch.float16)
+                # Force GPU if available
+                if x.device.type == 'cpu' and torch.cuda.is_available():
+                    x = x.to(device='cuda')
             
             decoded = self.decode(x)
             # Convert from [0, 1] to [0, 255] uint8 format expected by ComfyUI

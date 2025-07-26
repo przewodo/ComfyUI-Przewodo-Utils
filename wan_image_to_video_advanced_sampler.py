@@ -60,41 +60,72 @@ class WanImageToVideoAdvancedSampler:
 
         return {
             "required": OrderedDict([
+                # ═════════════════════════════════════════════════════════════════
+                # 🔧 MODEL CONFIGURATION
+                # ═════════════════════════════════════════════════════════════════
                 ("GGUF", (gguf_model_names, {"default": NONE, "advanced": True, "tooltip": "Select a GGUF model file for optimized inference."})),
                 ("Diffusor", (diffusion_models_names, {"default": NONE, "advanced": True, "tooltip": "Select a Diffusion model for standard inference."})),
                 ("Diffusor_weight_dtype", (["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"], {"default": "default", "advanced": True, "tooltip": "Weight data type for the diffusion model. FP8 options provide memory optimization with potential speed improvements."})),
                 ("Use_Model_Type", (MODEL_TYPE_LIST, {"default": MODEL_GGUF, "advanced": True, "tooltip": "Choose between GGUF or Diffusion model types. GGUF models are optimized for efficiency."})),
+                
+                # ═════════════════════════════════════════════════════════════════
+                # 📝 TEXT & CLIP CONFIGURATION  
+                # ═════════════════════════════════════════════════════════════════
                 ("positive", ("STRING", {"default": None, "advanced": True, "tooltip": "Positive text prompt describing what you want to generate in the video."})),
                 ("negative", ("STRING", {"default": None, "advanced": True, "tooltip": "Negative text prompt describing what you want to avoid in the video generation."})),
                 ("clip", (clip_names, {"default": None, "advanced": True, "tooltip": "CLIP text encoder model to use for processing text prompts."})),
                 ("clip_type", (CLIP_TYPE_LIST, {"default": CLIP_WAN, "advanced": True, "tooltip": "Type of CLIP encoder. WAN is optimized for Wan2.1 models."})),
                 ("clip_device", (CLIP_DEVICE_LIST, {"default": CLIP_DEVICE_DEFAULT, "advanced": True, "tooltip": "Device to run CLIP text encoding on (CPU/GPU)."})),
                 ("vae", (vae_names, {"default": NONE, "advanced": True, "tooltip": "Variational Auto-Encoder for encoding/decoding between pixel and latent space."})),
+                
+                # ═════════════════════════════════════════════════════════════════
+                # ⚡ TEACACHE OPTIMIZATION
+                # ═════════════════════════════════════════════════════════════════
                 ("use_tea_cache", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable TeaCache for faster inference by caching diffusion model outputs."})),
                 ("tea_cache_model_type", (["flux", "ltxv", "lumina_2", "hunyuan_video", "hidream_i1_dev", "hidream_i1_full", "wan2.1_t2v_1.3B", "wan2.1_t2v_14B", "wan2.1_i2v_480p_14B", "wan2.1_i2v_720p_14B", "wan2.1_t2v_1.3B_ret_mode", "wan2.1_t2v_14B_ret_mode", "wan2.1_i2v_480p_14B_ret_mode", "wan2.1_i2v_720p_14B_ret_mode"], {"default": "wan2.1_i2v_720p_14B", "tooltip": "Supported diffusion model."})),
                 ("tea_cache_rel_l1_thresh", ("FLOAT", {"default": 0.22, "min": 0.0, "max": 10.0, "step": 0.01, "tooltip": "How strongly to cache the output of diffusion model. This value must be non-negative."})),
                 ("tea_cache_start_percent", ("FLOAT", {"default": 0.2, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "The start percentage of the steps that will apply TeaCache."})),
                 ("tea_cache_end_percent", ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "The end percentage of the steps that will apply TeaCache."})),
                 ("tea_cache_cache_device", (["cuda", "cpu"], {"default": "cuda", "tooltip": "Device where the cache will reside"})),
+                
+                # ═════════════════════════════════════════════════════════════════
+                # 🎯 SKIP LAYER GUIDANCE
+                # ═════════════════════════════════════════════════════════════════
                 ("use_SLG", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable Skip Layer Guidance for improved video generation quality."})),
                 ("SLG_blocks", ("STRING", {"default": "10", "multiline": False, "tooltip": "Number of blocks to process in each step. You can comma separate the blocks like 8, 9, 10"})),
                 ("SLG_start_percent", ("FLOAT", {"default": 0.2, "min": 0.0, "max": 1.0, "step": 0.001, "tooltip": "The start percentage of sampling steps where Skip Layer Guidance will be applied."})),
                 ("SLG_end_percent", ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.001, "tooltip": "The end percentage of sampling steps where Skip Layer Guidance will be applied."})),
+                
+                # ═════════════════════════════════════════════════════════════════
+                # 🧠 ATTENTION & MODEL OPTIMIZATIONS
+                # ═════════════════════════════════════════════════════════════════
                 ("use_sage_attention", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable SageAttention for optimized attention computation and memory efficiency."})),
                 ("sage_attention_mode", (["disabled", "auto", "sageattn_qk_int8_pv_fp16_cuda", "sageattn_qk_int8_pv_fp16_triton", "sageattn_qk_int8_pv_fp8_cuda"], {"default": "auto", "tooltip": "Global patch comfy attention to use sageattn, once patched to revert back to normal you would need to run this node again with disabled option."})),
                 ("use_shift", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable Model Shift for improved sampling stability and quality."})),
                 ("shift", ("FLOAT", {"default": 2.0, "min": 0.0, "max": 100.0, "step":0.01, "tooltip": "Shift value for ModelSamplingSD3. Higher values can improve sampling stability."})),
                 ("use_block_swap", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable Block Swap optimization for memory efficiency during video generation."})),
                 ("block_swap", ("INT", {"default": 35, "min": 1, "max": 40, "step":1, "tooltip": "Block swap threshold value. Controls when to swap model blocks for memory optimization."})),
+                
+                # ═════════════════════════════════════════════════════════════════
+                # 🎬 VIDEO GENERATION SETTINGS
+                # ═════════════════════════════════════════════════════════════════
                 ("large_image_side", ("INT", {"default": 832, "min": 2.0, "max": 1280, "step":2, "advanced": True, "tooltip": "The larger side of the image to resize to. The smaller side will be resized proportionally."})),
                 ("image_generation_mode", (WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, {"default": START_IMAGE, "tooltip": "Mode for video generation."})),
                 ("wan_model_size", (WAN_MODELS, {"default": WAN_720P, "tooltip": "The model type to use for the diffusion process."})),
                 ("total_video_seconds", ("INT", {"default": 1, "min": 1, "max": 5, "step":1, "advanced": True, "tooltip": "The total duration of the video in seconds."})),
                 ("total_video_chunks", ("INT", {"default": 1, "min": 1, "max": 1000, "step":1, "advanced": True, "tooltip": "Number of sequential video chunks to generate. Each chunk extends the total video duration. Higher values create longer videos by generating chunks in sequence."})),
+                
+                # ═════════════════════════════════════════════════════════════════
+                # 👁️ CLIP VISION SETTINGS
+                # ═════════════════════════════════════════════════════════════════
                 ("clip_vision_model", (clip_vision_models, {"default": NONE, "advanced": True, "tooltip": "CLIP Vision model for processing input images. Required for image-to-video generation."})),
                 ("clip_vision_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01, "tooltip": "Strength of CLIP vision influence on the generation. Higher values make the output more similar to input images."})),
                 ("start_image_clip_vision_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CLIP vision for the start image. If disabled, the start image will be used as a static frame."})),
                 ("end_image_clip_vision_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CLIP vision for the end image. If disabled, the end image will be used as a static frame."})),
+                
+                # ═════════════════════════════════════════════════════════════════
+                # ⚙️ SAMPLING CONFIGURATION
+                # ═════════════════════════════════════════════════════════════════
                 ("use_dual_samplers", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Use dual samplers for better quality. First sampler with high CFG, then low CFG for refinement. If disabled, single sampler uses the High CFG parameters."})),
                 ("high_cfg", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01, "tooltip": "Classifier-Free Guidance scale for the first (high CFG) sampling pass. Higher values follow prompts more closely."})),
                 ("low_cfg", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01, "tooltip": "Classifier-Free Guidance scale for the second (low CFG) sampling pass. Used for refinement."})),
@@ -103,9 +134,17 @@ class WanImageToVideoAdvancedSampler:
                 ("total_steps", ("INT", {"default": 15, "min": 1, "max": 90, "step":1, "advanced": True, "tooltip": "Total number of sampling steps. More steps generally improve quality but increase generation time."})),
                 ("total_steps_high_cfg", ("INT", {"default": 5, "min": 1, "max": 90, "step":1, "advanced": True, "tooltip": "Percentage of total_steps dedicated to the high CFG pass when using dual samplers. Remaining steps use low CFG for refinement."})),
                 ("noise_seed", ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "control_after_generate": True, "tooltip": "Random seed for reproducible generation. Same seed with same settings produces identical results."})),
+                
+                # ═════════════════════════════════════════════════════════════════
+                # 🎨 CAUS VID ENHANCEMENT
+                # ═════════════════════════════════════════════════════════════════
                 ("causvid_lora", (lora_names, {"default": NONE, "tooltip": "CausVid LoRA model for enhanced video generation capabilities."})),
                 ("high_cfg_causvid_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step":0.01, "tooltip": "LoRA strength for CausVid during the high CFG sampling pass."})),
                 ("low_cfg_causvid_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step":0.01, "tooltip": "LoRA strength for CausVid during the low CFG sampling pass."})),
+                
+                # ═════════════════════════════════════════════════════════════════
+                # ✨ POST-PROCESSING OPTIONS
+                # ═════════════════════════════════════════════════════════════════
                 ("video_enhance_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable video enhancement processing for improved output quality and temporal consistency."})),
                 ("use_cfg_zero_star", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CFG Zero Star optimization for improved sampling efficiency and quality."})),
                 ("apply_color_match", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Apply color matching between start image and generated output for consistent color grading."})),
@@ -113,6 +152,7 @@ class WanImageToVideoAdvancedSampler:
             ]),
             "optional": OrderedDict([
                 ("lora_stack", (any_type, {"default": None, "advanced": True, "tooltip": "Stack of LoRAs to apply to the diffusion model. Each LoRA modifies the model's behavior."})),
+                ("prompt_stack", (any_type, {"default": None, "advanced": True, "tooltip": "Stack of prompts to apply to the diffusion model on each chunck generated. If there is less prompts than chunks, the last prompt will be used for the remaining chunks."})),
                 ("start_image", ("IMAGE", {"default": None, "advanced": True, "tooltip": "Start image for the video generation process."})),
                 ("end_image", ("IMAGE", {"default": None, "advanced": True, "tooltip": "End image for the video generation process."})),
             ]),
@@ -203,7 +243,8 @@ class WanImageToVideoAdvancedSampler:
         # Process start and end images
         start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image = self.process_start_and_end_images(
             start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled,
-            clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size
+            clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
+            image_generation_mode
         )
 
         # Apply Sage Attention
@@ -393,19 +434,32 @@ class WanImageToVideoAdvancedSampler:
             import comfy.model_management as mm
             import torch
             
-            # Move decoder to appropriate device
+            # Move decoder to appropriate device (force GPU if available)
             device = mm.unet_offload_device()
+            if device.type == 'cpu' and torch.cuda.is_available():
+                device = torch.device('cuda')  # Force GPU if available
             
             # Log the device and dtype information for debugging
             output_to_terminal_successful(f"Installing TAESD decoder on device: {device}")
             output_to_terminal_successful(f"Original decoder device: {next(taesd_decoder.decoder.parameters()).device}")
             output_to_terminal_successful(f"Original decoder dtype: {next(taesd_decoder.decoder.parameters()).dtype}")
             
+            # Ensure the model is properly moved to GPU with float16
             taesd_decoder = taesd_decoder.to(device=device, dtype=torch.float16)
             taesd_decoder.eval()
             
-            output_to_terminal_successful(f"Final decoder device: {next(taesd_decoder.decoder.parameters()).device}")
-            output_to_terminal_successful(f"Final decoder dtype: {next(taesd_decoder.decoder.parameters()).dtype}")
+            # Verify the move was successful
+            final_device = next(taesd_decoder.decoder.parameters()).device
+            final_dtype = next(taesd_decoder.decoder.parameters()).dtype
+            output_to_terminal_successful(f"Final decoder device: {final_device}")
+            output_to_terminal_successful(f"Final decoder dtype: {final_dtype}")
+            
+            # Ensure the model is actually on GPU
+            if final_device.type == 'cpu' and torch.cuda.is_available():
+                output_to_terminal_error("Warning: TAESD model is still on CPU despite GPU being available")
+                # Force move to CUDA
+                taesd_decoder = taesd_decoder.cuda().half()
+                output_to_terminal_successful(f"Forced TAESD to CUDA: {next(taesd_decoder.decoder.parameters()).device}")
             
             # Test dtype conversion with a dummy tensor
             try:
@@ -978,7 +1032,8 @@ class WanImageToVideoAdvancedSampler:
         return image, image_width, image_height, clip_vision_image
 
     def process_start_and_end_images(self, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled,
-                                    clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size):
+                                    clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
+                                    image_generation_mode):
         """
         Process start and end images, getting their dimensions and processing them.
         
@@ -998,26 +1053,32 @@ class WanImageToVideoAdvancedSampler:
             tuple: (start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image)
         """
         # Get original start_image dimensions if available
-        if start_image is not None:
+        if start_image is not None and (image_generation_mode == START_IMAGE or image_generation_mode == START_END_IMAGE or image_generation_mode == START_TO_END_TO_START_IMAGE):
             # ComfyUI images are tensors with shape [batch, height, width, channels]
             output_to_terminal_successful(f"Original start_image dimensions: {start_image.shape[2]}x{start_image.shape[1]}")
 
-        # Process Start Image
-        start_image, image_width, image_height, clip_vision_start_image = self.process_image(
-            start_image, start_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, 
-            CLIPVisionEncoder, large_image_side, wan_model_size, start_image.shape[2], start_image.shape[1], "Start Image"
-        )
+            # Process Start Image
+            start_image, image_width, image_height, clip_vision_start_image = self.process_image(
+                start_image, start_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, 
+                CLIPVisionEncoder, large_image_side, wan_model_size, start_image.shape[2], start_image.shape[1], "Start Image"
+            )
 
         # Get original end_image dimensions if available
-        if end_image is not None:
+        if end_image is not None and (image_generation_mode == END_IMAGE or image_generation_mode == END_TO_START_IMAGE or image_generation_mode == START_TO_END_TO_START_IMAGE):
             # ComfyUI images are tensors with shape [batch, height, width, channels]
             output_to_terminal_successful(f"Original end_image dimensions: {end_image.shape[2]}x{end_image.shape[1]}")
 
-        # Process End Image
-        end_image, image_width, image_height, clip_vision_end_image = self.process_image(
-            end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution,
-            CLIPVisionEncoder, large_image_side, wan_model_size, image_width, image_height, "End Image"
-        )
+            # Process End Image
+            if (image_generation_mode == END_IMAGE or image_generation_mode == END_TO_START_IMAGE):
+                end_image, image_width, image_height, clip_vision_end_image = self.process_image(
+                    end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution,
+                    CLIPVisionEncoder, large_image_side, wan_model_size, end_image.shape[2], end_image.shape[1], "End Image"
+                )
+            else:
+                end_image, _, _, clip_vision_end_image = self.process_image(
+                    end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution,
+                    CLIPVisionEncoder, large_image_side, wan_model_size, image_width, image_height, "End Image"
+                )
         
         return start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image
 

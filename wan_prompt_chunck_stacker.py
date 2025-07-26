@@ -14,7 +14,7 @@ class WanPromptChunkStacker:
         }
 
     RETURN_TYPES = (any_type,)
-    RETURN_NAMES = ("prompt_stack",)
+    RETURN_NAMES = ("prompt",)
     FUNCTION = "run"
 
     CATEGORY = "PrzewodoUtils/Wan"
