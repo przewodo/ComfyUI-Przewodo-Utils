@@ -90,6 +90,7 @@ class WanImageToVideoAdvancedSampler:
                 ("image_generation_mode", (WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, {"default": START_IMAGE, "tooltip": "Mode for video generation."})),
                 ("wan_model_size", (WAN_MODELS, {"default": WAN_720P, "tooltip": "The model type to use for the diffusion process."})),
                 ("total_video_seconds", ("INT", {"default": 1, "min": 1, "max": 5, "step":1, "advanced": True, "tooltip": "The total duration of the video in seconds."})),
+                ("total_video_chunks", ("INT", {"default": 1, "min": 1, "max": 1000, "step":1, "advanced": True, "tooltip": "Number of sequential video chunks to generate. Each chunk extends the total video duration. Higher values create longer videos by generating chunks in sequence."})),
                 ("clip_vision_model", (clip_vision_models, {"default": NONE, "advanced": True, "tooltip": "CLIP Vision model for processing input images. Required for image-to-video generation."})),
                 ("clip_vision_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01, "tooltip": "Strength of CLIP vision influence on the generation. Higher values make the output more similar to input images."})),
                 ("start_image_clip_vision_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CLIP vision for the start image. If disabled, the start image will be used as a static frame."})),
@@ -124,7 +125,7 @@ class WanImageToVideoAdvancedSampler:
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, use_taesd_preview=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0):
+    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, use_taesd_preview=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, total_video_chunks=1):
 
         #variables
         output_image = None
@@ -152,11 +153,11 @@ class WanImageToVideoAdvancedSampler:
         # Initialize Model Shift
         model_shift = self.initialize_model_shift(use_shift, shift)
 
-        output_image, = self.postprocess(model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength)
+        output_image, = self.postprocess(model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks)
 
         return (output_image,)
 
-    def postprocess(self, model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength):
+    def postprocess(self, model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks):
 
         output_to_terminal_successful("Generation started...")
 
@@ -222,29 +223,46 @@ class WanImageToVideoAdvancedSampler:
 
         # Apply CFG Zero Star
         working_model = self.apply_cfg_zero_star(use_cfg_zero_star, working_model, cfgZeroStar)
-        
 
-        output_to_terminal_successful("Encoding Positive CLIP text...")
-        temp_positive_clip, = text_encode.encode(clip, positive)
+        # Generate video chunks sequentially
+        images_chunck = []
+        for chunk_index in range(total_video_chunks):
+            output_to_terminal_successful(f"Generating video chunk {chunk_index + 1}/{total_video_chunks}...")
+            
+            output_to_terminal_successful("Encoding Positive CLIP text...")
+            temp_positive_clip, = text_encode.encode(clip, positive)
 
-        output_to_terminal_successful("Encoding Negative CLIP text...")
-        temp_negative_clip, = text_encode.encode(clip, negative)
+            output_to_terminal_successful("Encoding Negative CLIP text...")
+            temp_negative_clip, = text_encode.encode(clip, negative)
 
-        output_to_terminal_successful("Wan Image to Video started...")
-        temp_positive_clip, temp_negative_clip, in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, 0.5, image_generation_mode)
+            output_to_terminal_successful("Wan Image to Video started...")
+            temp_positive_clip, temp_negative_clip, in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, 0.5, image_generation_mode)
 
-        if (use_dual_samplers):
-            # Apply dual sampler processing
-            out_latent = self.apply_dual_sampler_processing(working_model, k_sampler, lora_loader, clip, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, noise_seed, total_steps, high_cfg, low_cfg, temp_positive_clip, temp_negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
+            if (use_dual_samplers):
+                # Apply dual sampler processing
+                out_latent = self.apply_dual_sampler_processing(working_model, k_sampler, lora_loader, clip, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, noise_seed, total_steps, high_cfg, low_cfg, temp_positive_clip, temp_negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
+            else:
+                # Apply single sampler processing
+                out_latent = self.apply_single_sampler_processing(working_model, k_sampler, lora_loader, clip, causvid_lora, high_cfg_causvid_strength, noise_seed, total_steps, high_cfg, temp_positive_clip, temp_negative_clip, in_latent, high_denoise)
+
+            output_to_terminal_successful("Vae Decode started...")
+            output_image, = wan_video_vae_decode.decode(out_latent, vae, 0, image_generation_mode)
+
+            # Apply color match
+            output_image = self.apply_color_match(start_image, output_image, apply_color_match, colorMatch)
+            images_chunck.append(output_image)
+
+        # Merge all video chunks in sequence
+        if len(images_chunck) > 1:
+            output_to_terminal_successful(f"Merging {len(images_chunck)} video chunks in sequence...")
+            import torch
+            # Concatenate all video chunks along the frame dimension (assuming batch, frames, height, width, channels)
+            output_image = torch.cat(images_chunck, dim=1)
+            output_to_terminal_successful("Video chunks merged successfully")
+        elif len(images_chunck) == 1:
+            output_image = images_chunck[0]
         else:
-            # Apply single sampler processing
-            out_latent = self.apply_single_sampler_processing(working_model, k_sampler, lora_loader, clip, causvid_lora, high_cfg_causvid_strength, noise_seed, total_steps, high_cfg, temp_positive_clip, temp_negative_clip, in_latent, high_denoise)
-
-        output_to_terminal_successful("Vae Decode started...")
-        output_image, = wan_video_vae_decode.decode(out_latent, vae, 0, image_generation_mode)
-
-        # Apply color match
-        output_image = self.apply_color_match(start_image, output_image, apply_color_match, colorMatch)
+            output_to_terminal_error("No video chunks generated")
 
         return (output_image,)
    
@@ -388,6 +406,20 @@ class WanImageToVideoAdvancedSampler:
             
             output_to_terminal_successful(f"Final decoder device: {next(taesd_decoder.decoder.parameters()).device}")
             output_to_terminal_successful(f"Final decoder dtype: {next(taesd_decoder.decoder.parameters()).dtype}")
+            
+            # Test dtype conversion with a dummy tensor
+            try:
+                dummy_latent = torch.randn(1, 16, 32, 32, dtype=torch.float32, device='cpu')
+                output_to_terminal_successful(f"Testing with dummy latent: dtype={dummy_latent.dtype}, device={dummy_latent.device}")
+                
+                with torch.no_grad():
+                    # This should trigger the dtype conversion in decode_latent_to_preview_image
+                    test_result = taesd_decoder.decode_latent_to_preview_image("RGB", dummy_latent)
+                    output_to_terminal_successful(f"Test decode successful: result shape={test_result.shape}, dtype={test_result.dtype}")
+                    
+            except Exception as test_error:
+                output_to_terminal_error(f"Test decode failed: {test_error}")
+                output_to_terminal_error("This indicates the dtype conversion is still not working properly")
             
             # Set the decoder name to indicate TAESD is available
             latent_format.taesd_decoder_name = "taesd_wan21"

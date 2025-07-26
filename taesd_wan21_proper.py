@@ -85,27 +85,60 @@ class TAESDWan21(nn.Module):
     
     def encode(self, x):
         """Encode images to latents [0, 1] -> ~[-3, 3]"""
-        # Ensure input tensor has the same dtype and device as the encoder
-        target_device = next(self.encoder.parameters()).device
-        target_dtype = next(self.encoder.parameters()).dtype
-        
-        if x.device != target_device:
-            x = x.to(device=target_device)
-        if x.dtype != target_dtype:
-            x = x.to(dtype=target_dtype)
+        try:
+            # Ensure input tensor has the same dtype and device as the encoder
+            encoder_params = list(self.encoder.parameters())
+            if len(encoder_params) > 0:
+                target_device = encoder_params[0].device
+                target_dtype = encoder_params[0].dtype
+                
+                # Convert input tensor to match encoder
+                if x.device != target_device:
+                    x = x.to(device=target_device)
+                if x.dtype != target_dtype:
+                    x = x.to(dtype=target_dtype)
+            else:
+                # Fallback: convert to float16 and move to cuda if available
+                if x.dtype == torch.float32:
+                    x = x.to(dtype=torch.float16)
+                if x.device.type == 'cpu' and torch.cuda.is_available():
+                    x = x.to(device='cuda')
+                    
+        except Exception as e:
+            print(f"Warning: Failed to match encoder dtype/device: {e}")
+            # Emergency fallback: ensure at least basic compatibility
+            if x.dtype == torch.float32:
+                x = x.to(dtype=torch.float16)
             
         return self.encoder(x)
     
     def decode(self, x):
         """Decode latents to images ~[-3, 3] -> [0, 1]"""
         # Ensure input tensor has the same dtype and device as the decoder
-        target_device = next(self.decoder.parameters()).device
-        target_dtype = next(self.decoder.parameters()).dtype
-        
-        if x.device != target_device:
-            x = x.to(device=target_device)
-        if x.dtype != target_dtype:
-            x = x.to(dtype=target_dtype)
+        try:
+            # Get target device and dtype from decoder parameters
+            decoder_params = list(self.decoder.parameters())
+            if len(decoder_params) > 0:
+                target_device = decoder_params[0].device
+                target_dtype = decoder_params[0].dtype
+                
+                # Convert input tensor to match decoder
+                if x.device != target_device:
+                    x = x.to(device=target_device)
+                if x.dtype != target_dtype:
+                    x = x.to(dtype=target_dtype)
+            else:
+                # Fallback: convert to float16 and move to cuda if available
+                if x.dtype == torch.float32:
+                    x = x.to(dtype=torch.float16)
+                if x.device.type == 'cpu' and torch.cuda.is_available():
+                    x = x.to(device='cuda')
+                    
+        except Exception as e:
+            print(f"Warning: Failed to match decoder dtype/device: {e}")
+            # Emergency fallback: ensure at least basic compatibility
+            if x.dtype == torch.float32:
+                x = x.to(dtype=torch.float16)
             
         return self.decoder(x).clamp(0, 1)
     
@@ -116,14 +149,30 @@ class TAESDWan21(nn.Module):
             # Video case: [B, 16, T, H, W] -> decode first frame [B, 16, H, W]
             x = x[:, :, 0]  # Take first frame
         
-        # Ensure input tensor has the same dtype and device as the decoder
-        target_device = next(self.decoder.parameters()).device
-        target_dtype = next(self.decoder.parameters()).dtype
-        
-        if x.device != target_device:
-            x = x.to(device=target_device)
-        if x.dtype != target_dtype:
-            x = x.to(dtype=target_dtype)
+        try:
+            # Ensure input tensor has the same dtype and device as the decoder
+            decoder_params = list(self.decoder.parameters())
+            if len(decoder_params) > 0:
+                target_device = decoder_params[0].device
+                target_dtype = decoder_params[0].dtype
+                
+                # Convert input tensor to match decoder
+                if x.device != target_device:
+                    x = x.to(device=target_device)
+                if x.dtype != target_dtype:
+                    x = x.to(dtype=target_dtype)
+            else:
+                # Fallback: convert to float16 and move to cuda if available
+                if x.dtype == torch.float32:
+                    x = x.to(dtype=torch.float16)
+                if x.device.type == 'cpu' and torch.cuda.is_available():
+                    x = x.to(device='cuda')
+                    
+        except Exception as e:
+            print(f"Warning: Failed to match decoder dtype/device in forward: {e}")
+            # Emergency fallback: ensure at least basic compatibility
+            if x.dtype == torch.float32:
+                x = x.to(dtype=torch.float16)
         
         return self.decode(x)
     
@@ -145,14 +194,30 @@ class TAESDWan21(nn.Module):
         
         # Decode latents to preview image
         with torch.no_grad():
-            # Ensure input tensor has the same dtype and device as the decoder
-            target_device = next(self.decoder.parameters()).device
-            target_dtype = next(self.decoder.parameters()).dtype
-            
-            if x.device != target_device:
-                x = x.to(device=target_device)
-            if x.dtype != target_dtype:
-                x = x.to(dtype=target_dtype)
+            try:
+                # Ensure input tensor has the same dtype and device as the decoder
+                decoder_params = list(self.decoder.parameters())
+                if len(decoder_params) > 0:
+                    target_device = decoder_params[0].device
+                    target_dtype = decoder_params[0].dtype
+                    
+                    # Convert input tensor to match decoder
+                    if x.device != target_device:
+                        x = x.to(device=target_device)
+                    if x.dtype != target_dtype:
+                        x = x.to(dtype=target_dtype)
+                else:
+                    # Fallback: convert to float16 and move to cuda if available
+                    if x.dtype == torch.float32:
+                        x = x.to(dtype=torch.float16)
+                    if x.device.type == 'cpu' and torch.cuda.is_available():
+                        x = x.to(device='cuda')
+                        
+            except Exception as e:
+                print(f"Warning: Failed to match decoder dtype/device in preview: {e}")
+                # Emergency fallback: ensure at least basic compatibility
+                if x.dtype == torch.float32:
+                    x = x.to(dtype=torch.float16)
             
             decoded = self.decode(x)
             # Convert from [0, 1] to [0, 255] uint8 format expected by ComfyUI
