@@ -1,4 +1,4 @@
-import os
+﻿import os
 from collections import OrderedDict
 from comfy_extras.nodes_model_advanced import ModelSamplingSD3
 from comfy_extras.nodes_cfg import CFGZeroStar
@@ -226,10 +226,18 @@ class WanImageToVideoAdvancedSampler:
 
         # Enable TAESD preview if requested
         if (use_taesd_preview):
-            output_to_terminal_successful("Setting up TAESD for Wan2.1...")
-            self.setup_taesd_preview(clip_type, working_model)
+            output_to_terminal_successful("Setting up TAESD override system...")
+            try:
+                from .taesd_override import initialize_taesd_override
+                if initialize_taesd_override():
+                    output_to_terminal_successful("TAESD override system activated successfully")
+                else:
+                    output_to_terminal_error("TAESD override system failed to initialize")
+            except Exception as e:
+                output_to_terminal_error(f"TAESD override setup failed: {e}")
+                output_to_terminal_error("Continuing with default ComfyUI preview system...")
         else:
-            output_to_terminal_error("TAESD for Wan2.1 is disabled, using default settings...")
+            output_to_terminal_successful("TAESD override is disabled, using default ComfyUI preview system...")
 
         # Process LoRA stack
         working_model, clip = self.process_lora_stack(lora_stack, working_model, clip)
@@ -341,219 +349,6 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_error("Invalid model type selected. Please choose either GGUF or Diffusion model.")
             raise ValueError("Invalid model type selected. Please choose either GGUF or Diffusion model.")
 
-    def setup_taesd_preview(self, clip_type, model):
-        """
-        TAESD preview setup for Wan2.1 models using proper TAESD architecture.
-        
-        This method sets up proper TAESD preview support for Wan2.1 models by:
-        1. Loading/creating a TAESD decoder specifically for Wan2.1's 16-channel latent space
-        2. Using the original TAESD architecture adapted for 16 channels
-        3. Installing it as the preview decoder in ComfyUI's latent preview system
-        4. Falling back to RGB previews if TAESD setup fails
-        
-        This is a proper TAESD implementation, not a wrapper around TAEHV.
-        """
-        output_to_terminal_successful(f"Setting up TAESD preview for clip_type: {clip_type}")
-        
-        # Only handle Wan2.1 models, let KSampler deal with everything else
-        if clip_type != CLIP_WAN:
-            output_to_terminal_successful("Not a Wan2.1 model, skipping TAESD setup")
-            return
-            
-        # Check if this is a Wan2.1 model
-        if hasattr(model, 'model') and hasattr(model.model, 'latent_format'):
-            latent_format = model.model.latent_format
-            output_to_terminal_successful(f"Model latent format found: channels={getattr(latent_format, 'latent_channels', 'N/A')}, dimensions={getattr(latent_format, 'latent_dimensions', 'N/A')}")
-            
-            if (hasattr(latent_format, 'latent_channels') and 
-                latent_format.latent_channels == 16 and
-                hasattr(latent_format, 'latent_dimensions') and 
-                latent_format.latent_dimensions == 3):
-                
-                output_to_terminal_successful("Detected Wan2.1 model with 16-channel 3D latent format")
-                
-                # Try to setup TAESD for Wan2.1 models
-                if self.setup_wan21_taesd_preview(latent_format):
-                    output_to_terminal_successful("TAESD preview system enabled for Wan2.1 models")
-                else:
-                    # Fallback: disable TAESD and use RGB previews
-                    latent_format.taesd_decoder_name = None
-                    output_to_terminal_error("TAESD setup failed - using RGB fallback previews for Wan2.1 models")
-            else:
-                output_to_terminal_successful("Not a 16-channel 3D latent format, skipping TAESD setup")
-        else:
-            output_to_terminal_successful("Model does not have latent_format attribute, skipping TAESD setup")
-        return
-
-    def setup_wan21_taesd_preview(self, latent_format):
-        """Setup TAESD preview for Wan2.1 models using proper TAESD architecture."""
-        try:
-            output_to_terminal_successful("Setting up TAESD preview for Wan2.1...")
-            
-            # Use proper TAESD implementation adapted for 16-channel latents
-            try:
-                from .taesd_wan21_proper import get_wan21_taesd_decoder, download_wan21_models
-            except ImportError:
-                from taesd_wan21_proper import get_wan21_taesd_decoder, download_wan21_models
-            
-            import folder_paths
-            
-            # Get vae_approx directory
-            vae_approx_paths = folder_paths.get_folder_paths("vae_approx")
-            if not vae_approx_paths:
-                output_to_terminal_error("vae_approx folder not found in ComfyUI")
-                return False
-            
-            vae_approx_dir = vae_approx_paths[0]
-            
-            # Download official TAEHV models from GitHub if not present
-            if download_wan21_models(vae_approx_dir):
-                output_to_terminal_successful("TAEHV models available for weight adaptation")
-            else:
-                output_to_terminal_error("TAEHV model download failed - using random initialization")
-            
-            # Get the TAESD decoder for Wan2.1
-            taesd_decoder = get_wan21_taesd_decoder(vae_approx_dir)
-            
-            if taesd_decoder is not None:
-                # Install the TAESD decoder in ComfyUI's preview system
-                self.install_wan21_taesd_decoder(latent_format, taesd_decoder)
-                output_to_terminal_successful("TAESD Wan2.1 preview system successfully enabled")
-                return True
-            else:
-                output_to_terminal_error("Failed to load TAESD Wan2.1 decoder")
-                return False
-                
-        except Exception as e:
-            output_to_terminal_error(f"Failed to setup TAESD Wan2.1 preview: {e}")
-            return False
-
-    def install_wan21_taesd_decoder(self, latent_format, taesd_decoder):
-        """Install TAESD Wan2.1 decoder in ComfyUI's preview system."""
-        try:
-            import comfy.model_management as mm
-            import torch
-            
-            # Move decoder to appropriate device (force GPU if available)
-            device = mm.unet_offload_device()
-            if device.type == 'cpu' and torch.cuda.is_available():
-                device = torch.device('cuda')  # Force GPU if available
-            
-            # Log the device and dtype information for debugging
-            output_to_terminal_successful(f"Installing TAESD decoder on device: {device}")
-            output_to_terminal_successful(f"Original decoder device: {next(taesd_decoder.decoder.parameters()).device}")
-            output_to_terminal_successful(f"Original decoder dtype: {next(taesd_decoder.decoder.parameters()).dtype}")
-            
-            # Ensure the model is properly moved to GPU with float16
-            taesd_decoder = taesd_decoder.to(device=device, dtype=torch.float16)
-            taesd_decoder.eval()
-            
-            # Verify the move was successful
-            final_device = next(taesd_decoder.decoder.parameters()).device
-            final_dtype = next(taesd_decoder.decoder.parameters()).dtype
-            output_to_terminal_successful(f"Final decoder device: {final_device}")
-            output_to_terminal_successful(f"Final decoder dtype: {final_dtype}")
-            
-            # Ensure the model is actually on GPU
-            if final_device.type == 'cpu' and torch.cuda.is_available():
-                output_to_terminal_error("Warning: TAESD model is still on CPU despite GPU being available")
-                # Force move to CUDA
-                taesd_decoder = taesd_decoder.cuda().half()
-                output_to_terminal_successful(f"Forced TAESD to CUDA: {next(taesd_decoder.decoder.parameters()).device}")
-            
-            # Test dtype conversion with a dummy tensor
-            try:
-                dummy_latent = torch.randn(1, 16, 32, 32, dtype=torch.float32, device='cpu')
-                output_to_terminal_successful(f"Testing with dummy latent: dtype={dummy_latent.dtype}, device={dummy_latent.device}")
-                
-                with torch.no_grad():
-                    # This should trigger the dtype conversion in decode_latent_to_preview_image
-                    test_result = taesd_decoder.decode_latent_to_preview_image("RGB", dummy_latent)
-                    output_to_terminal_successful(f"Test decode successful: result shape={test_result.shape}, dtype={test_result.dtype}")
-                    
-            except Exception as test_error:
-                output_to_terminal_error(f"Test decode failed: {test_error}")
-                output_to_terminal_error("This indicates the dtype conversion is still not working properly")
-            
-            # Set the decoder name to indicate TAESD is available
-            latent_format.taesd_decoder_name = "taesd_wan21"
-            
-            # Store the decoder for use by the preview system
-            latent_format.taesd_decoder = taesd_decoder
-            
-            # Try to patch ComfyUI's preview system to use our TAESD decoder
-            # This is optional - if it fails, ComfyUI might still pick up the decoder
-            try:
-                self.patch_preview_system_for_wan21_taesd()
-            except Exception as patch_error:
-                output_to_terminal_error(f"Preview system patching failed (non-critical): {patch_error}")
-                output_to_terminal_successful("TAESD decoder installed directly in latent format - ComfyUI may still use it")
-            
-            output_to_terminal_successful(f"TAESD Wan2.1 decoder installed on {device}")
-            
-        except Exception as e:
-            output_to_terminal_error(f"Failed to install TAESD Wan2.1 decoder: {e}")
-            latent_format.taesd_decoder_name = None
-
-    def patch_preview_system_for_wan21_taesd(self):
-        """Patch ComfyUI's latent preview system to use TAESD for Wan2.1 models."""
-        try:
-            # Try different import paths for ComfyUI's latent preview module
-            latent_preview_module = None
-            
-            # Try the most common import paths
-            import_attempts = [
-                ('comfy.latent_preview', 'comfy.latent_preview'),
-                ('latent_preview', 'latent_preview'),
-                ('comfy_extras.latent_preview', 'comfy_extras.latent_preview'),
-            ]
-            
-            for module_path, import_name in import_attempts:
-                try:
-                    latent_preview_module = __import__(module_path, fromlist=[''])
-                    output_to_terminal_successful(f"Successfully imported latent preview from: {module_path}")
-                    break
-                except ImportError:
-                    continue
-            
-            if latent_preview_module is None:
-                output_to_terminal_error("Could not find ComfyUI's latent preview module")
-                output_to_terminal_error("TAESD preview patching skipped - using default preview system")
-                return
-            
-            # Check if the module has the expected get_previewer function
-            if not hasattr(latent_preview_module, 'get_previewer'):
-                output_to_terminal_error("Latent preview module does not have 'get_previewer' function")
-                output_to_terminal_error("TAESD preview patching skipped - using default preview system")
-                return
-            
-            # Store the original get_previewer function
-            if not hasattr(latent_preview_module, '_original_get_previewer'):
-                latent_preview_module._original_get_previewer = latent_preview_module.get_previewer
-                output_to_terminal_successful("Stored original get_previewer function")
-            
-            def get_previewer_with_wan21_taesd(device, latent_format):
-                # Check if this is a Wan2.1 16-channel format with TAESD
-                if (hasattr(latent_format, 'latent_channels') and 
-                    latent_format.latent_channels == 16 and
-                    hasattr(latent_format, 'taesd_decoder_name') and
-                    latent_format.taesd_decoder_name == "taesd_wan21" and
-                    hasattr(latent_format, 'taesd_decoder')):
-                    
-                    output_to_terminal_successful("Using TAESD decoder for Wan2.1 preview")
-                    return latent_format.taesd_decoder
-                else:
-                    # Fall back to the original function for other formats
-                    return latent_preview_module._original_get_previewer(device, latent_format)
-            
-            # Monkey patch the get_previewer function
-            latent_preview_module.get_previewer = get_previewer_with_wan21_taesd
-            output_to_terminal_successful("Preview system patched for TAESD Wan2.1 support")
-            
-        except Exception as e:
-            output_to_terminal_error(f"Failed to patch preview system: {e}")
-            output_to_terminal_error("TAESD preview patching skipped - using default preview system")
-
     def load_taehv_model(self):
         """
         Load TAEHV model for potential fallback use in TAESD creation.
@@ -614,7 +409,7 @@ class WanImageToVideoAdvancedSampler:
                     return taehv_model
                     
                 except Exception as e:
-                    output_to_terminal_error(f"✗ Failed to load {model_name}: {e}")
+                    output_to_terminal_error(f"Failed to load {model_name}: {e}")
                     continue
             
             output_to_terminal_error("No compatible TAEHV models could be loaded")
@@ -761,7 +556,7 @@ class WanImageToVideoAdvancedSampler:
                 
                 # Skip if already exists
                 if os.path.exists(filepath):
-                    output_to_terminal_successful(f"✓ {model['name']} already exists, skipping")
+                    output_to_terminal_successful(f"{model['name']} already exists, skipping")
                     success_count += 1
                     continue
                 
@@ -774,11 +569,11 @@ class WanImageToVideoAdvancedSampler:
                     else:
                         self._download_file_with_urllib(model["url"], filepath, model["description"])
                         
-                    output_to_terminal_successful(f"✓ {model['name']} downloaded successfully")
+                    output_to_terminal_successful(f"{model['name']} downloaded successfully")
                     success_count += 1
                     
                 except Exception as e:
-                    output_to_terminal_error(f"✗ Failed to download {model['name']}: {e}")
+                    output_to_terminal_error(f"Failed to download {model['name']}: {e}")
             
             output_to_terminal_successful(f"Download complete: {success_count}/{len(all_models)} models")
             
@@ -1052,6 +847,9 @@ class WanImageToVideoAdvancedSampler:
         Returns:
             tuple: (start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image)
         """
+        clip_vision_end_image = None
+        clip_vision_start_image = None
+
         # Get original start_image dimensions if available
         if start_image is not None and (image_generation_mode == START_IMAGE or image_generation_mode == START_END_IMAGE or image_generation_mode == START_TO_END_TO_START_IMAGE):
             # ComfyUI images are tensors with shape [batch, height, width, channels]
@@ -1254,17 +1052,17 @@ class WanImageToVideoAdvancedSampler:
 
         if (causvid_lora != NONE and high_cfg_causvid_strength > 0.0):
             output_to_terminal_successful(f"Applying CausVid LoRA for High CFG with strength: {high_cfg_causvid_strength}")
-            model_high_cfg,_, = lora_loader.load_lora(model_high_cfg, clip, causvid_lora, 1.0, high_cfg_causvid_strength)
+            model_high_cfg,_, = lora_loader.load_lora(model_high_cfg, clip, causvid_lora, causvid_lora, high_cfg_causvid_strength)
 
         output_to_terminal_successful("High CFG KSampler started...")
         out_latent, = k_sampler.sample(model_high_cfg, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, stop_steps, "enabled", high_denoise)
 
         if (causvid_lora != NONE and low_cfg_causvid_strength > 0.0):
             output_to_terminal_successful(f"Applying CausVid LoRA for Low CFG with strength: {low_cfg_causvid_strength}")
-            model_low_cfg,_, = lora_loader.load_lora(model_low_cfg, clip, causvid_lora, 1.0, low_cfg_causvid_strength)
+            model_low_cfg,_, = lora_loader.load_lora(model_low_cfg, clip, causvid_lora, causvid_lora, low_cfg_causvid_strength)
 
         output_to_terminal_successful("Low CFG KSampler started...")
-        out_latent, = k_sampler.sample(model_low_cfg, "enable", noise_seed, total_steps, low_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, out_latent, stop_steps, 1000, "enabled", low_denoise)
+        out_latent, = k_sampler.sample(model_low_cfg, "disable", noise_seed, total_steps, low_cfg, "lcm", "simple", temp_positive_clip, temp_negative_clip, out_latent, stop_steps, 1000, "disable", low_denoise)
         
         return out_latent
 
@@ -1292,10 +1090,10 @@ class WanImageToVideoAdvancedSampler:
         """
         if (causvid_lora != NONE and high_cfg_causvid_strength > 0.0):
             output_to_terminal_successful(f"Applying CausVid LoRA with strength: {high_cfg_causvid_strength}")
-            working_model,_, = lora_loader.load_lora(working_model, clip, causvid_lora, 1.0, high_cfg_causvid_strength)
+            working_model,_, = lora_loader.load_lora(working_model, clip, causvid_lora, causvid_lora, high_cfg_causvid_strength)
 
         output_to_terminal_successful("KSampler started...")
-        out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, 1000, "enabled", high_denoise)
+        out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, 1000, "disable", high_denoise)
         
         return out_latent
     
