@@ -609,8 +609,13 @@ class WanImageToVideoAdvancedSampler:
             # Store the decoder for use by the preview system
             latent_format.taesd_decoder = taesd_decoder
             
-            # Patch ComfyUI's preview system to use our TAESD decoder
-            self.patch_preview_system_for_wan21_taesd()
+            # Try to patch ComfyUI's preview system to use our TAESD decoder
+            # This is optional - if it fails, ComfyUI might still pick up the decoder
+            try:
+                self.patch_preview_system_for_wan21_taesd()
+            except Exception as patch_error:
+                output_to_terminal_error(f"Preview system patching failed (non-critical): {patch_error}")
+                output_to_terminal_successful("TAESD decoder installed directly in latent format - ComfyUI may still use it")
             
             output_to_terminal_successful(f"TAESD Wan2.1 decoder installed on {device}")
             
@@ -621,11 +626,39 @@ class WanImageToVideoAdvancedSampler:
     def patch_preview_system_for_wan21_taesd(self):
         """Patch ComfyUI's latent preview system to use TAESD for Wan2.1 models."""
         try:
-            import comfy.latent_preview
+            # Try different import paths for ComfyUI's latent preview module
+            latent_preview_module = None
+            
+            # Try the most common import paths
+            import_attempts = [
+                ('comfy.latent_preview', 'comfy.latent_preview'),
+                ('latent_preview', 'latent_preview'),
+                ('comfy_extras.latent_preview', 'comfy_extras.latent_preview'),
+            ]
+            
+            for module_path, import_name in import_attempts:
+                try:
+                    latent_preview_module = __import__(module_path, fromlist=[''])
+                    output_to_terminal_successful(f"Successfully imported latent preview from: {module_path}")
+                    break
+                except ImportError:
+                    continue
+            
+            if latent_preview_module is None:
+                output_to_terminal_error("Could not find ComfyUI's latent preview module")
+                output_to_terminal_error("TAESD preview patching skipped - using default preview system")
+                return
+            
+            # Check if the module has the expected get_previewer function
+            if not hasattr(latent_preview_module, 'get_previewer'):
+                output_to_terminal_error("Latent preview module does not have 'get_previewer' function")
+                output_to_terminal_error("TAESD preview patching skipped - using default preview system")
+                return
             
             # Store the original get_previewer function
-            if not hasattr(comfy.latent_preview, '_original_get_previewer'):
-                comfy.latent_preview._original_get_previewer = comfy.latent_preview.get_previewer
+            if not hasattr(latent_preview_module, '_original_get_previewer'):
+                latent_preview_module._original_get_previewer = latent_preview_module.get_previewer
+                output_to_terminal_successful("Stored original get_previewer function")
             
             def get_previewer_with_wan21_taesd(device, latent_format):
                 # Check if this is a Wan2.1 16-channel format with TAESD
@@ -639,14 +672,15 @@ class WanImageToVideoAdvancedSampler:
                     return latent_format.taesd_decoder
                 else:
                     # Fall back to the original function for other formats
-                    return comfy.latent_preview._original_get_previewer(device, latent_format)
+                    return latent_preview_module._original_get_previewer(device, latent_format)
             
             # Monkey patch the get_previewer function
-            comfy.latent_preview.get_previewer = get_previewer_with_wan21_taesd
+            latent_preview_module.get_previewer = get_previewer_with_wan21_taesd
             output_to_terminal_successful("Preview system patched for TAESD Wan2.1 support")
             
         except Exception as e:
             output_to_terminal_error(f"Failed to patch preview system: {e}")
+            output_to_terminal_error("TAESD preview patching skipped - using default preview system")
 
     def load_taehv_model(self):
         """
