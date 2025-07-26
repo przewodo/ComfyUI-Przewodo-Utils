@@ -6,7 +6,6 @@ Based on WanVideoWrapper's approach for TAEHV preview integration.
 """
 import torch
 import comfy.model_management as mm
-from comfy.latent_preview import LatentPreviewer
 from PIL import Image
 
 
@@ -20,6 +19,16 @@ def preview_to_image(latent_image):
     latents_ubyte = latents_ubyte.to(device="cpu", dtype=torch.uint8, non_blocking=mm.device_supports_non_blocking(latent_image.device))
 
     return Image.fromarray(latents_ubyte.numpy())
+
+
+class LatentPreviewer:
+    """Base class for latent previewers - ComfyUI compatible"""
+    def decode_latent_to_preview(self, x0):
+        pass
+
+    def decode_latent_to_preview_image(self, preview_format, x0):
+        preview_image = self.decode_latent_to_preview(x0)
+        return ("JPEG", preview_image, 512)
 
 
 class TAEHVPreviewer(LatentPreviewer):

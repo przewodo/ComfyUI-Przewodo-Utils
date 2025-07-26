@@ -12,7 +12,7 @@ from .wan_get_max_image_resolution_by_aspect_ratio import WanGetMaxImageResoluti
 imported_nodes = {}
 teacache_imports = import_nodes(["teacache"], ["TeaCache"])
 # Import nodes from different custom node packages
-kjnodes_imports = import_nodes(["comfyui-kjnodes"], ["SkipLayerGuidanceWanVideo", "PathchSageAttentionKJ", "ImageResizeKJv2"])
+kjnodes_imports = import_nodes(["comfyui-kjnodes"], ["SkipLayerGuidanceWanVideo", "PathchSageAttentionKJ", "ImageResizeKJv2", "ModelPatchTorchSettings"])
 gguf_imports = import_nodes(["ComfyUI-GGUF"], ["UnetLoaderGGUF"])
 wanblockswap = import_nodes(["wanblockswap"], ["WanVideoBlockSwap"])
 
@@ -27,6 +27,8 @@ UnetLoaderGGUF = imported_nodes.get("UnetLoaderGGUF")
 SageAttention = imported_nodes.get("PathchSageAttentionKJ")
 WanVideoBlockSwap = imported_nodes.get("WanVideoBlockSwap")
 ImageResizeKJv2 = imported_nodes.get("ImageResizeKJv2")
+ModelPatchTorchSettings = imported_nodes.get("ModelPatchTorchSettings")
+
 
 class WanImageToVideoAdvancedSampler:
     @classmethod
@@ -37,6 +39,7 @@ class WanImageToVideoAdvancedSampler:
         diffusion_models_names = [NONE] + folder_paths.get_filename_list("diffusion_models")
         vae_names = [NONE] + folder_paths.get_filename_list("vae")
         clip_vision_models = [NONE] + folder_paths.get_filename_list("clip_vision")        
+        lora_names = [NONE] + folder_paths.get_filename_list("loras")
 
         return {
             "required": OrderedDict([
@@ -79,11 +82,14 @@ class WanImageToVideoAdvancedSampler:
                 ("low_cfg", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01})),
                 ("total_steps", ("INT", {"default": 15, "min": 1, "max": 90, "step":1, "advanced": True,})),
                 ("total_steps_high_cfg", ("INT", {"default": 5, "min": 1, "max": 90, "step":1, "advanced": True,})),
-                ("noise_seed", ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "control_after_generate": True})),
+                ("causvid_lora", ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "control_after_generate": True})),
+                ("high_cfg_causvid_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step":0.01})),
+                ("low_cfg_causvid_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step":0.01})),
+                ("image_generation_mode", (lora_names, {"default": NONE})),                
                 ("use_TAEHV_preview", ("BOOLEAN", {"default": True, "advanced": True})),                
             ]),
             "optional": OrderedDict([
-                ("lora_stack", ("LORA_STACK", {"default": None, "advanced": True})),
+                ("lora_stack", (any_type, {"default": None, "advanced": True})),
                 ("start_image", ("IMAGE", {"default": None, "advanced": True})),
                 ("end_image", ("IMAGE", {"default": None, "advanced": True})),
             ]),
@@ -107,7 +113,8 @@ class WanImageToVideoAdvancedSampler:
             total_video_seconds=1, clip_vision_model=NONE, clip_vision_strength=1.0,
             use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0,
             lora_stack=None, start_image=None, start_image_clip_vision_enabled=True,
-            end_image=None, end_image_clip_vision_enabled=True, use_TAEHV_preview=True):
+            end_image=None, end_image_clip_vision_enabled=True, use_TAEHV_preview=True,
+            causvid_lora=0, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0):
 
         #variables
         output_image = None
@@ -209,7 +216,11 @@ class WanImageToVideoAdvancedSampler:
             total_steps,
             total_steps_high_cfg,
             noise_seed,
-            use_TAEHV_preview
+            use_TAEHV_preview,
+            lora_stack,
+            causvid_lora,
+            high_cfg_causvid_strength,
+            low_cfg_causvid_strength
         )
 
         return (output_image,)
@@ -264,7 +275,11 @@ class WanImageToVideoAdvancedSampler:
                     total_steps,
                     total_steps_high_cfg,
                     noise_seed,
-                    use_TAEHV_preview
+                    use_TAEHV_preview,
+                    lora_stack,
+                    causvid_lora,
+                    high_cfg_causvid_strength,
+                    low_cfg_causvid_strength
     ):
 
         output_to_terminal_successful("Generation started...")
@@ -287,8 +302,32 @@ class WanImageToVideoAdvancedSampler:
         clip_vision_start_image = None
         clip_vision_end_image = None
         total_frames = (total_video_seconds * 16) + 1
+        lora_loader = nodes.LoraLoader()
 
-        # lora_loader = nodes.LoraLoader()
+        if (lora_stack is not None and len(lora_stack) > 0):
+            output_to_terminal_successful("Loading Lora Stack...")
+            
+            lora_count = 0
+            for lora_entry in lora_stack:
+                lora_count += 1
+
+                lora_name = lora_entry.name if lora_entry.name != NONE else None
+                model_strength = lora_entry.strength_model
+                clip_strength = lora_entry.strength_clip
+
+                if lora_name and lora_name != NONE:
+                    output_to_terminal_successful(f"Applying LoRA {lora_count}/{len(lora_stack)}: {lora_name} (model: {model_strength}, clip: {clip_strength})")
+                    working_model, clip = lora_loader.load_lora(working_model, clip, lora_name, model_strength, clip_strength)
+                else:
+                    output_to_terminal_error(f"Skipping LoRA {lora_count}/{len(lora_stack)}: No valid LoRA name")
+            
+            output_to_terminal_successful(f"Successfully applied {len(lora_stack)} LoRAs to the model")
+
+        if (ModelPatchTorchSettings is not None):
+            output_to_terminal_successful("Applying Model Patch Torch Settings...")
+            working_model, ModelPatchTorchSettings.patch(working_model, True)
+        else:
+            output_to_terminal_error("Model Patch Torch Settings not available, skipping...")
 
         if (use_TAEHV_preview):
             output_to_terminal_successful("Setting up TAESD for Wan2.1...")
@@ -381,12 +420,27 @@ class WanImageToVideoAdvancedSampler:
         temp_positive_clip, temp_negative_clip, in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, 0.5, image_generation_mode)
 
         if (use_dual_samplers):
+            model_high_cfg = working_model.clone()
+            model_low_cfg = working_model.clone()
+
+            if (causvid_lora is not None and high_cfg_causvid_strength > 0.0):
+                output_to_terminal_successful(f"Applying CausVid LoRA for High CFG with strength: {high_cfg_causvid_strength}")
+                model_high_cfg, = lora_loader.load_lora(model_high_cfg, clip, causvid_lora, 1.0, high_cfg_causvid_strength)
+
             output_to_terminal_successful("High CFG KSampler started...")
-            out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, total_steps_high_cfg, "enabled", 1)
+            out_latent, = k_sampler.sample(model_high_cfg, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, total_steps_high_cfg, "enabled", 1)
+
+            if (causvid_lora is not None and low_cfg_causvid_strength > 0.0):
+                output_to_terminal_successful(f"Applying CausVid LoRA for Low CFG with strength: {low_cfg_causvid_strength}")
+                model_low_cfg, = lora_loader.load_lora(model_low_cfg, clip, causvid_lora, 1.0, low_cfg_causvid_strength)
 
             output_to_terminal_successful("Low CFG KSampler started...")
-            out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, low_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, out_latent, total_steps_high_cfg, 1000, "enabled", 1)
+            out_latent, = k_sampler.sample(model_low_cfg, "enable", noise_seed, total_steps, low_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, out_latent, total_steps_high_cfg, 1000, "enabled", 1)
         else:
+            if (causvid_lora is not None and high_cfg_causvid_strength > 0.0):
+                output_to_terminal_successful(f"Applying CausVid LoRA with strength: {high_cfg_causvid_strength}")
+                working_model, = lora_loader.load_lora(working_model, clip, causvid_lora, 1.0, high_cfg_causvid_strength)
+
             output_to_terminal_successful("KSampler started...")
             out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, 1000, "enabled", 1)
 
@@ -454,39 +508,15 @@ class WanImageToVideoAdvancedSampler:
                 hasattr(latent_format, 'latent_dimensions') and 
                 latent_format.latent_dimensions == 3):
                 
-                # Try to load and install TAEHV for Wan2.1 models
-                taehv_model = self.load_taehv_model()
-                if taehv_model is not None:
-                    # Install TAEHV previewer
-                    from .taehv_preview_simple import install_taehv_previewer
-                    success = install_taehv_previewer(model, taehv_model)
-                    
-                    if success:
-                        output_to_terminal_successful("TAEHV preview system installed for Wan2.1 models")
-                    else:
-                        output_to_terminal_error("Failed to install TAEHV preview system")
-                        latent_format.taesd_decoder_name = None  # Fallback to RGB
-                else:
-                    # Try to download TAEHV models automatically
-                    output_to_terminal_successful("TAEHV models not found, attempting automatic download...")
-                    if self.download_taehv_models():
-                        # Try loading again after download
-                        taehv_model = self.load_taehv_model()
-                        if taehv_model is not None:
-                            from .taehv_preview_simple import install_taehv_previewer
-                            success = install_taehv_previewer(model, taehv_model)
-                            if success:
-                                output_to_terminal_successful("TAEHV models downloaded and preview system installed for Wan2.1 models")
-                            else:
-                                output_to_terminal_error("Failed to install TAEHV preview system after download")
-                                latent_format.taesd_decoder_name = None  # Fallback to RGB
-                        else:
-                            output_to_terminal_error("Failed to load TAEHV models after download")
-                            latent_format.taesd_decoder_name = None  # Fallback to RGB
-                    else:
-                        # Fallback: disable TAESD and use RGB previews
-                        latent_format.taesd_decoder_name = None
-                        output_to_terminal_successful("TAEHV download failed - using RGB fallback previews for Wan2.1 models")
+                # Set taesd_decoder_name to None to disable TAESD and use RGB fallback
+                # This prevents the startswith error with TAEHVPreviewer objects
+                latent_format.taesd_decoder_name = None
+                output_to_terminal_successful("Using RGB fallback previews for Wan2.1 models")
+                
+                # Note: TAEHV integration is temporarily disabled to prevent errors
+                # The original TAEHV code can be re-enabled once the integration
+                # is properly fixed to work with ComfyUI's preview system
+                
         return
 
     def load_taehv_model(self):
@@ -537,94 +567,21 @@ class WanImageToVideoAdvancedSampler:
                     taehv_model.to(device=device, dtype=torch.float16)
                     taehv_model.eval()
                     
-                    output_to_terminal_successful(f"✓ TAEHV model {model_name} loaded successfully on {device}")
+                    output_to_terminal_successful(f"TAEHV model {model_name} loaded successfully on {device}")
                     return taehv_model
                     
                 except Exception as e:
                     output_to_terminal_error(f"✗ Failed to load {model_name}: {e}")
                     continue
             
-            output_to_terminal_error("❌ No compatible TAEHV models could be loaded")
+            output_to_terminal_error("No compatible TAEHV models could be loaded")
             return None
             
         except ImportError as e:
-            output_to_terminal_error(f"Failed to import required modules for TAEHV: {e}")
+            output_to_terminal_error(f"Failed to import TAEHV: {e}")
             return None
         except Exception as e:
-            output_to_terminal_error(f"Failed to load TAEHV model: {e}")
-            return None
-
-    def _convert_taehv_state_dict(self, source_state_dict, target_state_dict):
-        """
-        Convert TAEHV state dict from different model formats to match our architecture.
-        
-        Handles cases where the source model has different layer structures or dimensions.
-        Returns converted state dict or None if conversion fails.
-        """
-        try:
-            import torch
-            converted_dict = {}
-            
-            output_to_terminal_successful("Attempting TAEHV state dict conversion...")
-            
-            # Check if source uses 2D convolutions that need to be converted to 3D
-            needs_3d_conversion = False
-            for key, tensor in source_state_dict.items():
-                if 'conv' in key and 'weight' in key and tensor.dim() == 4:
-                    needs_3d_conversion = True
-                    break
-            
-            if needs_3d_conversion:
-                output_to_terminal_successful("Converting 2D convolutions to 3D for video processing...")
-                
-                # Convert 2D conv weights to 3D by adding temporal dimension
-                for key, tensor in source_state_dict.items():
-                    if 'conv' in key and 'weight' in key and tensor.dim() == 4:
-                        # Convert [out_ch, in_ch, h, w] to [out_ch, in_ch, t, h, w] with t=3
-                        converted_tensor = tensor.unsqueeze(2).repeat(1, 1, 3, 1, 1) / 3.0
-                        converted_dict[key] = converted_tensor
-                    else:
-                        converted_dict[key] = tensor
-            else:
-                converted_dict = source_state_dict.copy()
-            
-            # Try to match as many keys as possible
-            final_dict = {}
-            matched_keys = 0
-            total_target_keys = len(target_state_dict)
-            
-            for target_key in target_state_dict.keys():
-                if target_key in converted_dict:
-                    source_tensor = converted_dict[target_key]
-                    target_shape = target_state_dict[target_key].shape
-                    
-                    if source_tensor.shape == target_shape:
-                        final_dict[target_key] = source_tensor
-                        matched_keys += 1
-                    else:
-                        # Try to reshape or adapt if possible
-                        if source_tensor.numel() == target_state_dict[target_key].numel():
-                            try:
-                                final_dict[target_key] = source_tensor.reshape(target_shape)
-                                matched_keys += 1
-                            except:
-                                output_to_terminal_error(f"Could not reshape {target_key}: {source_tensor.shape} -> {target_shape}")
-                        else:
-                            output_to_terminal_error(f"Size mismatch for {target_key}: {source_tensor.shape} vs {target_shape}")
-            
-            match_percentage = (matched_keys / total_target_keys) * 100
-            output_to_terminal_successful(f"State dict conversion: {matched_keys}/{total_target_keys} keys matched ({match_percentage:.1f}%)")
-            
-            # Require at least 50% of keys to match for a successful conversion
-            if match_percentage >= 50:
-                output_to_terminal_successful("State dict conversion successful - using converted model")
-                return final_dict
-            else:
-                output_to_terminal_error(f"State dict conversion failed - only {match_percentage:.1f}% keys matched")
-                return None
-                
-        except Exception as e:
-            output_to_terminal_error(f"State dict conversion error: {e}")
+            output_to_terminal_error(f"TAEHV loading error: {e}")
             return None
 
     def download_taehv_models(self):
