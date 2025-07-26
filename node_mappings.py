@@ -18,6 +18,7 @@ try:
     from .debug_latent_shapes import *
     from .wan_video_generation_mode_selector import *
     from .wan_video_vae_decode import *
+    from .wan_video_lora_stack import *
     
 except ImportError:
     output_to_terminal_error("Failed to load Essential nodes")
@@ -43,6 +44,7 @@ NODE_CLASS_MAPPINGS = {
     "przewodo DebugLatentShapes": DebugLatentShapes,
     "przewodo WanVideoGenerationModeSelector": WanVideoGenerationModeSelector,
     "przewodo WanVideoVaeDecode": WanVideoVaeDecode,
+    "przewodo WanVideoLoraStack": WanVideoLoraStack,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -65,4 +67,5 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "przewodo DebugLatentShapes": "DebugLatentShapes",
     "przewodo WanVideoGenerationModeSelector": "WanVideoGenerationModeSelector",
     "przewodo WanVideoVaeDecode": "WanVideoVaeDecode",
+    "przewodo WanVideoLoraStack": "WanVideoLoraStack",
 }

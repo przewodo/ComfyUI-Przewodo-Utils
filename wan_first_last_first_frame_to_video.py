@@ -53,7 +53,7 @@ class WanFirstLastFirstFrameToVideo:
         total_shift = (first_end_frame_shift * 4)
         total_length = length + total_shift
 
-        print(f"{RESET+CYAN}" f"Generating {length} frames with a padding of {total_shift}. Total Frames: {total_length}" f"{RESET}")
+        output_to_terminal_successful(f"Generating {length} frames with a padding of {total_shift}. Total Frames: {total_length}")
 
         if start_image is not None:
             start_image = comfy.utils.common_upscale(start_image[:total_length].movedim(-1, 1), width, height, "lanczos", "center").movedim(1, -1)
@@ -72,25 +72,25 @@ class WanFirstLastFirstFrameToVideo:
             middle_end = (total_length // 2) + ((total_length // 6) // 2)
 
             if (generation_mode == START_TO_END_TO_START_IMAGE and start_image is not None and end_image is not None):
-                output_to_terminal("Generating start -> end -> start frame sequence")
+                output_to_terminal_successful("Generating start -> end -> start frame sequence")
 
                 # Fix first section (start frames)
                 image[0:middle_start] = start_image
                 mask[:, :, 0:middle_start] = first_end_frame_denoise
-                output_to_terminal(f"Start sequence: frames 0-{middle_start - 1} ({middle_start} frames)")
+                output_to_terminal_successful(f"Start sequence: frames 0-{middle_start - 1} ({middle_start} frames)")
 
                 # Fix the middle frame (the "end" frame)
                 image[middle_start:middle_end] = end_image
                 mask[:, :, middle_start:middle_end] = first_end_frame_denoise
-                output_to_terminal(f"Middle sequence: frames {middle_start}-{middle_end - 1} ({middle_end - middle_start} frames)")
+                output_to_terminal_successful(f"Middle sequence: frames {middle_start}-{middle_end - 1} ({middle_end - middle_start} frames)")
 
                 # Fix last section (return to start frames)
                 image[middle_end:total_length - middle_end] = start_image
                 mask[:, :, middle_end:total_length - middle_end] = first_end_frame_denoise
-                output_to_terminal(f"End sequence: frames {middle_end}-{total_length - 1} ({total_length - middle_end} frames)")
+                output_to_terminal_successful(f"End sequence: frames {middle_end}-{total_length - 1} ({total_length - middle_end} frames)")
 
             elif (generation_mode == START_END_IMAGE and start_image is not None and end_image is not None):
-                output_to_terminal("Generating start -> end frame sequence")
+                output_to_terminal_successful("Generating start -> end frame sequence")
                 # Fix first frame
                 image[:start_image.shape[0]] = start_image
                 mask[:, :, :start_image.shape[0]] = first_end_frame_denoise
@@ -100,7 +100,7 @@ class WanFirstLastFirstFrameToVideo:
                 mask[:, :, -end_image.shape[0]:] = first_end_frame_denoise
 
             elif (generation_mode == END_TO_START_IMAGE and start_image is not None and end_image is not None):
-                output_to_terminal("Generating end -> start frame sequence")
+                output_to_terminal_successful("Generating end -> start frame sequence")
                 # Fix first frame
                 image[:end_image.shape[0]] = end_image
                 mask[:, :, :end_image.shape[0]] = first_end_frame_denoise
@@ -110,13 +110,13 @@ class WanFirstLastFirstFrameToVideo:
                 mask[:, :, -start_image.shape[0]:] = first_end_frame_denoise
 
             elif (generation_mode == START_IMAGE and start_image is not None):
-                output_to_terminal("Generating start frame sequence")
+                output_to_terminal_successful("Generating start frame sequence")
                 # Fix first frame
                 image[:start_image.shape[0]] = start_image
                 mask[:, :, :start_image.shape[0]] = first_end_frame_denoise
 
             elif (generation_mode == END_IMAGE and end_image is not None):
-                output_to_terminal("Generating end frame sequence")
+                output_to_terminal_successful("Generating end frame sequence")
                 # Fix last frame (cycle closure)
                 image[-end_image.shape[0]:] = end_image
                 mask[:, :, -end_image.shape[0]:] = first_end_frame_denoise
@@ -133,9 +133,9 @@ class WanFirstLastFirstFrameToVideo:
             if first_end_frame_denoise > 0:
                 mask[:, :, total_length - end_shift:total_length - end_shift + 1] = 0
 
-            output_to_terminal(f"First KeyFrame: {start_shift} ({(start_shift) - (start_shift - 1)} frames)")
-            output_to_terminal(f"Middle KeyFrame: {(total_length // 2)} ({(total_length // 2) - ((total_length // 2) - 1)} frames)")
-            output_to_terminal(f"End KeyFrame: {total_length - end_shift} ({(total_length - end_shift + 1) - (total_length - end_shift)} frames)")
+            output_to_terminal_successful(f"First KeyFrame: {start_shift} ({(start_shift) - (start_shift - 1)} frames)")
+            output_to_terminal_successful(f"Middle KeyFrame: {(total_length // 2)} ({(total_length // 2) - ((total_length // 2) - 1)} frames)")
+            output_to_terminal_successful(f"End KeyFrame: {total_length - end_shift} ({(total_length - end_shift + 1) - (total_length - end_shift)} frames)")
 
         concat_latent_image = vae.encode_tiled(image[:,:,:,:3], 512, 512, 64, 64, 8)
         mask = mask.view(1, mask.shape[2] // 4, 4, mask.shape[3], mask.shape[4]).transpose(1, 2)
@@ -144,7 +144,7 @@ class WanFirstLastFirstFrameToVideo:
 
         if (clip_vision_start_image is not None or clip_vision_end_image is not None):
             if (generation_mode == START_TO_END_TO_START_IMAGE and clip_vision_start_image is not None and clip_vision_end_image is not None):
-                output_to_terminal("Running clipvision for start -> end -> start sequence")
+                output_to_terminal_successful("Running clipvision for start -> end -> start sequence")
                 start_hidden = clip_vision_start_image.penultimate_hidden_states
                 end_hidden = clip_vision_end_image.penultimate_hidden_states
 
@@ -159,7 +159,7 @@ class WanFirstLastFirstFrameToVideo:
                 clip_vision_output.penultimate_hidden_states = states
 
             elif (generation_mode == START_END_IMAGE and clip_vision_start_image is not None and clip_vision_end_image is not None):
-                output_to_terminal("Running clipvision for start -> end sequence")
+                output_to_terminal_successful("Running clipvision for start -> end sequence")
                 start_hidden = clip_vision_start_image.penultimate_hidden_states
                 end_hidden = clip_vision_end_image.penultimate_hidden_states
 
@@ -174,7 +174,7 @@ class WanFirstLastFirstFrameToVideo:
                 clip_vision_output.penultimate_hidden_states = states
 
             elif (generation_mode == END_TO_START_IMAGE and clip_vision_start_image is not None and clip_vision_end_image is not None):
-                output_to_terminal("Running clipvision for end -> start sequence")
+                output_to_terminal_successful("Running clipvision for end -> start sequence")
                 start_hidden = clip_vision_start_image.penultimate_hidden_states
                 end_hidden = clip_vision_end_image.penultimate_hidden_states 
 
@@ -189,7 +189,7 @@ class WanFirstLastFirstFrameToVideo:
                 clip_vision_output.penultimate_hidden_states = states
 
             elif (generation_mode == START_IMAGE and clip_vision_start_image is not None):
-                output_to_terminal("Running clipvision for start sequence")
+                output_to_terminal_successful("Running clipvision for start sequence")
                 start_hidden = clip_vision_start_image.penultimate_hidden_states
 
                 start_hidden = start_hidden * clip_vision_strength
@@ -198,7 +198,7 @@ class WanFirstLastFirstFrameToVideo:
                 clip_vision_output.penultimate_hidden_states = start_hidden
 
             elif (generation_mode == END_IMAGE and clip_vision_end_image is not None):
-                output_to_terminal("Running clipvision for end sequence")
+                output_to_terminal_successful("Running clipvision for end sequence")
                 end_hidden = clip_vision_end_image.penultimate_hidden_states
 
                 end_hidden = end_hidden * clip_vision_strength

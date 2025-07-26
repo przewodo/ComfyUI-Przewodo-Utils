@@ -64,25 +64,28 @@ class WanImageToVideoAdvancedSampler:
                 ("sage_attention_mode", (["disabled", "auto", "sageattn_qk_int8_pv_fp16_cuda", "sageattn_qk_int8_pv_fp16_triton", "sageattn_qk_int8_pv_fp8_cuda"], {"default": "auto", "tooltip": "Global patch comfy attention to use sageattn, once patched to revert back to normal you would need to run this node again with disabled option."})),
                 ("use_shift", ("BOOLEAN", {"default": True, "advanced": True})),
                 ("shift", ("FLOAT", {"default": 2.0, "min": 0.0, "max": 100.0, "step":0.01})),
+                ("use_block_swap", ("BOOLEAN", {"default": True, "advanced": True})),
+                ("block_swap", ("INT", {"default": 35, "min": 1, "max": 40, "step":1})),
                 ("large_image_side", ("INT", {"default": 832, "min": 2.0, "max": 1200, "step":2, "advanced": True, "tooltip": "The larger side of the image to resize to. The smaller side will be resized proportionally."})),
                 ("image_generation_mode", (WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, {"default": START_IMAGE})),
                 ("wan_model_size", (WAN_MODELS, {"default": "wan2.1_i2v_720p_14B_ret_mode", "tooltip": "The model type to use for the diffusion process."})),
                 ("total_video_seconds", ("INT", {"default": 1, "min": 1, "max": 5, "step":1, "advanced": True, "tooltip": "The total duration of the video in seconds."})),
                 ("clip_vision_model", (clip_vision_models, {"default": NONE, "advanced": True})),
                 ("clip_vision_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01})),
+                ("start_image_clip_vision_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CLIP vision for the start image. If disabled, the start image will be used as a static frame."})),
+                ("end_image_clip_vision_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CLIP vision for the end image. If disabled, the end image will be used as a static frame."})),                
                 ("use_dual_samplers", ("BOOLEAN", {"default": True, "advanced": True})),
                 ("high_cfg", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01})),
                 ("low_cfg", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01})),
                 ("total_steps", ("INT", {"default": 15, "min": 1, "max": 90, "step":1, "advanced": True,})),
                 ("total_steps_high_cfg", ("INT", {"default": 5, "min": 1, "max": 90, "step":1, "advanced": True,})),
                 ("noise_seed", ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "control_after_generate": True})),
+                ("use_TAEHV_preview", ("BOOLEAN", {"default": True, "advanced": True})),                
             ]),
             "optional": OrderedDict([
                 ("lora_stack", ("LORA_STACK", {"default": None, "advanced": True})),
                 ("start_image", ("IMAGE", {"default": None, "advanced": True})),
-                ("start_image_clip_vision_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CLIP vision for the start image. If disabled, the start image will be used as a static frame."})),
                 ("end_image", ("IMAGE", {"default": None, "advanced": True})),
-                ("end_image_clip_vision_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CLIP vision for the end image. If disabled, the end image will be used as a static frame."})),                
             ]),
         }
 
@@ -95,14 +98,16 @@ class WanImageToVideoAdvancedSampler:
 
     def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative,
             clip, clip_type, clip_device, vae, use_tea_cache,
-            tea_cache_model_type="wan2.1_i2v_720p_14B_ret_mode", tea_cache_rel_l1_thresh=0.4,
-            tea_cache_start_percent=0.0, tea_cache_end_percent=1.0, tea_cache_cache_device="cuda",
+            tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22,
+            tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda",
             use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8,
-            lora_stack=None, use_sage_attention=True, sage_attention_mode="auto", use_shift=False, shift=2,
-            start_image=None, start_image_clip_vision_enabled=True,
-            end_image=None, end_image_clip_vision_enabled=True, large_image_side=832, wan_model_size=WAN_480P,
-            clip_vision_model=NONE, total_video_seconds=1, clip_vision_strength=1.0, image_generation_mode=START_IMAGE,
-            use_dual_samplers=True, high_cfg=3.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0):
+            use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0,
+            use_block_swap=True, block_swap=35,
+            large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size="wan2.1_i2v_720p_14B_ret_mode",
+            total_video_seconds=1, clip_vision_model=NONE, clip_vision_strength=1.0,
+            use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0,
+            lora_stack=None, start_image=None, start_image_clip_vision_enabled=True,
+            end_image=None, end_image_clip_vision_enabled=True, use_TAEHV_preview=True):
 
         #variables
         output_image = None
@@ -119,7 +124,7 @@ class WanImageToVideoAdvancedSampler:
         sage_attention = None
         slg_wanvideo = None
         model_shift = None
-        block_swap = WanVideoBlockSwap()
+        wanBlockSwap = WanVideoBlockSwap()
 
         # Create TeaCache node if available
         if TeaCache is not None and use_tea_cache:
@@ -168,10 +173,14 @@ class WanImageToVideoAdvancedSampler:
 
             model_shift,
             shift,
+            use_shift,
 
-            block_swap,          
+            wanBlockSwap,
+            use_block_swap,
+            block_swap,
 
-            tea_cache, 
+            tea_cache,
+            use_tea_cache,
             tea_cache_model_type, 
             tea_cache_rel_l1_thresh, 
             tea_cache_start_percent, 
@@ -179,6 +188,7 @@ class WanImageToVideoAdvancedSampler:
             tea_cache_cache_device,
 
             slg_wanvideo,
+            use_SLG,
             SLG_blocks,
             SLG_start_percent,
             SLG_end_percent,
@@ -198,7 +208,8 @@ class WanImageToVideoAdvancedSampler:
             low_cfg,
             total_steps,
             total_steps_high_cfg,
-            noise_seed
+            noise_seed,
+            use_TAEHV_preview
         )
 
         return (output_image,)
@@ -217,10 +228,14 @@ class WanImageToVideoAdvancedSampler:
 
                     model_shift,
                     shift,
+                    use_shift,
 
+                    wanBlockSwap,
+                    use_block_swap,
                     block_swap,
 
                     tea_cache,
+                    use_tea_cache,
                     tea_cache_model_type,
                     tea_cache_rel_l1_thresh,
                     tea_cache_start_percent,
@@ -228,6 +243,7 @@ class WanImageToVideoAdvancedSampler:
                     tea_cache_cache_device,
 
                     slg_wanvideo,
+                    use_SLG,
                     slg_wanvideo_blocks_string,
                     slg_wanvideo_start_percent,
                     slg_wanvideo_end_percent,
@@ -247,7 +263,8 @@ class WanImageToVideoAdvancedSampler:
                     low_cfg,
                     total_steps,
                     total_steps_high_cfg,
-                    noise_seed
+                    noise_seed,
+                    use_TAEHV_preview
     ):
 
         output_to_terminal_successful("Generation started...")
@@ -271,12 +288,19 @@ class WanImageToVideoAdvancedSampler:
         clip_vision_end_image = None
         total_frames = (total_video_seconds * 16) + 1
 
-        output_to_terminal_successful("Setting up TAESD for Wan2.1...")
-        self.setup_taesd_preview(clip_type, working_model)
+        # lora_loader = nodes.LoraLoader()
+
+        if (use_TAEHV_preview):
+            output_to_terminal_successful("Setting up TAESD for Wan2.1...")
+            self.setup_taesd_preview(clip_type, working_model)
+        else:
+            output_to_terminal_error("TAESD for Wan2.1 is disabled, using default settings...")
 
         if (clip_vision_model != NONE):
             output_to_terminal_successful("Loading clip vision model...")
             clip_vision, = CLIPVisionLoader.load_clip(clip_vision_model)
+        else:
+            output_to_terminal_error("No clip vision model selected, skipping...")
 
         if (start_image is not None):
             output_to_terminal_successful("Resizing Start Image...")
@@ -287,11 +311,15 @@ class WanImageToVideoAdvancedSampler:
             if (tmpTotalPixels < imageTotalPixels):
                 image_width = tmp_width
                 image_height = tmp_height
-                end_image, image_width, image_height = resizer.resize(end_image, image_width, image_height, "resize", "lanczos", 2, "0, 0, 0", "center", "cpu")
+                start_image, image_width, image_height = resizer.resize(start_image, image_width, image_height, "resize", "lanczos", 2, "0, 0, 0", "center", "cpu")
+
             output_to_terminal_successful(f"Start Image final size: {image_width}x{image_height}")
+
             if (start_image_clip_vision_enabled) and (clip_vision is not None):
                 output_to_terminal_successful("Encoding CLIP Vision for Start Image...")
                 clip_vision_start_image, = CLIPVisionEncoder.encode(clip_vision, start_image, "center")
+        else:
+            output_to_terminal_error("Start Image is not provided, skipping...")
 
         if (end_image is not None):
             output_to_terminal_successful("Resizing End Image...")
@@ -305,28 +333,43 @@ class WanImageToVideoAdvancedSampler:
                 end_image, image_width, image_height = resizer.resize(end_image, image_width, image_height, "resize", "lanczos", 2, "0, 0, 0", "center", "cpu")
 
             output_to_terminal_successful(f"End Image final size: {image_width}x{image_height}")
+
             if (end_image_clip_vision_enabled) and (clip_vision is not None):
                 output_to_terminal_successful("Encoding CLIP Vision for End Image...")
                 clip_vision_end_image, = CLIPVisionEncoder.encode(clip_vision, end_image, "center")
+        else:
+            output_to_terminal_error("End Image is not provided, skipping...")
 
         if (sage_attention is not None):
             output_to_terminal_successful("Applying Sage Attention...")
             working_model, = sage_attention.patch(working_model, sage_attention_mode)
+        else:
+            output_to_terminal_error("Sage Attention disabled, skipping...")
 
-        if (tea_cache is not None):
+        if (tea_cache is not None and use_tea_cache):
             output_to_terminal_successful("Applying TeaCache...")
             working_model, = tea_cache.apply_teacache(working_model, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device)
 
-            if (slg_wanvideo is not None) and (slg_wanvideo_blocks_string is not None) and (slg_wanvideo_blocks_string.strip() != ""):
+            if (slg_wanvideo is not None and use_SLG) and (slg_wanvideo_blocks_string is not None) and (slg_wanvideo_blocks_string.strip() != ""):
                 output_to_terminal_successful(f"Applying Skip Layer Guidance with blocks: {slg_wanvideo_blocks_string}...")
                 working_model, = slg_wanvideo.slg(working_model, slg_wanvideo_start_percent, slg_wanvideo_end_percent, slg_wanvideo_blocks_string)
+            else:
+                output_to_terminal_error("SLG WanVideo not enabled or blocks not specified, skipping...")
+        else:
+            output_to_terminal_error("TeaCache not enabled, skipping...")
+            
         
-        if (model_shift is not None):
+        if (model_shift is not None and use_shift):
             output_to_terminal_successful("Applying Model Shift...")
             working_model, = model_shift.patch(working_model, shift)
+        else:
+            output_to_terminal_error("Model Shift disabled, skipping...")
 
-        output_to_terminal_successful("Setting block swap...")
-        working_model, = block_swap.set_callback(working_model, 35, True, True, True)
+        if (use_block_swap):
+            output_to_terminal_successful("Setting block swap...")
+            working_model, = wanBlockSwap.set_callback(working_model, block_swap, True, True, True)
+        else:
+            output_to_terminal_error("Block swap disabled, skipping...")
 
         output_to_terminal_successful("Encoding Positive CLIP text...")
         temp_positive_clip, = text_encode.encode(clip, positive)
@@ -362,7 +405,7 @@ class WanImageToVideoAdvancedSampler:
                 output_to_terminal_successful(f"Loading GGUF model: {GGUF}")
                 gguf_loader = UnetLoaderGGUF()
                 model, = gguf_loader.load_unet(unet_name=GGUF)
-                output_to_terminal_successful(f"GGUF model '{GGUF}' loaded successfully using UnetLoaderGGUF")
+                output_to_terminal_successful(f"GGUF model {GGUF} loaded successfully using UnetLoaderGGUF")
                 return model
             else:
                 if UnetLoaderGGUF is None:
@@ -377,7 +420,7 @@ class WanImageToVideoAdvancedSampler:
                 output_to_terminal_successful(f"Loading Diffusion model: {Diffusor}")
                 unet_loader = nodes.UNETLoader()
                 model, = unet_loader.load_unet(unet_name=Diffusor, weight_dtype=Diffusor_weight_dtype)
-                output_to_terminal_successful(f"Diffusion model '{Diffusor}' loaded successfully using UNETLoader")
+                output_to_terminal_successful(f"Diffusion model {Diffusor} loaded successfully using UNETLoader")
                 return model
             else:
                 output_to_terminal_error("No Diffusion model specified")
@@ -388,87 +431,304 @@ class WanImageToVideoAdvancedSampler:
 
     def setup_taesd_preview(self, clip_type, model):
         """
-        Set up TAESD preview for Wan2.1 models based on CLIP type.
-        Only applies taew2_1 models for CLIP_WAN, otherwise lets KSampler handle it.
+        TAESD preview setup for Wan2.1 models using TAEHV integration.
+        
+        This method sets up proper TAESD preview support for Wan2.1 models by:
+        1. Loading TAEHV (Tiny AutoEncoder for Hunyuan Video) for Wan2.1 models
+        2. Auto-downloading TAEHV models if they don't exist
+        3. Installing TAEHV as the preview decoder in the latent format
+        4. Falling back to RGB previews if TAEHV is not available
+        
+        TAEHV is specifically designed for Wan2.1's 16-channel latent space
+        and provides proper video preview functionality.
         """
         # Only handle Wan2.1 models, let KSampler deal with everything else
         if clip_type != CLIP_WAN:
             return
             
+        # Check if this is a Wan2.1 model
+        if hasattr(model, 'model') and hasattr(model.model, 'latent_format'):
+            latent_format = model.model.latent_format
+            if (hasattr(latent_format, 'latent_channels') and 
+                latent_format.latent_channels == 16 and
+                hasattr(latent_format, 'latent_dimensions') and 
+                latent_format.latent_dimensions == 3):
+                
+                # Try to load and install TAEHV for Wan2.1 models
+                taehv_model = self.load_taehv_model()
+                if taehv_model is not None:
+                    # Install TAEHV previewer
+                    from .taehv_preview_simple import install_taehv_previewer
+                    success = install_taehv_previewer(model, taehv_model)
+                    
+                    if success:
+                        output_to_terminal_successful("TAEHV preview system installed for Wan2.1 models")
+                    else:
+                        output_to_terminal_error("Failed to install TAEHV preview system")
+                        latent_format.taesd_decoder_name = None  # Fallback to RGB
+                else:
+                    # Try to download TAEHV models automatically
+                    output_to_terminal_successful("TAEHV models not found, attempting automatic download...")
+                    if self.download_taehv_models():
+                        # Try loading again after download
+                        taehv_model = self.load_taehv_model()
+                        if taehv_model is not None:
+                            from .taehv_preview_simple import install_taehv_previewer
+                            success = install_taehv_previewer(model, taehv_model)
+                            if success:
+                                output_to_terminal_successful("TAEHV models downloaded and preview system installed for Wan2.1 models")
+                            else:
+                                output_to_terminal_error("Failed to install TAEHV preview system after download")
+                                latent_format.taesd_decoder_name = None  # Fallback to RGB
+                        else:
+                            output_to_terminal_error("Failed to load TAEHV models after download")
+                            latent_format.taesd_decoder_name = None  # Fallback to RGB
+                    else:
+                        # Fallback: disable TAESD and use RGB previews
+                        latent_format.taesd_decoder_name = None
+                        output_to_terminal_successful("TAEHV download failed - using RGB fallback previews for Wan2.1 models")
+        return
+
+    def load_taehv_model(self):
+        """
+        Load TAEHV model for Wan2.1 video previews.
+        
+        Searches for TAEHV models in the vae_approx folder and loads the first compatible one.
+        Returns the loaded TAEHV model or None if not found.
+        """
         try:
-            models_dir = folder_paths.models_dir
-            vae_approx_dir = os.path.join(models_dir, "vae_approx")
+            import folder_paths
+            from .taehv_simple import TAEHV
             
-            # Create vae_approx directory if it doesn't exist
-            if not os.path.exists(vae_approx_dir):
-                os.makedirs(vae_approx_dir)
-                output_to_terminal_successful("Created vae_approx directory")
+            # Look for TAEHV models (prefer safetensors like WanVideoWrapper)
+            vae_approx_files = folder_paths.get_filename_list("vae_approx")
             
-            # Look for Wan2.1 TAESD models and ensure they're in vae_approx
-            wan_taesd_files = ["taew2_1.pth", "taew2_1.safetensors"]
+            # Priority order: safetensors first, then other formats
+            taehv_candidates = []
+            for f in vae_approx_files:
+                if any(keyword in f.lower() for keyword in ['taehv', 'taew2_1', 'wan2.1', 'hunyuan']):
+                    if f.endswith('.safetensors'):
+                        taehv_candidates.insert(0, f)  # Prioritize safetensors
+                    else:
+                        taehv_candidates.append(f)
             
-            # Additional search locations for TAESD models
-            additional_search_paths = [
-                vae_approx_dir,  # Primary location - should already be checked
-                os.path.join(models_dir, "vae"),  # Sometimes placed in vae folder
-                models_dir  # Root models directory
+            if not taehv_candidates:
+                output_to_terminal_error("No TAEHV models found in vae_approx folder")
+                output_to_terminal_error("Download models like 'taew2_1.safetensors' to ComfyUI/models/vae_approx/")
+                return None
+            
+            # Try to load each candidate (prioritizing safetensors)
+            for model_name in taehv_candidates:
+                try:
+                    model_path = folder_paths.get_full_path("vae_approx", model_name)
+                    output_to_terminal_successful(f"Loading TAEHV model: {model_name}")
+                    
+                    # Load state dict
+                    import torch
+                    from comfy.utils import load_torch_file
+                    state_dict = load_torch_file(model_path, safe_load=True)
+                    
+                    # Create TAEHV model using simplified approach
+                    taehv_model = TAEHV(state_dict)
+                    
+                    # Move to device
+                    import comfy.model_management as mm
+                    device = mm.unet_offload_device()
+                    taehv_model.to(device=device, dtype=torch.float16)
+                    taehv_model.eval()
+                    
+                    output_to_terminal_successful(f"✓ TAEHV model {model_name} loaded successfully on {device}")
+                    return taehv_model
+                    
+                except Exception as e:
+                    output_to_terminal_error(f"✗ Failed to load {model_name}: {e}")
+                    continue
+            
+            output_to_terminal_error("❌ No compatible TAEHV models could be loaded")
+            return None
+            
+        except ImportError as e:
+            output_to_terminal_error(f"Failed to import required modules for TAEHV: {e}")
+            return None
+        except Exception as e:
+            output_to_terminal_error(f"Failed to load TAEHV model: {e}")
+            return None
+
+    def _convert_taehv_state_dict(self, source_state_dict, target_state_dict):
+        """
+        Convert TAEHV state dict from different model formats to match our architecture.
+        
+        Handles cases where the source model has different layer structures or dimensions.
+        Returns converted state dict or None if conversion fails.
+        """
+        try:
+            import torch
+            converted_dict = {}
+            
+            output_to_terminal_successful("Attempting TAEHV state dict conversion...")
+            
+            # Check if source uses 2D convolutions that need to be converted to 3D
+            needs_3d_conversion = False
+            for key, tensor in source_state_dict.items():
+                if 'conv' in key and 'weight' in key and tensor.dim() == 4:
+                    needs_3d_conversion = True
+                    break
+            
+            if needs_3d_conversion:
+                output_to_terminal_successful("Converting 2D convolutions to 3D for video processing...")
+                
+                # Convert 2D conv weights to 3D by adding temporal dimension
+                for key, tensor in source_state_dict.items():
+                    if 'conv' in key and 'weight' in key and tensor.dim() == 4:
+                        # Convert [out_ch, in_ch, h, w] to [out_ch, in_ch, t, h, w] with t=3
+                        converted_tensor = tensor.unsqueeze(2).repeat(1, 1, 3, 1, 1) / 3.0
+                        converted_dict[key] = converted_tensor
+                    else:
+                        converted_dict[key] = tensor
+            else:
+                converted_dict = source_state_dict.copy()
+            
+            # Try to match as many keys as possible
+            final_dict = {}
+            matched_keys = 0
+            total_target_keys = len(target_state_dict)
+            
+            for target_key in target_state_dict.keys():
+                if target_key in converted_dict:
+                    source_tensor = converted_dict[target_key]
+                    target_shape = target_state_dict[target_key].shape
+                    
+                    if source_tensor.shape == target_shape:
+                        final_dict[target_key] = source_tensor
+                        matched_keys += 1
+                    else:
+                        # Try to reshape or adapt if possible
+                        if source_tensor.numel() == target_state_dict[target_key].numel():
+                            try:
+                                final_dict[target_key] = source_tensor.reshape(target_shape)
+                                matched_keys += 1
+                            except:
+                                output_to_terminal_error(f"Could not reshape {target_key}: {source_tensor.shape} -> {target_shape}")
+                        else:
+                            output_to_terminal_error(f"Size mismatch for {target_key}: {source_tensor.shape} vs {target_shape}")
+            
+            match_percentage = (matched_keys / total_target_keys) * 100
+            output_to_terminal_successful(f"State dict conversion: {matched_keys}/{total_target_keys} keys matched ({match_percentage:.1f}%)")
+            
+            # Require at least 50% of keys to match for a successful conversion
+            if match_percentage >= 50:
+                output_to_terminal_successful("State dict conversion successful - using converted model")
+                return final_dict
+            else:
+                output_to_terminal_error(f"State dict conversion failed - only {match_percentage:.1f}% keys matched")
+                return None
+                
+        except Exception as e:
+            output_to_terminal_error(f"State dict conversion error: {e}")
+            return None
+
+    def download_taehv_models(self):
+        """
+        Download TAEHV models automatically if they don't exist.
+        
+        Downloads TAEHV models from HuggingFace to the vae_approx directory.
+        Returns True if at least one model was downloaded successfully, False otherwise.
+        """
+        try:
+            import requests
+            from tqdm import tqdm
+            
+            # Get vae_approx directory
+            vae_approx_paths = folder_paths.get_folder_paths("vae_approx")
+            if not vae_approx_paths:
+                output_to_terminal_error("vae_approx folder not found in ComfyUI")
+                return False
+            
+            vae_approx_dir = vae_approx_paths[0]
+            os.makedirs(vae_approx_dir, exist_ok=True)
+            
+            # Define TAEHV models to download (prioritize safetensors)
+            models = [
+                {
+                    "name": "taew2_1.safetensors",
+                    "url": "https://huggingface.co/madebyollin/taehv/resolve/main/taew2_1.safetensors",
+                    "description": "TAEHV for Wan 2.1 (safetensors)"
+                },
+                {
+                    "name": "taehv.safetensors",
+                    "url": "https://huggingface.co/madebyollin/taehv/resolve/main/taehv.safetensors",
+                    "description": "TAEHV for Hunyuan Video (safetensors)"
+                },
+                {
+                    "name": "taew2_1.pth", 
+                    "url": "https://huggingface.co/madebyollin/taehv/resolve/main/taew2_1.pth",
+                    "description": "TAEHV for Wan 2.1 (pth)"
+                }
             ]
             
-            found_model = False
-            for file_name in wan_taesd_files:
-                target_path = os.path.join(vae_approx_dir, file_name)
-                
-                # Check if already exists in correct location
-                if os.path.exists(target_path):
-                    found_model = True
-                    output_to_terminal_successful(f"Wan2.1 TAESD found in place: {file_name}")
-                    break
-                
-                # Search in all possible locations
-                for search_dir in additional_search_paths:
-                    if not os.path.exists(search_dir):
-                        continue
-                        
-                    model_path = os.path.join(search_dir, file_name)
-                    if os.path.exists(model_path):
-                        if search_dir != vae_approx_dir:  # Only copy/link if not already in correct location
-                            try:
-                                # Try to create symbolic link first (more efficient)
-                                os.symlink(model_path, target_path)
-                                output_to_terminal_successful(f"Created symlink for Wan2.1 TAESD from {search_dir}: {file_name}")
-                                found_model = True
-                                break
-                            except OSError:
-                                # If symlink fails, copy the file
-                                import shutil
-                                shutil.copy2(model_path, target_path)
-                                output_to_terminal_successful(f"Copied Wan2.1 TAESD from {search_dir} to vae_approx: {file_name}")
-                                found_model = True
-                                break
-                        else:
-                            found_model = True
-                            break
-                
-                if found_model:
-                    break
+            output_to_terminal_successful("Downloading TAEHV models for Wan2.1 preview support...")
+            output_to_terminal_successful(f"Target directory: {vae_approx_dir}")
             
-            if found_model:
-                # Dynamically set the TAESD decoder name on the model's latent format
-                if hasattr(model, 'model') and hasattr(model.model, 'latent_format'):
-                    # Check if this is a Wan21 latent format
-                    latent_format = model.model.latent_format
-                    if (hasattr(latent_format, 'latent_channels') and 
-                        latent_format.latent_channels == 16 and
-                        hasattr(latent_format, 'latent_dimensions') and 
-                        latent_format.latent_dimensions == 3 and
-                        (latent_format.taesd_decoder_name is None or latent_format.taesd_decoder_name == "")):
-                        
-                        # Set the TAESD decoder name for Wan2.1 models
-                        latent_format.taesd_decoder_name = "taew2_1"
-                        output_to_terminal_successful("Set Wan2.1 TAESD decoder name on model - previews enabled")
-                return
+            success_count = 0
             
-            output_to_terminal_error("No Wan2.1 TAESD models found - previews will use fallback RGB method")
-                        
+            for model in models:
+                filepath = os.path.join(vae_approx_dir, model["name"])
+                
+                # Skip if already exists
+                if os.path.exists(filepath):
+                    output_to_terminal_successful(f"✓ {model['name']} already exists, skipping")
+                    success_count += 1
+                    continue
+                
+                try:
+                    output_to_terminal_successful(f"Downloading {model['name']}...")
+                    self._download_file_with_progress(model["url"], filepath, model["description"])
+                    output_to_terminal_successful(f"✓ {model['name']} downloaded successfully")
+                    success_count += 1
+                    
+                except Exception as e:
+                    output_to_terminal_error(f"✗ Failed to download {model['name']}: {e}")
+            
+            output_to_terminal_successful(f"Download complete: {success_count}/{len(models)} models")
+            
+            if success_count > 0:
+                output_to_terminal_successful("🎉 TAEHV models are now available for Wan2.1 preview support!")
+                return True
+            else:
+                output_to_terminal_error("❌ No models were downloaded successfully.")
+                return False
+                
+        except ImportError as e:
+            output_to_terminal_error(f"Required modules not available for downloading: {e}")
+            output_to_terminal_error("Please install manually or run: pip install requests tqdm")
+            return False
         except Exception as e:
-            output_to_terminal_error(f"Failed to setup Wan2.1 TAESD preview: {str(e)}")
+            output_to_terminal_error(f"Download error: {e}")
+            output_to_terminal_error("Manual installation:")
+            output_to_terminal_error("1. Download TAEHV models from https://huggingface.co/madebyollin/taehv")
+            output_to_terminal_error("2. Place them in ComfyUI/models/vae_approx/")
+            return False
+
+    def _download_file_with_progress(self, url, filepath, description="Downloading"):
+        """Download a file with progress tracking."""
+        import requests
+        from tqdm import tqdm
+        
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        
+        total_size = int(response.headers.get('content-length', 0))
+        
+        # Use a simple progress indicator since tqdm might not work well in ComfyUI console
+        output_to_terminal_successful(f"{description} - {total_size // (1024*1024)} MB")
+        
+        with open(filepath, 'wb') as file:
+            downloaded = 0
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    file.write(chunk)
+                    downloaded += len(chunk)
+                    # Simple progress indicator every 10MB
+                    if downloaded % (10 * 1024 * 1024) == 0:
+                        progress = (downloaded / total_size * 100) if total_size > 0 else 0
+                        output_to_terminal_successful(f"Progress: {progress:.1f}%")
