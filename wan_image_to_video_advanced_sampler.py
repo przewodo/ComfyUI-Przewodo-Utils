@@ -11,7 +11,8 @@ from .wan_get_max_image_resolution_by_aspect_ratio import WanGetMaxImageResoluti
 # Import external custom nodes using the centralized import function
 imported_nodes = {}
 teacache_imports = import_nodes(["teacache"], ["TeaCache"])
-kjnodes_imports = import_nodes(["comfyui-kjnodes", "nodes", "model_optimization_nodes"], ["SkipLayerGuidanceWanVideo", "PathchSageAttentionKJ", "ImageResizeKJv2"])
+# Import nodes from different custom node packages
+kjnodes_imports = import_nodes(["comfyui-kjnodes"], ["SkipLayerGuidanceWanVideo", "PathchSageAttentionKJ", "ImageResizeKJv2"])
 gguf_imports = import_nodes(["ComfyUI-GGUF"], ["UnetLoaderGGUF"])
 wanblockswap = import_nodes(["wanblockswap"], ["WanVideoBlockSwap"])
 
@@ -50,7 +51,7 @@ class WanImageToVideoAdvancedSampler:
                 ("clip_device", (CLIP_DEVICE_LIST, {"default": CLIP_DEVICE_DEFAULT, "advanced": True})),
                 ("vae", (vae_names, {"default": NONE, "advanced": True})),
                 ("use_tea_cache", ("BOOLEAN", {"default": True, "advanced": True})),
-                ("tea_cache_model_type", (["flux", "ltxv", "lumina_2", "hunyuan_video", "hidream_i1_dev", "hidream_i1_full", "wan2.1_t2v_1.3B", "wan2.1_t2v_14B", "wan2.1_i2v_480p_14B", "wan2.1_i2v_720p_14B", "wan2.1_t2v_1.3B_ret_mode", "wan2.1_t2v_14B_ret_mode", "wan2.1_i2v_480p_14B_ret_mode", "wan2.1_i2v_720p_14B_ret_mode"], {"default": "wan2.1_i2v_720p_14B_ret_mode", "tooltip": "Supported diffusion model."})),
+                ("tea_cache_model_type", (["flux", "ltxv", "lumina_2", "hunyuan_video", "hidream_i1_dev", "hidream_i1_full", "wan2.1_t2v_1.3B", "wan2.1_t2v_14B", "wan2.1_i2v_480p_14B", "wan2.1_i2v_720p_14B", "wan2.1_t2v_1.3B_ret_mode", "wan2.1_t2v_14B_ret_mode", "wan2.1_i2v_480p_14B_ret_mode", "wan2.1_i2v_720p_14B_ret_mode"], {"default": "wan2.1_i2v_720p_14B", "tooltip": "Supported diffusion model."})),
                 ("tea_cache_rel_l1_thresh", ("FLOAT", {"default": 0.22, "min": 0.0, "max": 10.0, "step": 0.01, "tooltip": "How strongly to cache the output of diffusion model. This value must be non-negative."})),
                 ("tea_cache_start_percent", ("FLOAT", {"default": 0.2, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "The start percentage of the steps that will apply TeaCache."})),
                 ("tea_cache_end_percent", ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "The end percentage of the steps that will apply TeaCache."})),
@@ -60,7 +61,7 @@ class WanImageToVideoAdvancedSampler:
                 ("SLG_start_percent", ("FLOAT", {"default": 0.2, "min": 0.0, "max": 1.0, "step": 0.001})),
                 ("SLG_end_percent", ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.001})),
                 ("use_sage_attention", ("BOOLEAN", {"default": True, "advanced": True})),
-                ("sage_attention_mode", (["disabled", "auto", "sageattn_qk_int8_pv_fp16_cuda", "sageattn_qk_int8_pv_fp16_triton", "sageattn_qk_int8_pv_fp8_cuda"], {"default": False, "tooltip": "Global patch comfy attention to use sageattn, once patched to revert back to normal you would need to run this node again with disabled option."})),
+                ("sage_attention_mode", (["disabled", "auto", "sageattn_qk_int8_pv_fp16_cuda", "sageattn_qk_int8_pv_fp16_triton", "sageattn_qk_int8_pv_fp8_cuda"], {"default": "auto", "tooltip": "Global patch comfy attention to use sageattn, once patched to revert back to normal you would need to run this node again with disabled option."})),
                 ("use_shift", ("BOOLEAN", {"default": True, "advanced": True})),
                 ("shift", ("FLOAT", {"default": 2.0, "min": 0.0, "max": 100.0, "step":0.01})),
                 ("large_image_side", ("INT", {"default": 832, "min": 2.0, "max": 1200, "step":2, "advanced": True, "tooltip": "The larger side of the image to resize to. The smaller side will be resized proportionally."})),
@@ -69,6 +70,12 @@ class WanImageToVideoAdvancedSampler:
                 ("total_video_seconds", ("INT", {"default": 1, "min": 1, "max": 5, "step":1, "advanced": True, "tooltip": "The total duration of the video in seconds."})),
                 ("clip_vision_model", (clip_vision_models, {"default": NONE, "advanced": True})),
                 ("clip_vision_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01})),
+                ("use_dual_samplers", ("BOOLEAN", {"default": True, "advanced": True})),
+                ("high_cfg", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01})),
+                ("low_cfg", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01})),
+                ("total_steps", ("INT", {"default": 15, "min": 1, "max": 90, "step":1, "advanced": True,})),
+                ("total_steps_high_cfg", ("INT", {"default": 5, "min": 1, "max": 90, "step":1, "advanced": True,})),
+                ("noise_seed", ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff, "control_after_generate": True})),
             ]),
             "optional": OrderedDict([
                 ("lora_stack", ("LORA_STACK", {"default": None, "advanced": True})),
@@ -94,7 +101,8 @@ class WanImageToVideoAdvancedSampler:
             lora_stack=None, use_sage_attention=True, sage_attention_mode="auto", use_shift=False, shift=2,
             start_image=None, start_image_clip_vision_enabled=True,
             end_image=None, end_image_clip_vision_enabled=True, large_image_side=832, wan_model_size=WAN_480P,
-            clip_vision_model=NONE, total_video_seconds=1, clip_vision_strength=1.0):
+            clip_vision_model=NONE, total_video_seconds=1, clip_vision_strength=1.0, image_generation_mode=START_IMAGE,
+            use_dual_samplers=True, high_cfg=3.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0):
 
         #variables
         output_image = None
@@ -184,7 +192,13 @@ class WanImageToVideoAdvancedSampler:
             large_image_side,
             wan_model_size,
             total_video_seconds,
-            image_generation_mode
+            image_generation_mode,
+            use_dual_samplers,
+            high_cfg,
+            low_cfg,
+            total_steps,
+            total_steps_high_cfg,
+            noise_seed
         )
 
         return (output_image,)
@@ -227,14 +241,20 @@ class WanImageToVideoAdvancedSampler:
                     large_image_side,
                     wan_model_size,
                     total_video_seconds,
-                    image_generation_mode
+                    image_generation_mode,
+                    use_dual_samplers,
+                    high_cfg,
+                    low_cfg,
+                    total_steps,
+                    total_steps_high_cfg,
+                    noise_seed
     ):
 
-        output_to_terminal_successful("Generation Started started...")
+        output_to_terminal_successful("Generation started...")
 
         output_image = None
         working_model = model.clone()
-        k_sampler_high = nodes.KSamplerAdvanced()
+        k_sampler = nodes.KSamplerAdvanced()
         text_encode = nodes.CLIPTextEncode()
         wan_image_to_video = WanFirstLastFirstFrameToVideo()
         wan_video_vae_decode = WanVideoVaeDecode()
@@ -259,17 +279,32 @@ class WanImageToVideoAdvancedSampler:
             clip_vision, = CLIPVisionLoader.load_clip(clip_vision_model)
 
         if (start_image is not None):
+            output_to_terminal_successful("Resizing Start Image...")
             start_image, image_width, image_height = resizer.resize(start_image, large_image_side, large_image_side, "resize", "lanczos", 2, "0, 0, 0", "center", "cpu")
-            image_width, image_height, = wan_max_resolution.run(wan_model_size, start_image)
-            start_image, image_width, image_height = resizer.resize(start_image, image_width, image_height, "resize", "lanczos", 2, "0, 0, 0", "center", "cpu")
+            tmp_width, tmp_height, = wan_max_resolution.run(wan_model_size, start_image)
+            tmpTotalPixels = tmp_width * tmp_height
+            imageTotalPixels = image_width * image_height
+            if (tmpTotalPixels < imageTotalPixels):
+                image_width = tmp_width
+                image_height = tmp_height
+                end_image, image_width, image_height = resizer.resize(end_image, image_width, image_height, "resize", "lanczos", 2, "0, 0, 0", "center", "cpu")
+            output_to_terminal_successful(f"Start Image final size: {image_width}x{image_height}")
             if (start_image_clip_vision_enabled) and (clip_vision is not None):
                 output_to_terminal_successful("Encoding CLIP Vision for Start Image...")
                 clip_vision_start_image, = CLIPVisionEncoder.encode(clip_vision, start_image, "center")
 
         if (end_image is not None):
+            output_to_terminal_successful("Resizing End Image...")
             end_image, image_width, image_height = resizer.resize(end_image, large_image_side, large_image_side, "resize", "lanczos", 2, "0, 0, 0", "center", "cpu")
-            image_width, image_height, = wan_max_resolution.run(wan_model_size, end_image)
-            end_image, image_width, image_height = resizer.resize(end_image, image_width, image_height, "resize", "lanczos", 2, "0, 0, 0", "center", "cpu")
+            tmp_width, tmp_height, = wan_max_resolution.run(wan_model_size, end_image)
+            tmpTotalPixels = tmp_width * tmp_height
+            imageTotalPixels = image_width * image_height
+            if (tmpTotalPixels < imageTotalPixels):
+                image_width = tmp_width
+                image_height = tmp_height
+                end_image, image_width, image_height = resizer.resize(end_image, image_width, image_height, "resize", "lanczos", 2, "0, 0, 0", "center", "cpu")
+
+            output_to_terminal_successful(f"End Image final size: {image_width}x{image_height}")
             if (end_image_clip_vision_enabled) and (clip_vision is not None):
                 output_to_terminal_successful("Encoding CLIP Vision for End Image...")
                 clip_vision_end_image, = CLIPVisionEncoder.encode(clip_vision, end_image, "center")
@@ -290,7 +325,7 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_successful("Applying Model Shift...")
             working_model, = model_shift.patch(working_model, shift)
 
-        output_to_terminal_successful("Seetting block swap...")
+        output_to_terminal_successful("Setting block swap...")
         working_model, = block_swap.set_callback(working_model, 35, True, True, True)
 
         output_to_terminal_successful("Encoding Positive CLIP text...")
@@ -302,8 +337,15 @@ class WanImageToVideoAdvancedSampler:
         output_to_terminal_successful("Wan Image to Video started...")
         temp_positive_clip, temp_negative_clip, in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, 0.5, image_generation_mode)
 
-        output_to_terminal_successful("High CFG KSampler started...")
-        out_latent, = k_sampler_high.sample(working_model, "enable", 123456789, 15, 1.2, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 8, 1000, "enabled", 1)
+        if (use_dual_samplers):
+            output_to_terminal_successful("High CFG KSampler started...")
+            out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, total_steps_high_cfg, "enabled", 1)
+
+            output_to_terminal_successful("Low CFG KSampler started...")
+            out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, low_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, out_latent, total_steps_high_cfg, 1000, "enabled", 1)
+        else:
+            output_to_terminal_successful("KSampler started...")
+            out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, 1000, "enabled", 1)
 
         output_to_terminal_successful("Vae Decode started...")
         output_image = wan_video_vae_decode.decode(out_latent, vae, 0, START_IMAGE)
@@ -365,36 +407,66 @@ class WanImageToVideoAdvancedSampler:
             # Look for Wan2.1 TAESD models and ensure they're in vae_approx
             wan_taesd_files = ["taew2_1.pth", "taew2_1.safetensors"]
             
+            # Additional search locations for TAESD models
+            additional_search_paths = [
+                vae_approx_dir,  # Primary location - should already be checked
+                os.path.join(models_dir, "vae"),  # Sometimes placed in vae folder
+                models_dir  # Root models directory
+            ]
+            
+            found_model = False
             for file_name in wan_taesd_files:
-                model_path = os.path.join(models_dir, file_name)
                 target_path = os.path.join(vae_approx_dir, file_name)
                 
-                if os.path.exists(model_path):
-                    if not os.path.exists(target_path):
-                        try:
-                            # Try to create symbolic link first (more efficient)
-                            os.symlink(model_path, target_path)
-                            output_to_terminal_successful(f"Created symlink for Wan2.1 TAESD: {file_name}")
-                        except OSError:
-                            # If symlink fails, copy the file
-                            import shutil
-                            shutil.copy2(model_path, target_path)
-                            output_to_terminal_successful(f"Copied Wan2.1 TAESD to vae_approx: {file_name}")
-                    
-                    # Dynamically set the TAESD decoder name on the model's latent format
-                    if hasattr(model, 'model') and hasattr(model.model, 'latent_format'):
-                        # Check if this is a Wan21 latent format
-                        latent_format = model.model.latent_format
-                        if (hasattr(latent_format, 'latent_channels') and 
-                            latent_format.latent_channels == 16 and
-                            hasattr(latent_format, 'latent_dimensions') and 
-                            latent_format.latent_dimensions == 3 and
-                            (latent_format.taesd_decoder_name is None or latent_format.taesd_decoder_name == "")):
-                            
-                            # Set the TAESD decoder name for Wan2.1 models
-                            latent_format.taesd_decoder_name = "taew2_1"
-                            output_to_terminal_successful("Set Wan2.1 TAESD decoder name on model - previews enabled")
-                    return
+                # Check if already exists in correct location
+                if os.path.exists(target_path):
+                    found_model = True
+                    output_to_terminal_successful(f"Wan2.1 TAESD found in place: {file_name}")
+                    break
+                
+                # Search in all possible locations
+                for search_dir in additional_search_paths:
+                    if not os.path.exists(search_dir):
+                        continue
+                        
+                    model_path = os.path.join(search_dir, file_name)
+                    if os.path.exists(model_path):
+                        if search_dir != vae_approx_dir:  # Only copy/link if not already in correct location
+                            try:
+                                # Try to create symbolic link first (more efficient)
+                                os.symlink(model_path, target_path)
+                                output_to_terminal_successful(f"Created symlink for Wan2.1 TAESD from {search_dir}: {file_name}")
+                                found_model = True
+                                break
+                            except OSError:
+                                # If symlink fails, copy the file
+                                import shutil
+                                shutil.copy2(model_path, target_path)
+                                output_to_terminal_successful(f"Copied Wan2.1 TAESD from {search_dir} to vae_approx: {file_name}")
+                                found_model = True
+                                break
+                        else:
+                            found_model = True
+                            break
+                
+                if found_model:
+                    break
+            
+            if found_model:
+                # Dynamically set the TAESD decoder name on the model's latent format
+                if hasattr(model, 'model') and hasattr(model.model, 'latent_format'):
+                    # Check if this is a Wan21 latent format
+                    latent_format = model.model.latent_format
+                    if (hasattr(latent_format, 'latent_channels') and 
+                        latent_format.latent_channels == 16 and
+                        hasattr(latent_format, 'latent_dimensions') and 
+                        latent_format.latent_dimensions == 3 and
+                        (latent_format.taesd_decoder_name is None or latent_format.taesd_decoder_name == "")):
+                        
+                        # Set the TAESD decoder name for Wan2.1 models
+                        latent_format.taesd_decoder_name = "taew2_1"
+                        output_to_terminal_successful("Set Wan2.1 TAESD decoder name on model - previews enabled")
+                return
             
             output_to_terminal_error("No Wan2.1 TAESD models found - previews will use fallback RGB method")
                         
