@@ -297,6 +297,8 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_successful("Vae Decode started...")
             output_image, = wan_video_vae_decode.decode(out_latent, vae, 0, image_generation_mode)
 
+            start_image = output_image[:, -1:, :, :, :]
+
             # Apply color match
             output_image = self.apply_color_match(start_image, output_image, apply_color_match, colorMatch)
             images_chunck.append(output_image)
