@@ -21,23 +21,23 @@ class WanFirstLastFirstFrameToVideo:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "positive": ("CONDITIONING", ),
-                "negative": ("CONDITIONING", ),
-                "vae": ("VAE", ),
-                "width": ("INT", {"default": 832, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 16}),
-                "height": ("INT", {"default": 480, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 16}),
-                "length": ("INT", {"default": 81, "min": 1, "max": nodes.MAX_RESOLUTION, "step": 4}),
-                "first_end_frame_shift": ("INT", {"default": 0, "min": 0, "max": 80, "step": 1}),
-                "first_end_frame_denoise": ("FLOAT", {"default": 0, "min": 0, "max": 1, "step": 0.0001}),
-                "fill_denoise": ("FLOAT", {"default": 0.5, "min": 0, "max": 1, "step": 0.01}),
-                "generation_mode": (WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, {"default": START_IMAGE}),
-                "clip_vision_strength": ("FLOAT", {"default": 1.0, "min": 0.1, "max": 5.0, "step": 0.1}),
+                "positive": ("CONDITIONING", {"tooltip": "Positive conditioning for video generation"}),
+                "negative": ("CONDITIONING", {"tooltip": "Negative conditioning for video generation"}),
+                "vae": ("VAE", {"tooltip": "VAE model for encoding/decoding video frames"}),
+                "width": ("INT", {"default": 832, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 2, "tooltip": "Width of the generated video in pixels (must be divisible by 2)"}),
+                "height": ("INT", {"default": 480, "min": 16, "max": nodes.MAX_RESOLUTION, "step": 2, "tooltip": "Height of the generated video in pixels (must be divisible by 2)"}),
+                "length": ("INT", {"default": 81, "min": 1, "max": nodes.MAX_RESOLUTION, "step": 4, "tooltip": "Number of frames in the generated video (step of 4 recommended for optimal performance)"}),
+                "first_end_frame_shift": ("INT", {"default": 0, "min": 0, "max": 80, "step": 1, "tooltip": "Frame shift offset for first and end frames positioning in the sequence"}),
+                "first_end_frame_denoise": ("FLOAT", {"default": 0, "min": 0, "max": 1, "step": 0.0001, "tooltip": "Denoising strength for first and end frames (0=no denoising, 1=full denoising)"}),
+                "fill_denoise": ("FLOAT", {"default": 0.5, "min": 0, "max": 1, "step": 0.01, "tooltip": "Denoising strength for intermediate frames between keyframes"}),
+                "generation_mode": (WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, {"default": START_IMAGE, "tooltip": "Video generation pattern: start only, end only, start->end, end->start, or start->end->start"}),
+                "clip_vision_strength": ("FLOAT", {"default": 1.0, "min": 0.1, "max": 5.0, "step": 0.1, "tooltip": "Strength multiplier for CLIP vision influence on video generation"}),
             },
             "optional": {
-                "clip_vision_start_image": ("CLIP_VISION_OUTPUT", ),
-                "clip_vision_end_image": ("CLIP_VISION_OUTPUT", ),
-                "start_image": ("IMAGE", ),
-                "end_image": ("IMAGE", ),
+                "clip_vision_start_image": ("CLIP_VISION_OUTPUT", {"tooltip": "CLIP vision encoding of the start image for enhanced conditioning"}),
+                "clip_vision_end_image": ("CLIP_VISION_OUTPUT", {"tooltip": "CLIP vision encoding of the end image for enhanced conditioning"}),
+                "start_image": ("IMAGE", {"tooltip": "Starting image/frame for the video sequence"}),
+                "end_image": ("IMAGE", {"tooltip": "Ending image/frame for the video sequence"}),
             }
         }
 

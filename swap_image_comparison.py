@@ -7,14 +7,14 @@ class SwapImageComparison:
         compare_functions = list(COMPARE_FUNCTIONS.keys())
 
         optional = {
-            "input_a": ("IMAGE",),
-            "input_b": ("IMAGE",),
+            "input_a": ("IMAGE", {"tooltip": "First image input to swap. Will be returned as 'input_b' if comparison is true, otherwise as 'input_a'"}),
+            "input_b": ("IMAGE", {"tooltip": "Second image input to swap. Will be returned as 'input_a' if comparison is true, otherwise as 'input_b'"}),
         }
 
         required = {
-            "comparison": (compare_functions, {"default": "a == b"}),
-            "value_a": (any_type,),
-            "value_b": (any_type,),
+            "value_a": (any_type, {"tooltip": "First value for comparison operation. Used as left operand in the comparison"}),
+            "value_b": (any_type, {"tooltip": "Second value for comparison operation. Used as right operand in the comparison"}),
+            "comparison": (compare_functions, {"default": "a == b", "tooltip": "Comparison operation to evaluate between value_a and value_b. If true, image inputs are swapped"}),
         }
 
         return {"optional": optional, "required": required}

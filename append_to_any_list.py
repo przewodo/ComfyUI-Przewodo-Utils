@@ -5,8 +5,8 @@ class AppendToAnyList:
     def INPUT_TYPES(self):
         return {
             "required": {
-                "any_list": (any_type,),
-                "any": (any_type,),
+                "any_list": (any_type, {"tooltip": "The existing list to append/merge to. Can be empty or contain any type of items."}),
+                "any": (any_type, {"tooltip": "Single item to append to the list, or array to merge with the list. If this is a list, all items will be added. If it's a single item, only that item will be appended."}),
             },
         }
 

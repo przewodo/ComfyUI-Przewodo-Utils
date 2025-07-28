@@ -8,16 +8,18 @@ class ImageSizer:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model_type": (["SD","SDXL","Video 480p","Video 720p", "Flux Kontext", "Flux 1D"],),
+                "model_type": (["SD","SDXL","Video 480p","Video 720p", "Flux Kontext", "Flux 1D"], {"tooltip": "Model type that determines the base resolution and total pixel count. Each model has optimized dimensions: SD (512x512), SDXL (1024x1024), Video 480p (832x480), Video 720p (1280x720), Flux Kontext (1024x1024), Flux 1D (1536x1536)."}),
                 "aspect_ratio_width": ("INT",{
                     "default": 1,
                     "step":1,
-                    "display": "number"
+                    "display": "number",
+                    "tooltip": "Width component of the desired aspect ratio. Combined with aspect_ratio_height to calculate the final dimensions while maintaining the model's total pixel count."
                 }),
                 "aspect_ratio_height": ("INT",{
                     "default": 1,
                     "step":1,
-                    "display": "number"
+                    "display": "number",
+                    "tooltip": "Height component of the desired aspect ratio. Combined with aspect_ratio_width to calculate the final dimensions while maintaining the model's total pixel count."
                 })
             }
         }

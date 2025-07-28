@@ -10,8 +10,8 @@ class WanGetMaxImageResolutionByAspectRatio:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model_type": (WAN_MODELS,),
-                "image": ("IMAGE",)
+                "model_type": (WAN_MODELS, {"tooltip": "WAN model type that determines maximum resolution constraints and pixel limits for optimal processing"}),
+                "image": ("IMAGE", {"tooltip": "Input image to analyze for calculating optimal width and height based on aspect ratio and model constraints"})
             }
         }
 

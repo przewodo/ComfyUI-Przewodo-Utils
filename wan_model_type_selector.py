@@ -6,7 +6,7 @@ class WanModelTypeSelector:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model_type": (WAN_MODELS,),
+                "model_type": (WAN_MODELS, {"tooltip": "Select WAN model type to pass through. Used for connecting model type selection to other WAN nodes"}),
             },
         }
 

@@ -8,12 +8,12 @@ class FloatIfElse:
     def INPUT_TYPES(cls, **kwargs):
 
         optional = {
-            "input_true": ("FLOAT", {"default": 0.0, "label": "Input True"}),
-            "input_false": ("FLOAT", {"default": 0.0, "label": "Input False"}),
+            "input_true": ("FLOAT", {"default": 0.0, "label": "Input True", "tooltip": "Float value to return when conditioning is True."}),
+            "input_false": ("FLOAT", {"default": 0.0, "label": "Input False", "tooltip": "Float value to return when conditioning is False."}),
         }
 
         required = {
-            "conditioning": ("BOOLEAN", {"default": True}),
+            "conditioning": ("BOOLEAN", {"default": True, "tooltip": "Boolean condition that determines which float value to return. True returns input_true, False returns input_false."}),
         }
 
         return {"optional": optional, "required": required}

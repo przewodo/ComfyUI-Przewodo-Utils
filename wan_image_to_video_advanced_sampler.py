@@ -352,17 +352,38 @@ class WanImageToVideoAdvancedSampler:
             # Latent space continuity: Use previous latent for initialization if available
             if enable_quality_preservation and chunk_index > 0 and last_latent is not None and latent_blend_strength > 0:
                 try:
+                    # Extract the actual tensor from last_latent (handle both dict and tensor formats)
+                    if isinstance(last_latent, dict) and 'samples' in last_latent:
+                        last_latent_tensor = last_latent['samples']
+                    else:
+                        last_latent_tensor = last_latent
+                    
+                    # Extract the actual tensor from in_latent (handle both dict and tensor formats)
+                    if isinstance(in_latent, dict) and 'samples' in in_latent:
+                        in_latent_tensor = in_latent['samples']
+                        is_in_latent_dict = True
+                    else:
+                        in_latent_tensor = in_latent
+                        is_in_latent_dict = False
+                    
                     # Blend the new latent with the last latent for smoother transition
-                    if in_latent.shape == last_latent.shape:
+                    if in_latent_tensor.shape == last_latent_tensor.shape:
                         # Take the last few latent frames and blend them with the new initialization
-                        blend_frames = min(2, last_latent.shape[2])  # Use last 2 frames
-                        in_latent[:, :, :blend_frames] = (
-                            in_latent[:, :, :blend_frames] * (1 - latent_blend_strength) + 
-                            last_latent[:, :, -blend_frames:] * latent_blend_strength
+                        blend_frames = min(2, last_latent_tensor.shape[2])  # Use last 2 frames
+                        blended_frames = (
+                            in_latent_tensor[:, :, :blend_frames] * (1 - latent_blend_strength) + 
+                            last_latent_tensor[:, :, -blend_frames:] * latent_blend_strength
                         )
+                        
+                        # Update the latent with blended frames
+                        if is_in_latent_dict:
+                            in_latent['samples'][:, :, :blend_frames] = blended_frames
+                        else:
+                            in_latent[:, :, :blend_frames] = blended_frames
+                            
                         output_to_terminal_successful(f"Applied latent space blending with strength {latent_blend_strength}")
                     else:
-                        output_to_terminal_error(f"Latent shape mismatch: {in_latent.shape} vs {last_latent.shape}, skipping blend")
+                        output_to_terminal_error(f"Latent shape mismatch: {in_latent_tensor.shape} vs {last_latent_tensor.shape}, skipping blend")
                 except Exception as e:
                     output_to_terminal_error(f"Latent blending failed, continuing without: {e}")
 

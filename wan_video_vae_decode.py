@@ -6,10 +6,10 @@ class WanVideoVaeDecode:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "latent": ("LATENT", ),
-                "vae": ("VAE", ),
-                "first_end_frame_shift": ("INT", {"default": 3, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1}),
-                "generation_mode": (WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, {"default": START_IMAGE}),
+                "latent": ("LATENT", {"tooltip": "Latent representation of the video to decode into images"}),
+                "vae": ("VAE", {"tooltip": "VAE model for decoding latent representations back to pixel space"}),
+                "first_end_frame_shift": ("INT", {"default": 3, "min": 0, "max": nodes.MAX_RESOLUTION, "step": 1, "tooltip": "Frame shift offset used during encoding that needs to be removed during decoding"}),
+                "generation_mode": (WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, {"default": START_IMAGE, "tooltip": "Video generation pattern that determines which frames to remove during decoding"}),
             },
         }
 

@@ -12,7 +12,7 @@ class WanVideoLoraStack:
                 "strength_clip": ("FLOAT", {"default": 1.0, "min": -100.0, "max": 100.0, "step": 0.01, "tooltip": "How strongly to modify the CLIP model. This value can be negative."}),
             },
             "optional": {
-                "previous_lora": (any_type,),
+                "previous_lora": (any_type, {"tooltip": "Previous LoRA stack to append to. If None, creates a new stack. Used for chaining multiple LoRAs together"}),
             },
         }
 

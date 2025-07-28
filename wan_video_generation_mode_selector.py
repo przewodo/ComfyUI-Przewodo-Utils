@@ -5,7 +5,7 @@ class WanVideoGenerationModeSelector:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "generation_mode": (WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, {"default": START_IMAGE}),
+                "generation_mode": (WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, {"default": START_IMAGE, "tooltip": "Video generation pattern: start only, end only, start->end, end->start, or start->end->start frame sequences"}),
             },
         }
 

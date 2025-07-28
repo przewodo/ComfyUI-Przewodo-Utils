@@ -10,8 +10,8 @@ class BatchImagesFromPath:
     def INPUT_TYPES(self):
         return {
             "required": {
-                "path": ("STRING", ("STRING", {"default": "",})),
-                "pattern": ("STRING", {"default": "",}),
+                "path": ("STRING", {"default": "", "tooltip": "Directory path containing images to batch load. Can be absolute or relative to ComfyUI output folder."}),
+                "pattern": ("STRING", {"default": "", "tooltip": "File pattern to match images (e.g., '*.jpg', '*.png', 'image_*.jpeg'). Leave empty to load all image files."}),
             },
         }
 

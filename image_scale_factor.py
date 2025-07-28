@@ -8,12 +8,13 @@ class ImageScaleFactor:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "image": ("IMAGE",),
+                "image": ("IMAGE", {"tooltip": "Input image to calculate scale factor for. The node will analyze the image dimensions to determine scaling."}),
                 "final_size": ("INT",{
                     "default": 1024,
                     "min": 1,
                     "step":1,
-                    "display": "number"
+                    "display": "number",
+                    "tooltip": "Target size for the larger side of the image. The scale factor will be calculated to resize the larger dimension to this value while maintaining aspect ratio."
                 })
             }
         }

@@ -14,8 +14,8 @@ class DebugLatentShapes:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "latent": ("LATENT",),
-                "shape_index": ("INT",)
+                "latent": ("LATENT", {"tooltip": "The latent tensor to analyze. This node will print all dimensions and return a specific dimension value."}),
+                "shape_index": ("INT", {"tooltip": "Index of the dimension to return (0=batch, 1=channels, 2=height, 3=width for typical latents). Uses modulo to prevent index errors."})
             },
         }
 

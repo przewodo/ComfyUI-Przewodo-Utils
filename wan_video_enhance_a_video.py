@@ -13,10 +13,10 @@ class WanVideoEnhanceAVideo:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model": ("MODEL",),
+                "model": ("MODEL", {"tooltip": "Diffusion model to enhance for video generation with temporal attention improvements"}),
                 "weight": ("FLOAT", {"default": 2.0, "min": 0.0, "max": 10.0, "step": 0.001, "tooltip": "Strength of the enhance effect"}),
                 "length": ("INT", {"tooltip": "Number of frames in the video", "default": 16, "min": 1, "max": 1000}),
-                "first_end_frame_shift": ("INT", {"default": 0, "min": 0, "max": 80, "step": 1}),
+                "first_end_frame_shift": ("INT", {"default": 0, "min": 0, "max": 80, "step": 1, "tooltip": "Frame shift offset for temporal attention calculations in enhanced video processing"}),
            }
         }
     

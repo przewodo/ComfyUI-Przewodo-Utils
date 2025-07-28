@@ -8,12 +8,12 @@ class SwapAnyCondition:
     def INPUT_TYPES(cls):
 
         optional = {
-            "input_a": (any_type, {"default": None}),
-            "input_b": (any_type, {"default": None}),
+            "input_a": (any_type, {"default": None, "tooltip": "First input value. Will be returned as 'input_b' if invert_values is True, otherwise as 'input_a'"}),
+            "input_b": (any_type, {"default": None, "tooltip": "Second input value. Will be returned as 'input_a' if invert_values is True, otherwise as 'input_b'"}),
         }
 
         required = {
-            "invert_values": ("BOOLEAN", {"default": True}),
+            "invert_values": ("BOOLEAN", {"default": True, "tooltip": "When True, swaps input_a and input_b positions in output. When False, returns inputs in original order"}),
         }
 
         return {"optional": optional, "required": required}

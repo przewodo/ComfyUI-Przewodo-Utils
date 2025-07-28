@@ -12,11 +12,11 @@ class CompareNumbersToCombo:
         compare_functions = list(COMPARE_FUNCTIONS.keys())
         return {
             "required": {
-                "a": ("INT",),
-                "b": ("INT",),
-                "comparison": (compare_functions, {"default": "a == b"}),
-                "string_true": ("STRING", {"default": ""}),
-                "string_false": ("STRING", {"default": ""}),
+                "a": ("INT", {"tooltip": "First number to compare (left side of comparison)."}),
+                "b": ("INT", {"tooltip": "Second number to compare (right side of comparison)."}),
+                "comparison": (compare_functions, {"default": "a == b", "tooltip": "Comparison operation to perform between numbers a and b (==, !=, <, >, <=, >=)."}),
+                "string_true": ("STRING", {"default": "", "tooltip": "Value to return when the comparison is true. Can be any string or value."}),
+                "string_false": ("STRING", {"default": "", "tooltip": "Value to return when the comparison is false. Can be any string or value."}),
             }
         }
 
