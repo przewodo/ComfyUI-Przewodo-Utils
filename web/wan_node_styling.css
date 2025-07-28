@@ -1,0 +1,88 @@
+/* Custom CSS for WanImageToVideoAdvancedSampler Node */
+
+/* Target the specific node by its title */
+.comfy-graph-canvas .litegraph .node[title*="przewodo WanImageToVideoAdvancedSampler"] {
+    /* Node background color */
+    background-color: #2C5282 !important;
+    
+    /* Node border */
+    border: 2px solid #DA691E !important;
+    border-radius: 8px !important;
+    
+    /* Add a subtle shadow for depth */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Style the node title/header */
+.comfy-graph-canvas .litegraph .node[title*="przewodo WanImageToVideoAdvancedSampler"] .node_title {
+    /* Title background color */
+    background: linear-gradient(135deg, #4A90E2, #357ABD) !important;
+    color: #FFFFFF !important;
+    font-weight: bold !important;
+    padding: 8px 12px !important;
+    border-radius: 6px 6px 0 0 !important;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Style node when selected */
+.comfy-graph-canvas .litegraph .node[title*="przewodo WanImageToVideoAdvancedSampler"].selected {
+    border-color: #FFD700 !important;
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.6) !important;
+}
+
+/* Style node inputs/outputs */
+.comfy-graph-canvas .litegraph .node[title*="przewodo WanImageToVideoAdvancedSampler"] .slot {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border-radius: 3px !important;
+}
+
+/* Style node when executing */
+.comfy-graph-canvas .litegraph .node[title*="przewodo WanImageToVideoAdvancedSampler"].executing {
+    border-color: #00FF00 !important;
+    animation: wan-node-pulse 2s infinite !important;
+}
+
+/* Animation for executing state */
+@keyframes wan-node-pulse {
+    0% {
+        box-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.8);
+    }
+    100% {
+        box-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+    }
+}
+
+/* Alternative: Target by category if title targeting doesn't work */
+.comfy-graph-canvas .litegraph .node[data-category="PrzewodoUtils/Wan"] {
+    /* Fallback styling for all nodes in the category */
+    border-left: 4px solid #4A90E2 !important;
+}
+
+/* Style for collapsed nodes */
+.comfy-graph-canvas .litegraph .node[title*="przewodo WanImageToVideoAdvancedSampler"].collapsed {
+    background: linear-gradient(135deg, #4A90E2, #2C5282) !important;
+    border-radius: 12px !important;
+}
+
+/* Style node widgets/controls */
+.comfy-graph-canvas .litegraph .node[title*="przewodo WanImageToVideoAdvancedSampler"] .widget {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 4px !important;
+    margin: 2px 0 !important;
+}
+
+/* Style progress indicators */
+.comfy-graph-canvas .litegraph .node[title*="przewodo WanImageToVideoAdvancedSampler"] .progress-bar {
+    background: linear-gradient(90deg, #4A90E2, #DA691E) !important;
+    border-radius: 10px !important;
+}
+
+/* Hover effect */
+.comfy-graph-canvas .litegraph .node[title*="przewodo WanImageToVideoAdvancedSampler"]:hover {
+    transform: scale(1.02) !important;
+    transition: transform 0.2s ease !important;
+}
