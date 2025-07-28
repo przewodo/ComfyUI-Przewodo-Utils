@@ -1315,6 +1315,9 @@ class WanImageToVideoAdvancedSampler:
         """
         stop_steps = int(total_steps_high_cfg / 100 * total_steps)
 
+        gc.collect()
+        torch.cuda.empty_cache()
+        mm.soft_empty_cache()
         output_to_terminal_successful("High CFG KSampler started...")
         out_latent, = k_sampler.sample(model_high_cfg, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, stop_steps, "enabled", high_denoise)
 
