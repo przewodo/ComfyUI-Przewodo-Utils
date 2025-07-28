@@ -159,6 +159,13 @@ class WanImageToVideoAdvancedSampler:
                 ("end_image_clip_vision_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CLIP vision for the end image. If disabled, the end image will be used as a static frame."})),
                 
                 # ═════════════════════════════════════════════════════════════════
+                # 🎯 FEATURE CONSISTENCY SETTINGS
+                # ═════════════════════════════════════════════════════════════════
+                ("feature_consistency_strength", ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.05, "advanced": True, "tooltip": "Strength of feature consistency enforcement. Higher values better preserve all body features including face, body shape, hands, feet, genitals, tattoos, jewelry, clothing patterns across frames."})),
+                ("reference_frame_interval", ("INT", {"default": 3, "min": 1, "max": 10, "step": 1, "advanced": True, "tooltip": "How often to re-inject reference image features during generation. Lower values = more consistency but may reduce motion."})),
+                ("detail_preservation_mode", (["disabled", "light", "medium", "strong"], {"default": "medium", "advanced": True, "tooltip": "Detail preservation mode. Strong mode best preserves features but may reduce motion fluidity."})),
+                
+                # ═════════════════════════════════════════════════════════════════
                 # ⚙️ SAMPLING CONFIGURATION
                 # ═════════════════════════════════════════════════════════════════
                 ("use_dual_samplers", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Use dual samplers for better quality. First sampler with high CFG, then low CFG for refinement. If disabled, single sampler uses the High CFG parameters."})),
@@ -200,9 +207,11 @@ class WanImageToVideoAdvancedSampler:
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, enable_quality_preservation=True, temporal_overlap_frames=3, latent_blend_strength=0.2, artifact_reduction=True, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, use_taesd_preview=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None):
-
-        #variables
+    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, enable_quality_preservation=True, temporal_overlap_frames=3, latent_blend_strength=0.2, artifact_reduction=True, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, use_taesd_preview=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, feature_consistency_strength=0.8, reference_frame_interval=3, detail_preservation_mode="medium"):
+        gc.collect()
+        torch.cuda.empty_cache()
+        mm.soft_empty_cache()
+        mm.throw_exception_if_processing_interrupted()
         output_image = None
         model = self.load_model(GGUF, Diffusor, Use_Model_Type, Diffusor_weight_dtype)
         output_to_terminal_successful("Loading VAE...")
@@ -221,18 +230,21 @@ class WanImageToVideoAdvancedSampler:
 
         # Initialize TeaCache and SkipLayerGuidanceWanVideo
         tea_cache, slg_wanvideo = self.initialize_tea_cache_and_slg(use_tea_cache, use_SLG, SLG_blocks)
+        mm.throw_exception_if_processing_interrupted()
 
         # Initialize SageAttention
         sage_attention = self.initialize_sage_attention(use_sage_attention, sage_attention_mode)
+        mm.throw_exception_if_processing_interrupted()
 
         # Initialize Model Shift
         model_shift = self.initialize_model_shift(use_shift, shift)
+        mm.throw_exception_if_processing_interrupted()
 
-        output_image, = self.postprocess(model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, enable_quality_preservation, temporal_overlap_frames, latent_blend_strength, artifact_reduction, prompt_stack)
+        output_image, = self.postprocess(model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, enable_quality_preservation, temporal_overlap_frames, latent_blend_strength, artifact_reduction, prompt_stack, feature_consistency_strength, reference_frame_interval, detail_preservation_mode)
 
         return (output_image,)
 
-    def postprocess(self, model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, enable_quality_preservation, temporal_overlap_frames, latent_blend_strength, artifact_reduction, prompt_stack):
+    def postprocess(self, model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, enable_quality_preservation, temporal_overlap_frames, latent_blend_strength, artifact_reduction, prompt_stack, feature_consistency_strength, reference_frame_interval, detail_preservation_mode):
 
         output_to_terminal_successful("Generation started...")
 
@@ -268,41 +280,63 @@ class WanImageToVideoAdvancedSampler:
                 output_to_terminal_error("Continuing with default ComfyUI preview system...")
         else:
             output_to_terminal_error("TAESD override is disabled, using default ComfyUI preview system...")
+        mm.throw_exception_if_processing_interrupted()
 
         # Load CLIP Vision Model
         clip_vision = self.load_clip_vision_model(clip_vision_model, CLIPVisionLoader)
+        mm.throw_exception_if_processing_interrupted()
 
         # Apply Model Patch Torch Settings
         working_model = self.apply_model_patch_torch_settings(working_model)
+        mm.throw_exception_if_processing_interrupted()
 
         # Apply Sage Attention
         working_model = self.apply_sage_attention(sage_attention, working_model, sage_attention_mode)
+        mm.throw_exception_if_processing_interrupted()
 
         # Apply TeaCache and SLG
         working_model = self.apply_tea_cache_and_slg(tea_cache, use_tea_cache, working_model, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent)
-            
+        mm.throw_exception_if_processing_interrupted()
+
         # Apply Model Shift
         working_model = self.apply_model_shift(model_shift, use_shift, working_model, shift)
+        mm.throw_exception_if_processing_interrupted()
 
         # Apply Video Enhance
         working_model = self.apply_video_enhance(video_enhance_enabled, working_model, wanVideoEnhanceAVideo, total_frames)
+        mm.throw_exception_if_processing_interrupted()
 
         # Apply CFG Zero Star
         working_model = self.apply_cfg_zero_star(use_cfg_zero_star, working_model, cfgZeroStar)
+        mm.throw_exception_if_processing_interrupted()
 
         # Apply Block Swap
         working_model = self.apply_block_swap(use_block_swap, working_model, wanBlockSwap, block_swap)
+        mm.throw_exception_if_processing_interrupted()
 
         # Process LoRA stack
         working_model, clip = self.process_lora_stack(lora_stack, working_model, clip)
+        mm.throw_exception_if_processing_interrupted()
 
         # Generate video chunks sequentially with quality preservation
         images_chunck = []
         original_image = start_image.clone() if start_image is not None else None
         last_latent = None  # Store latent for continuity
+        reference_clip_vision = None  # Store reference CLIP vision features for consistency
+        
+        # Prepare reference features for consistency
+        if feature_consistency_strength > 0 and original_image is not None and clip_vision is not None:
+            try:
+                reference_clip_vision, = CLIPVisionEncoder.encode(clip_vision, original_image, "center")
+                output_to_terminal_successful(f"Reference CLIP vision features extracted for consistency (strength: {feature_consistency_strength})")
+            except Exception as e:
+                output_to_terminal_error(f"Failed to extract reference features: {e}")
+                reference_clip_vision = None
+        mm.throw_exception_if_processing_interrupted()
         
         for chunk_index in range(total_video_chunks):
             output_to_terminal_successful(f"Generating video chunk {chunk_index + 1}/{total_video_chunks}...")
+            mm.throw_exception_if_processing_interrupted()
             gc.collect()
             torch.cuda.empty_cache()
             mm.soft_empty_cache()
@@ -314,9 +348,11 @@ class WanImageToVideoAdvancedSampler:
             generation_clip = clip.clone()
 
             positive, negative, loras = self.get_current_prompt(prompt_stack, chunk_index, positive, negative)
+            mm.throw_exception_if_processing_interrupted()
 
             if (loras is not None):
                 generation_model, generation_clip = self.process_lora_stack(loras, generation_model, generation_clip)
+            mm.throw_exception_if_processing_interrupted()
 
             # Quality preservation: Use multiple frames for smoother transition
             if enable_quality_preservation and chunk_index > 0 and images_chunck:
@@ -353,30 +389,43 @@ class WanImageToVideoAdvancedSampler:
                 # Basic fallback: just use last frame
                 start_image = images_chunck[-1][-1:].clone()
                 output_to_terminal_successful("Using simple last frame transition (quality preservation disabled)")
+            mm.throw_exception_if_processing_interrupted()
 
-            # Process start and end images
-            start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image = self.process_start_and_end_images(
+            # Process start and end images with enhanced feature consistency
+            start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image = self.process_start_and_end_images_with_consistency(
                 start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled,
                 clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
-                image_generation_mode
+                image_generation_mode, reference_clip_vision, feature_consistency_strength, 
+                chunk_index, reference_frame_interval, detail_preservation_mode
             )
+            mm.throw_exception_if_processing_interrupted()
 
             # Apply CausVid LoRA processing for current chunk
             model_high_cfg, model_low_cfg, generation_clip = self.apply_causvid_lora_processing(
                 generation_model, generation_clip, lora_loader, causvid_lora, 
                 high_cfg_causvid_strength, low_cfg_causvid_strength, use_dual_samplers
             )
+            mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Encoding Positive CLIP text...")
-            temp_positive_clip, = text_encode.encode(generation_clip, positive)
+            
+            # Enhance positive prompt with consistency keywords based on detail preservation mode
+            enhanced_positive = self.enhance_prompt_for_consistency(positive, detail_preservation_mode, chunk_index)
+            temp_positive_clip, = text_encode.encode(generation_clip, enhanced_positive)
+            mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Encoding Negative CLIP text...")
-            temp_negative_clip, = text_encode.encode(generation_clip, negative)
+            
+            # Enhance negative prompt to avoid inconsistencies
+            enhanced_negative = self.enhance_negative_prompt_for_consistency(negative, detail_preservation_mode)
+            temp_negative_clip, = text_encode.encode(generation_clip, enhanced_negative)
+            mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Wan Image to Video started...")
             temp_positive_clip, temp_negative_clip, in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, 0.5, image_generation_mode)
+            mm.throw_exception_if_processing_interrupted()
 
-            # Latent space continuity: Use previous latent for initialization if available
+            # Enhanced latent space continuity with feature consistency
             if enable_quality_preservation and chunk_index > 0 and last_latent is not None and latent_blend_strength > 0:
                 try:
                     # Extract the actual tensor from last_latent (handle both dict and tensor formats)
@@ -395,11 +444,22 @@ class WanImageToVideoAdvancedSampler:
                     
                     # Blend the new latent with the last latent for smoother transition
                     if in_latent_tensor.shape == last_latent_tensor.shape:
-                        # Take the last few latent frames and blend them with the new initialization
-                        blend_frames = min(2, last_latent_tensor.shape[2])  # Use last 2 frames
+                        # Enhanced blending with feature consistency consideration
+                        effective_blend_strength = latent_blend_strength
+                        
+                        # Increase blending strength for better feature consistency
+                        if detail_preservation_mode == "strong":
+                            effective_blend_strength = min(0.6, latent_blend_strength * 1.5)
+                        elif detail_preservation_mode == "medium":
+                            effective_blend_strength = min(0.5, latent_blend_strength * 1.2)
+                        
+                        # Take more frames for stronger consistency
+                        blend_frames = min(3 if detail_preservation_mode == "strong" else 2, 
+                                         last_latent_tensor.shape[2])
+                        
                         blended_frames = (
-                            in_latent_tensor[:, :, :blend_frames] * (1 - latent_blend_strength) + 
-                            last_latent_tensor[:, :, -blend_frames:] * latent_blend_strength
+                            in_latent_tensor[:, :, :blend_frames] * (1 - effective_blend_strength) + 
+                            last_latent_tensor[:, :, -blend_frames:] * effective_blend_strength
                         )
                         
                         # Update the latent with blended frames
@@ -408,12 +468,13 @@ class WanImageToVideoAdvancedSampler:
                         else:
                             in_latent[:, :, :blend_frames] = blended_frames
                             
-                        output_to_terminal_successful(f"Applied latent space blending with strength {latent_blend_strength}")
+                        output_to_terminal_successful(f"Applied enhanced latent space blending (strength: {effective_blend_strength:.2f}, frames: {blend_frames}, mode: {detail_preservation_mode})")
                     else:
                         output_to_terminal_error(f"Latent shape mismatch: {in_latent_tensor.shape} vs {last_latent_tensor.shape}, skipping blend")
                 except Exception as e:
-                    output_to_terminal_error(f"Latent blending failed, continuing without: {e}")
+                    output_to_terminal_error(f"Enhanced latent blending failed, continuing without: {e}")
 
+            mm.throw_exception_if_processing_interrupted()
             gc.collect()
             torch.cuda.empty_cache()
             mm.soft_empty_cache()
@@ -433,6 +494,7 @@ class WanImageToVideoAdvancedSampler:
                     last_latent = out_latent.clone() if out_latent is not None else None
                 else:
                     last_latent = out_latent  # Fallback for other types
+            mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Vae Decode started...")
             output_image, = wan_video_vae_decode.decode(out_latent, vae, 0, image_generation_mode)
@@ -450,6 +512,7 @@ class WanImageToVideoAdvancedSampler:
                 elif apply_color_match and original_image is not None:
                     # Fallback to original image color matching
                     output_image = self.apply_color_match(original_image, output_image, apply_color_match, colorMatch)
+            mm.throw_exception_if_processing_interrupted()
             
             images_chunck.append(output_image)
             
@@ -991,6 +1054,214 @@ class WanImageToVideoAdvancedSampler:
         else:
             output_to_terminal_error("No clip vision model selected, skipping...")
             return None
+
+    def process_start_and_end_images_with_consistency(self, start_image, start_image_clip_vision_enabled, 
+                                                    end_image, end_image_clip_vision_enabled, clip_vision, 
+                                                    resizer, wan_max_resolution, CLIPVisionEncoder, 
+                                                    large_image_side, wan_model_size, image_generation_mode,
+                                                    reference_clip_vision, feature_consistency_strength,
+                                                    chunk_index, reference_frame_interval, detail_preservation_mode):
+        """
+        Enhanced version of process_start_and_end_images with feature consistency support.
+        
+        This method maintains consistency of features like tattoos, jewelry, clothing patterns
+        across video chunks by blending CLIP vision features with the original reference.
+        """
+        
+        # First, process images normally
+        start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image = self.process_start_and_end_images(
+            start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled,
+            clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
+            image_generation_mode
+        )
+        
+        # Apply feature consistency if enabled and we have reference features
+        if (feature_consistency_strength > 0 and reference_clip_vision is not None and 
+            clip_vision_start_image is not None and detail_preservation_mode != "disabled"):
+            
+            try:
+                # Determine consistency strength based on mode and frame interval
+                consistency_factor = feature_consistency_strength
+                
+                # Adjust based on detail preservation mode
+                mode_multipliers = {
+                    "light": 0.6,
+                    "medium": 1.0,
+                    "strong": 1.4
+                }
+                consistency_factor *= mode_multipliers.get(detail_preservation_mode, 1.0)
+                
+                # Apply periodic stronger consistency injections
+                if chunk_index % reference_frame_interval == 0:
+                    consistency_factor *= 1.3  # Boost consistency at intervals
+                    output_to_terminal_successful(f"Applying enhanced feature consistency at frame interval (factor: {consistency_factor:.2f})")
+                
+                # Blend CLIP vision features for consistency
+                # This preserves the original features while allowing for some motion/pose changes
+                original_clip_features = clip_vision_start_image
+                
+                # Create a weighted blend: more original features = better consistency
+                blended_features = self.blend_clip_vision_features(
+                    original_clip_features, reference_clip_vision, consistency_factor
+                )
+                
+                clip_vision_start_image = blended_features
+                
+                # Apply same logic to end image if it exists and is enabled
+                if clip_vision_end_image is not None and end_image_clip_vision_enabled:
+                    blended_end_features = self.blend_clip_vision_features(
+                        clip_vision_end_image, reference_clip_vision, consistency_factor * 0.8  # Slightly less for end frame
+                    )
+                    clip_vision_end_image = blended_end_features
+                
+                output_to_terminal_successful(f"Applied feature consistency blending (strength: {consistency_factor:.2f}, mode: {detail_preservation_mode})")
+                
+            except Exception as e:
+                output_to_terminal_error(f"Feature consistency blending failed: {e}")
+                # Continue with original features if blending fails
+                pass
+        
+        return start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image
+
+    def blend_clip_vision_features(self, current_features, reference_features, blend_strength):
+        """
+        Blend CLIP vision features to maintain consistency while allowing motion.
+        
+        Args:
+            current_features: Current frame's CLIP vision features
+            reference_features: Original reference image's CLIP vision features  
+            blend_strength: How much to blend (0.0 = all current, 1.0 = all reference)
+            
+        Returns:
+            Blended CLIP vision features
+        """
+        try:
+            # Ensure blend_strength is in valid range
+            blend_strength = max(0.0, min(1.0, blend_strength))
+            
+            # Simple linear interpolation between features
+            # This maintains feature consistency while allowing for pose/motion changes
+            blended = current_features * (1.0 - blend_strength) + reference_features * blend_strength
+            
+            return blended
+            
+        except Exception as e:
+            output_to_terminal_error(f"CLIP vision feature blending failed: {e}")
+            return current_features  # Return original if blending fails
+
+    def process_start_and_end_images(self, start_image, start_image_clip_vision_enabled, 
+                                   end_image, end_image_clip_vision_enabled, clip_vision, 
+                                   resizer, wan_max_resolution, CLIPVisionEncoder, 
+                                   large_image_side, wan_model_size, image_generation_mode):
+        """
+        Original method for processing start and end images.
+        This is kept as a separate method for backward compatibility and cleaner code.
+        """
+        
+        image_width = 512
+        image_height = 512
+        clip_vision_start_image = None
+        clip_vision_end_image = None
+        
+        # Process start image
+        if start_image is not None:
+            start_image, image_width, image_height, clip_vision_start_image = self.process_image(
+                start_image, start_image_clip_vision_enabled, clip_vision, resizer,
+                wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
+                image_width, image_height, "start image"
+            )
+        
+        # Process end image
+        if end_image is not None:
+            end_image, _, _, clip_vision_end_image = self.process_image(
+                end_image, end_image_clip_vision_enabled, clip_vision, resizer,
+                wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
+                image_width, image_height, "end image"
+            )
+        
+        return start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image
+
+    def enhance_prompt_for_consistency(self, positive_prompt, detail_preservation_mode, chunk_index):
+        """
+        Enhance the positive prompt to encourage feature consistency.
+        
+        Args:
+            positive_prompt: Original positive prompt
+            detail_preservation_mode: Level of detail preservation 
+            chunk_index: Current chunk being generated
+            
+        Returns:
+            Enhanced prompt with consistency keywords
+        """
+        if detail_preservation_mode == "disabled":
+            return positive_prompt
+        
+        # Base consistency keywords
+        consistency_keywords = []
+        
+        if detail_preservation_mode == "light":
+            consistency_keywords = ["consistent appearance", "same person", "identical face", "same body shape"]
+        elif detail_preservation_mode == "medium":
+            consistency_keywords = ["consistent appearance", "same person", "identical features", "maintaining details", 
+                                  "same face", "identical body shape", "consistent hands", "same feet", "preserved body parts"]
+        elif detail_preservation_mode == "strong":
+            consistency_keywords = ["consistent appearance", "same person", "identical features", "maintaining details", 
+                                  "same face", "identical facial features", "consistent body shape", "same body proportions",
+                                  "preserved hands", "consistent feet", "identical body parts", "same genitals", 
+                                  "preserved tattoos", "consistent jewelry", "same clothing patterns", "unchanged accessories",
+                                  "anatomical consistency", "body part preservation", "facial consistency"]
+        
+        # Add temporal consistency for multi-chunk generation
+        if chunk_index > 0:
+            consistency_keywords.extend(["temporal consistency", "smooth continuation", "anatomical continuity"])
+        
+        # Combine with original prompt
+        if consistency_keywords:
+            enhanced_prompt = f"{positive_prompt}, {', '.join(consistency_keywords)}"
+            return enhanced_prompt
+        
+        return positive_prompt
+
+    def enhance_negative_prompt_for_consistency(self, negative_prompt, detail_preservation_mode):
+        """
+        Enhance the negative prompt to avoid inconsistencies.
+        
+        Args:
+            negative_prompt: Original negative prompt
+            detail_preservation_mode: Level of detail preservation
+            
+        Returns:
+            Enhanced negative prompt that discourages inconsistencies
+        """
+        if detail_preservation_mode == "disabled":
+            return negative_prompt
+        
+        # Inconsistency keywords to avoid
+        inconsistency_keywords = []
+        
+        if detail_preservation_mode == "light":
+            inconsistency_keywords = ["changing appearance", "different person", "morphing face", "changing body shape"]
+        elif detail_preservation_mode == "medium":
+            inconsistency_keywords = ["changing appearance", "different person", "inconsistent features", "morphing details",
+                                    "face morphing", "changing facial features", "body shape changes", "hand morphing", "feet changes"]
+        elif detail_preservation_mode == "strong":
+            inconsistency_keywords = ["changing appearance", "different person", "inconsistent features", "morphing details",
+                                    "face morphing", "changing facial features", "facial inconsistency", "different face",
+                                    "body shape changes", "changing body proportions", "morphing body parts",
+                                    "hand morphing", "changing hands", "different hands", "feet changes", "morphing feet",
+                                    "genital changes", "morphing genitals", "body part inconsistency",
+                                    "disappearing tattoos", "changing jewelry", "different clothing patterns", "missing accessories",
+                                    "feature inconsistency", "detail morphing", "identity changes", "anatomical inconsistency"]
+        
+        # Combine with original negative prompt
+        if inconsistency_keywords:
+            if negative_prompt:
+                enhanced_negative = f"{negative_prompt}, {', '.join(inconsistency_keywords)}"
+            else:
+                enhanced_negative = ', '.join(inconsistency_keywords)
+            return enhanced_negative
+        
+        return negative_prompt if negative_prompt else ""
 
     def process_image(self, image, image_clip_vision_enabled, clip_vision, resizer, 
                      wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
