@@ -118,6 +118,14 @@ class WanImageToVideoAdvancedSampler:
                 ("total_video_chunks", ("INT", {"default": 1, "min": 1, "max": 1000, "step":1, "advanced": True, "tooltip": "Number of sequential video chunks to generate. Each chunk extends the total video duration. Higher values create longer videos by generating chunks in sequence."})),
                 
                 # ═════════════════════════════════════════════════════════════════
+                # 🔄 QUALITY PRESERVATION FOR MULTI-CHUNK GENERATION
+                # ═════════════════════════════════════════════════════════════════
+                ("enable_quality_preservation", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable advanced quality preservation techniques for multi-chunk video generation. Reduces degradation over time."})),
+                ("temporal_overlap_frames", ("INT", {"default": 3, "min": 1, "max": 8, "step": 1, "advanced": True, "tooltip": "Number of frames to overlap between chunks for temporal coherence. More frames = smoother transitions but slower generation."})),
+                ("latent_blend_strength", ("FLOAT", {"default": 0.2, "min": 0.0, "max": 0.8, "step": 0.05, "advanced": True, "tooltip": "Strength of latent space blending between chunks. Higher values preserve more continuity but may reduce variation."})),
+                ("artifact_reduction", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Apply gaussian blur artifact reduction to transition frames. Helps reduce compression artifacts between chunks."})),
+                
+                # ═════════════════════════════════════════════════════════════════
                 # 👁️ CLIP VISION SETTINGS
                 # ═════════════════════════════════════════════════════════════════
                 ("clip_vision_model", (clip_vision_models, {"default": NONE, "advanced": True, "tooltip": "CLIP Vision model for processing input images. Required for image-to-video generation."})),
@@ -167,7 +175,7 @@ class WanImageToVideoAdvancedSampler:
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, use_taesd_preview=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, total_video_chunks=1, prompt_stack=None):
+    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, enable_quality_preservation=True, temporal_overlap_frames=3, latent_blend_strength=0.2, artifact_reduction=True, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, use_taesd_preview=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None):
 
         #variables
         output_image = None
@@ -195,11 +203,11 @@ class WanImageToVideoAdvancedSampler:
         # Initialize Model Shift
         model_shift = self.initialize_model_shift(use_shift, shift)
 
-        output_image, = self.postprocess(model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack)
+        output_image, = self.postprocess(model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, enable_quality_preservation, temporal_overlap_frames, latent_blend_strength, artifact_reduction, prompt_stack)
 
         return (output_image,)
 
-    def postprocess(self, model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack):
+    def postprocess(self, model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, enable_quality_preservation, temporal_overlap_frames, latent_blend_strength, artifact_reduction, prompt_stack):
 
         output_to_terminal_successful("Generation started...")
 
@@ -264,12 +272,15 @@ class WanImageToVideoAdvancedSampler:
         # Process LoRA stack
         working_model, clip = self.process_lora_stack(lora_stack, working_model, clip)
 
-        # Generate video chunks sequentially
+        # Generate video chunks sequentially with quality preservation
         images_chunck = []
-        original_image = start_image.clone()
+        original_image = start_image.clone() if start_image is not None else None
+        last_latent = None  # Store latent for continuity
+        
         for chunk_index in range(total_video_chunks):
             output_to_terminal_successful(f"Generating video chunk {chunk_index + 1}/{total_video_chunks}...")
-#            gc.collect()  # Clear memory before each chunk generation
+            gc.collect()  # Clear memory before each chunk generation
+            torch.cuda.empty_cache()  # Clear GPU memory
             output_image = None
             clip_vision = None
             clip_vision_start_image = None
@@ -281,6 +292,40 @@ class WanImageToVideoAdvancedSampler:
 
             if (loras is not None):
                 generation_model, generation_clip = self.process_lora_stack(loras, generation_model, generation_clip)
+
+            # Quality preservation: Use multiple frames for smoother transition
+            if enable_quality_preservation and chunk_index > 0 and images_chunck:
+                # Extract last few frames for better temporal coherence
+                prev_chunk = images_chunck[-1]
+                overlap_frames = min(temporal_overlap_frames, prev_chunk.shape[0])
+                
+                # Use weighted average of last frames to reduce single-frame artifacts
+                if overlap_frames > 1:
+                    # Take last N frames and compute weighted average (more weight to recent frames)
+                    weights = torch.linspace(0.3, 1.0, overlap_frames).unsqueeze(1).unsqueeze(2).unsqueeze(3)
+                    weights = weights.to(prev_chunk.device)
+                    
+                    last_frames = prev_chunk[-overlap_frames:]
+                    weighted_frames = last_frames * weights
+                    start_image = weighted_frames.mean(dim=0, keepdim=True)
+                    
+                    output_to_terminal_successful(f"Using weighted average of last {overlap_frames} frames for temporal coherence")
+                else:
+                    # Fallback to single frame with noise reduction
+                    start_image = prev_chunk[-1:].clone()
+                    
+                # Apply artifact reduction if enabled
+                if artifact_reduction:
+                    try:
+                        from torchvision.transforms.functional import gaussian_blur
+                        start_image = gaussian_blur(start_image, kernel_size=3, sigma=0.5)
+                        output_to_terminal_successful("Applied artifact reduction to transition frame")
+                    except ImportError:
+                        output_to_terminal_error("torchvision not available for artifact reduction, skipping...")
+            elif chunk_index > 0 and images_chunck:
+                # Basic fallback: just use last frame
+                start_image = images_chunck[-1][-1:].clone()
+                output_to_terminal_successful("Using simple last frame transition (quality preservation disabled)")
 
             # Process start and end images
             start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image = self.process_start_and_end_images(
@@ -304,6 +349,23 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_successful("Wan Image to Video started...")
             temp_positive_clip, temp_negative_clip, in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, 0.5, image_generation_mode)
 
+            # Latent space continuity: Use previous latent for initialization if available
+            if enable_quality_preservation and chunk_index > 0 and last_latent is not None and latent_blend_strength > 0:
+                try:
+                    # Blend the new latent with the last latent for smoother transition
+                    if in_latent.shape == last_latent.shape:
+                        # Take the last few latent frames and blend them with the new initialization
+                        blend_frames = min(2, last_latent.shape[2])  # Use last 2 frames
+                        in_latent[:, :, :blend_frames] = (
+                            in_latent[:, :, :blend_frames] * (1 - latent_blend_strength) + 
+                            last_latent[:, :, -blend_frames:] * latent_blend_strength
+                        )
+                        output_to_terminal_successful(f"Applied latent space blending with strength {latent_blend_strength}")
+                    else:
+                        output_to_terminal_error(f"Latent shape mismatch: {in_latent.shape} vs {last_latent.shape}, skipping blend")
+                except Exception as e:
+                    output_to_terminal_error(f"Latent blending failed, continuing without: {e}")
+
             if (use_dual_samplers):
                 # Apply dual sampler processing
                 out_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, generation_clip, noise_seed, total_steps, high_cfg, low_cfg, temp_positive_clip, temp_negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
@@ -311,25 +373,82 @@ class WanImageToVideoAdvancedSampler:
                 # Apply single sampler processing
                 out_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, generation_clip, noise_seed, total_steps, high_cfg, temp_positive_clip, temp_negative_clip, in_latent, high_denoise)
 
+            # Store latent for next chunk continuity
+            if enable_quality_preservation:
+                # Handle both tensor and dict formats from KSampler
+                if isinstance(out_latent, dict) and 'samples' in out_latent:
+                    last_latent = out_latent['samples'].clone() if out_latent['samples'] is not None else None
+                elif hasattr(out_latent, 'clone'):
+                    last_latent = out_latent.clone() if out_latent is not None else None
+                else:
+                    last_latent = out_latent  # Fallback for other types
+
             output_to_terminal_successful("Vae Decode started...")
             output_image, = wan_video_vae_decode.decode(out_latent, vae, 0, image_generation_mode)
 
-            # Apply color match
-            output_image = self.apply_color_match(original_image, output_image, apply_color_match, colorMatch)
+            # Enhanced color matching: Match to original OR previous chunk
+            if chunk_index == 0:
+                # First chunk: match to original image
+                output_image = self.apply_color_match(original_image, output_image, apply_color_match, colorMatch)
+            else:
+                # Subsequent chunks: maintain color consistency with previous chunk
+                if apply_color_match and images_chunck and enable_quality_preservation:
+                    prev_reference = images_chunck[-1][-1:]  # Last frame of previous chunk
+                    output_image = self.apply_color_match(prev_reference, output_image, True, colorMatch)
+                    output_to_terminal_successful("Applied color matching to previous chunk for consistency")
+                elif apply_color_match and original_image is not None:
+                    # Fallback to original image color matching
+                    output_image = self.apply_color_match(original_image, output_image, apply_color_match, colorMatch)
+            
             images_chunck.append(output_image)
-            start_image = output_image[output_image.shape[0] - 1:output_image.shape[0] + 1].clone()
-            output_to_terminal_successful(f"Video chunk {chunk_index + 1} generated successfully")    
+            
+            quality_status = "with quality preservation" if enable_quality_preservation else "standard"
+            output_to_terminal_successful(f"Video chunk {chunk_index + 1} generated successfully {quality_status}")    
 
         output_to_terminal_successful("All video chunks generated successfully")
-        # Merge all video chunks in sequence
+        # Merge all video chunks in sequence with overlap handling
         if len(images_chunck) > 1:
-            output_to_terminal_successful(f"Merging {len(images_chunck)} video chunks in sequence...")
+            output_to_terminal_successful(f"Merging {len(images_chunck)} video chunks with smart concatenation...")
 
-            # Concatenate all video chunks along the frame dimension (dim=0 for batch/frame concatenation)
-            output_image = torch.cat(images_chunck, dim=0)
-            output_to_terminal_successful(f"Final video shape after concatenation: {output_image.shape}")
+            if enable_quality_preservation:
+                # Smart concatenation: remove overlapping frames to avoid duplicates
+                merged_chunks = [images_chunck[0]]  # Start with first chunk
+                
+                for i in range(1, len(images_chunck)):
+                    current_chunk = images_chunck[i]
+                    
+                    # Skip the first frame of subsequent chunks to avoid overlap
+                    # (since we used the last frame of previous chunk as start)
+                    if current_chunk.shape[0] > 1:
+                        merged_chunks.append(current_chunk[1:])  # Skip first frame
+                        output_to_terminal_successful(f"Merged chunk {i + 1} with overlap removal")
+                    else:
+                        # If chunk has only 1 frame, keep it but blend with previous
+                        if i > 0 and merged_chunks:
+                            # Blend the single frame with the last frame for smoother transition
+                            prev_last = merged_chunks[-1][-1:]
+                            blended_frame = (prev_last * 0.3 + current_chunk * 0.7)
+                            merged_chunks.append(blended_frame)
+                            output_to_terminal_successful(f"Blended single-frame chunk {i + 1}")
+                        else:
+                            merged_chunks.append(current_chunk)
+
+                # Concatenate all processed chunks
+                output_image = torch.cat(merged_chunks, dim=0)
+                output_to_terminal_successful(f"Final video shape after smart concatenation: {output_image.shape}")
+                
+                # Verify temporal consistency
+                total_expected_frames = sum(chunk.shape[0] for chunk in images_chunck) - (len(images_chunck) - 1)
+                actual_frames = output_image.shape[0]
+                output_to_terminal_successful(f"Frame count: Expected ~{total_expected_frames}, Got {actual_frames}")
+            else:
+                # Simple concatenation without overlap handling
+                output_image = torch.cat(images_chunck, dim=0)
+                output_to_terminal_successful(f"Final video shape after simple concatenation: {output_image.shape}")
+            
         elif len(images_chunck) == 1:
             output_image = images_chunck[0]
+            output_to_terminal_successful(f"Single chunk video shape: {output_image.shape}")
         else:
             output_to_terminal_error("No video chunks generated")
 
