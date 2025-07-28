@@ -1,16 +1,41 @@
 ﻿import os
 import torch
-from collections import OrderedDict
-from comfy_extras.nodes_model_advanced import ModelSamplingSD3
-from comfy_extras.nodes_cfg import CFGZeroStar
 import nodes
 import folder_paths
 import gc
+import comfy.model_management as mm
+from collections import OrderedDict
+from comfy_extras.nodes_model_advanced import ModelSamplingSD3
+from comfy_extras.nodes_cfg import CFGZeroStar
+from comfy.utils import load_torch_file
 from .core import *
 from .wan_first_last_first_frame_to_video import WanFirstLastFirstFrameToVideo
 from .wan_video_vae_decode import WanVideoVaeDecode
 from .wan_get_max_image_resolution_by_aspect_ratio import WanGetMaxImageResolutionByAspectRatio
 from .wan_video_enhance_a_video import WanVideoEnhanceAVideo
+
+# Optional imports with try/except blocks
+try:
+    from .taesd_override import initialize_taesd_override
+    TAESD_OVERRIDE_AVAILABLE = True
+except ImportError:
+    TAESD_OVERRIDE_AVAILABLE = False
+
+try:
+    from torchvision.transforms.functional import gaussian_blur
+    TORCHVISION_AVAILABLE = True
+except ImportError:
+    TORCHVISION_AVAILABLE = False
+
+try:
+    from .taehv_simple import TAEHV
+    TAEHV_SIMPLE_AVAILABLE = True
+except ImportError:
+    try:
+        from taehv_simple import TAEHV
+        TAEHV_SIMPLE_AVAILABLE = True
+    except ImportError:
+        TAEHV_SIMPLE_AVAILABLE = False
 
 # Try to import optional dependencies for downloading
 try:
@@ -234,8 +259,7 @@ class WanImageToVideoAdvancedSampler:
         if (use_taesd_preview):
             output_to_terminal_successful("Setting up TAESD override system...")
             try:
-                from .taesd_override import initialize_taesd_override
-                if initialize_taesd_override():
+                if TAESD_OVERRIDE_AVAILABLE and initialize_taesd_override():
                     output_to_terminal_successful("TAESD override system activated successfully")
                 else:
                     output_to_terminal_error("TAESD override system failed to initialize")
@@ -279,8 +303,9 @@ class WanImageToVideoAdvancedSampler:
         
         for chunk_index in range(total_video_chunks):
             output_to_terminal_successful(f"Generating video chunk {chunk_index + 1}/{total_video_chunks}...")
-            gc.collect()  # Clear memory before each chunk generation
-            torch.cuda.empty_cache()  # Clear GPU memory
+            gc.collect()
+            torch.cuda.empty_cache()
+            mm.soft_empty_cache()
             output_image = None
             clip_vision = None
             clip_vision_start_image = None
@@ -317,11 +342,13 @@ class WanImageToVideoAdvancedSampler:
                 # Apply artifact reduction if enabled
                 if artifact_reduction:
                     try:
-                        from torchvision.transforms.functional import gaussian_blur
-                        start_image = gaussian_blur(start_image, kernel_size=3, sigma=0.5)
-                        output_to_terminal_successful("Applied artifact reduction to transition frame")
-                    except ImportError:
-                        output_to_terminal_error("torchvision not available for artifact reduction, skipping...")
+                        if TORCHVISION_AVAILABLE:
+                            start_image = gaussian_blur(start_image, kernel_size=3, sigma=0.5)
+                            output_to_terminal_successful("Applied artifact reduction to transition frame")
+                        else:
+                            output_to_terminal_error("torchvision not available for artifact reduction, skipping...")
+                    except Exception as e:
+                        output_to_terminal_error(f"Artifact reduction failed: {e}")
             elif chunk_index > 0 and images_chunck:
                 # Basic fallback: just use last frame
                 start_image = images_chunck[-1][-1:].clone()
@@ -387,6 +414,9 @@ class WanImageToVideoAdvancedSampler:
                 except Exception as e:
                     output_to_terminal_error(f"Latent blending failed, continuing without: {e}")
 
+            gc.collect()
+            torch.cuda.empty_cache()
+            mm.soft_empty_cache()
             if (use_dual_samplers):
                 # Apply dual sampler processing
                 out_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, generation_clip, noise_seed, total_steps, high_cfg, low_cfg, temp_positive_clip, temp_negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
@@ -547,13 +577,10 @@ class WanImageToVideoAdvancedSampler:
         The actual preview system now uses proper TAESD architecture.
         """
         try:
-            import folder_paths
-            # Try relative import first (when running as ComfyUI custom node)
-            try:
-                from .taehv_simple import TAEHV
-            except ImportError:
-                # Fallback to absolute import (when running standalone)
-                from taehv_simple import TAEHV
+            # Check if TAEHV is available from our imports
+            if not TAEHV_SIMPLE_AVAILABLE:
+                output_to_terminal_error("TAEHV not available - install taehv_simple module")
+                return None
             
             # Look for TAEHV models (prefer pth files from GitHub repository)
             vae_approx_files = folder_paths.get_filename_list("vae_approx")
@@ -582,15 +609,12 @@ class WanImageToVideoAdvancedSampler:
                     output_to_terminal_successful(f"Loading TAEHV model: {model_name}")
                     
                     # Load state dict
-                    import torch
-                    from comfy.utils import load_torch_file
                     state_dict = load_torch_file(model_path, safe_load=True)
                     
                     # Create TAEHV model using the official implementation
                     taehv_model = TAEHV(state_dict=state_dict)
                     
                     # Move to device
-                    import comfy.model_management as mm
                     device = mm.unet_offload_device()
                     taehv_model.to(device=device, dtype=torch.float16)
                     taehv_model.eval()
@@ -627,8 +651,6 @@ class WanImageToVideoAdvancedSampler:
                     if response.status_code == 200:
                         return True
                 elif URLLIB_AVAILABLE:
-                    import urllib.request
-                    import urllib.error
                     urllib.request.urlopen(url, timeout=5)
                     return True
             except Exception:
@@ -643,8 +665,6 @@ class WanImageToVideoAdvancedSampler:
                 response = requests.head(url, timeout=10)
                 return response.status_code == 200
             elif URLLIB_AVAILABLE:
-                import urllib.request
-                import urllib.error
                 urllib.request.urlopen(url, timeout=10)
                 return True
         except Exception as e:
@@ -804,8 +824,6 @@ class WanImageToVideoAdvancedSampler:
 
     def _download_file_with_urllib(self, url, filepath, description="Downloading"):
         """Download a file using urllib as fallback."""
-        import urllib.request
-        import urllib.error
         
         def show_progress(block_num, block_size, total_size):
             downloaded = block_num * block_size
@@ -1240,6 +1258,9 @@ class WanImageToVideoAdvancedSampler:
         output_to_terminal_successful("High CFG KSampler started...")
         out_latent, = k_sampler.sample(model_high_cfg, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, stop_steps, "enabled", high_denoise)
 
+        gc.collect()
+        torch.cuda.empty_cache()
+        mm.soft_empty_cache()
         output_to_terminal_successful("Low CFG KSampler started...")
         out_latent, = k_sampler.sample(model_low_cfg, "disable", noise_seed, total_steps, low_cfg, "lcm", "simple", temp_positive_clip, temp_negative_clip, out_latent, stop_steps, 1000, "disable", low_denoise)
         
