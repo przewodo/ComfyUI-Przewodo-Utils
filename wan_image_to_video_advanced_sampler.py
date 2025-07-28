@@ -27,30 +27,6 @@ try:
 except ImportError:
     TORCHVISION_AVAILABLE = False
 
-try:
-    from .taehv_simple import TAEHV
-    TAEHV_SIMPLE_AVAILABLE = True
-except ImportError:
-    try:
-        from taehv_simple import TAEHV
-        TAEHV_SIMPLE_AVAILABLE = True
-    except ImportError:
-        TAEHV_SIMPLE_AVAILABLE = False
-
-# Try to import optional dependencies for downloading
-try:
-    import requests
-    REQUESTS_AVAILABLE = True
-except ImportError:
-    REQUESTS_AVAILABLE = False
-
-try:
-    import urllib.request
-    import urllib.error
-    URLLIB_AVAILABLE = True
-except ImportError:
-    URLLIB_AVAILABLE = False
-
 # Import external custom nodes using the centralized import function
 imported_nodes = {}
 teacache_imports = import_nodes(["teacache"], ["TeaCache"])
@@ -191,6 +167,11 @@ class WanImageToVideoAdvancedSampler:
                 ("use_cfg_zero_star", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CFG Zero Star optimization for improved sampling efficiency and quality."})),
                 ("apply_color_match", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Apply color matching between start image and generated output for consistent color grading."})),
                 ("use_taesd_preview", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable TAESD preview for Wan2.1 models. Provides fast latent preview during generation."})),  # Proper TAESD implementation for Wan2.1
+                
+                # ═════════════════════════════════════════════════════════════════
+                # 🚀 MEMORY OPTIMIZATION
+                # ═════════════════════════════════════════════════════════════════
+                ("enable_aggressive_memory_optimization", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable aggressive VRAM optimization. Reduces memory usage at the cost of some performance."})),
             ]),
             "optional": OrderedDict([
                 ("lora_stack", (any_type, {"default": None, "advanced": True, "tooltip": "Stack of LoRAs to apply to the diffusion model. Each LoRA modifies the model's behavior."})),
@@ -207,7 +188,31 @@ class WanImageToVideoAdvancedSampler:
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, enable_quality_preservation=True, temporal_overlap_frames=3, latent_blend_strength=0.2, artifact_reduction=True, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, use_taesd_preview=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, feature_consistency_strength=0.8, reference_frame_interval=3, detail_preservation_mode="medium"):
+    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, enable_quality_preservation=True, temporal_overlap_frames=3, latent_blend_strength=0.2, artifact_reduction=True, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, use_taesd_preview=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, feature_consistency_strength=0.8, reference_frame_interval=3, detail_preservation_mode="medium", enable_aggressive_memory_optimization=True):
+        # Aggressive memory optimization setup
+        if enable_aggressive_memory_optimization:
+            output_to_terminal_successful("Enabling aggressive memory optimization...")
+            
+            # Force aggressive garbage collection
+            gc.collect()
+            torch.cuda.empty_cache()
+            mm.soft_empty_cache()
+            
+            # Set memory fraction if available
+            if hasattr(torch.cuda, 'set_memory_fraction'):
+                try:
+                    torch.cuda.set_memory_fraction(0.9)  # Use 90% of available VRAM
+                    output_to_terminal_successful("Set CUDA memory fraction to 0.9")
+                except Exception as e:
+                    output_to_terminal_error(f"Failed to set memory fraction: {e}")
+            
+            # Enable memory efficient attention if available
+            if hasattr(torch.backends.cuda, 'enable_math_sdp'):
+                torch.backends.cuda.enable_math_sdp(True)
+                torch.backends.cuda.enable_flash_sdp(True)
+                torch.backends.cuda.enable_mem_efficient_sdp(True)
+                output_to_terminal_successful("Enabled efficient attention backends")
+        
         gc.collect()
         torch.cuda.empty_cache()
         mm.soft_empty_cache()
@@ -240,11 +245,11 @@ class WanImageToVideoAdvancedSampler:
         model_shift = self.initialize_model_shift(use_shift, shift)
         mm.throw_exception_if_processing_interrupted()
 
-        output_image, = self.postprocess(model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, enable_quality_preservation, temporal_overlap_frames, latent_blend_strength, artifact_reduction, prompt_stack, feature_consistency_strength, reference_frame_interval, detail_preservation_mode)
+        output_image, = self.postprocess(model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, enable_quality_preservation, temporal_overlap_frames, latent_blend_strength, artifact_reduction, prompt_stack, feature_consistency_strength, reference_frame_interval, detail_preservation_mode, enable_aggressive_memory_optimization)
 
         return (output_image,)
 
-    def postprocess(self, model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, enable_quality_preservation, temporal_overlap_frames, latent_blend_strength, artifact_reduction, prompt_stack, feature_consistency_strength, reference_frame_interval, detail_preservation_mode):
+    def postprocess(self, model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, use_taesd_preview, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, enable_quality_preservation, temporal_overlap_frames, latent_blend_strength, artifact_reduction, prompt_stack, feature_consistency_strength, reference_frame_interval, detail_preservation_mode, enable_aggressive_memory_optimization):
 
         output_to_terminal_successful("Generation started...")
 
@@ -337,6 +342,27 @@ class WanImageToVideoAdvancedSampler:
         for chunk_index in range(total_video_chunks):
             output_to_terminal_successful(f"Generating video chunk {chunk_index + 1}/{total_video_chunks}...")
             mm.throw_exception_if_processing_interrupted()
+            
+            # Aggressive memory cleanup before each chunk
+            if enable_aggressive_memory_optimization:
+                # Clean up previous chunk data
+                if chunk_index > 0:
+                    # Explicitly delete variables that might hold GPU memory
+                    for var_name in ['output_image', 'out_latent', 'in_latent', 'temp_positive_clip', 'temp_negative_clip']:
+                        if var_name in locals():
+                            del locals()[var_name]
+                    
+                    # Force garbage collection and cache clearing
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    mm.soft_empty_cache()
+                    
+                    # Report memory status
+                    if torch.cuda.is_available():
+                        current_memory = torch.cuda.memory_allocated() / 1024**3
+                        max_memory = torch.cuda.max_memory_allocated() / 1024**3
+                        output_to_terminal_successful(f"VRAM: Current {current_memory:.2f}GB, Peak {max_memory:.2f}GB")
+            
             gc.collect()
             torch.cuda.empty_cache()
             mm.soft_empty_cache()
@@ -485,6 +511,17 @@ class WanImageToVideoAdvancedSampler:
                 # Apply single sampler processing
                 out_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, generation_clip, noise_seed, total_steps, high_cfg, temp_positive_clip, temp_negative_clip, in_latent, high_denoise)
 
+            # Memory cleanup after sampling
+            if enable_aggressive_memory_optimization:
+                # Clear intermediate variables
+                del temp_positive_clip, temp_negative_clip, in_latent
+                if 'model_high_cfg' in locals():
+                    del model_high_cfg
+                if 'model_low_cfg' in locals():
+                    del model_low_cfg
+                gc.collect()
+                torch.cuda.empty_cache()
+
             # Store latent for next chunk continuity
             if enable_quality_preservation:
                 # Handle both tensor and dict formats from KSampler
@@ -547,9 +584,14 @@ class WanImageToVideoAdvancedSampler:
                         else:
                             merged_chunks.append(current_chunk)
 
-                # Concatenate all processed chunks
-                output_image = torch.cat(merged_chunks, dim=0)
-                output_to_terminal_successful(f"Final video shape after smart concatenation: {output_image.shape}")
+                    # Concatenate all processed chunks
+                    output_image = torch.cat(merged_chunks, dim=0)
+                    output_to_terminal_successful(f"Final video shape after smart concatenation: {output_image.shape}")
+                    
+                    # Clean up intermediate chunks to save memory
+                    del merged_chunks
+                    gc.collect()
+                    torch.cuda.empty_cache()
                 
                 # Verify temporal consistency
                 total_expected_frames = sum(chunk.shape[0] for chunk in images_chunck) - (len(images_chunck) - 1)
@@ -565,6 +607,23 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_successful(f"Single chunk video shape: {output_image.shape}")
         else:
             output_to_terminal_error("No video chunks generated")
+
+        # Final memory cleanup and reporting
+        if enable_aggressive_memory_optimization:
+            # Clean up any remaining variables
+            del images_chunck
+            gc.collect()
+            torch.cuda.empty_cache()
+            mm.soft_empty_cache()
+            
+            # Final memory report
+            if torch.cuda.is_available():
+                current_memory = torch.cuda.memory_allocated() / 1024**3
+                max_memory = torch.cuda.max_memory_allocated() / 1024**3
+                output_to_terminal_successful(f"Final VRAM usage: Current {current_memory:.2f}GB, Peak {max_memory:.2f}GB")
+                
+                # Reset peak memory tracker for next run
+                torch.cuda.reset_peak_memory_stats()
 
         return (output_image,)
     
@@ -632,276 +691,6 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_error("Invalid model type selected. Please choose either GGUF or Diffusion model.")
             raise ValueError("Invalid model type selected. Please choose either GGUF or Diffusion model.")
 
-    def load_taehv_model(self):
-        """
-        Load TAEHV model for potential fallback use in TAESD creation.
-        
-        This is kept for potential weight adaptation but not used directly in the preview system.
-        The actual preview system now uses proper TAESD architecture.
-        """
-        try:
-            # Check if TAEHV is available from our imports
-            if not TAEHV_SIMPLE_AVAILABLE:
-                output_to_terminal_error("TAEHV not available - install taehv_simple module")
-                return None
-            
-            # Look for TAEHV models (prefer pth files from GitHub repository)
-            vae_approx_files = folder_paths.get_filename_list("vae_approx")
-            output_to_terminal_successful(f"Checking vae_approx folder, found {len(vae_approx_files)} files")
-            
-            # Priority order: pth files from GitHub repository
-            taehv_candidates = []
-            for f in vae_approx_files:
-                if any(keyword in f.lower() for keyword in ['taehv', 'taew2_1', 'wan2.1', 'hunyuan', 'taecvx', 'taeos1_3']):
-                    if f.endswith('.pth'):
-                        taehv_candidates.insert(0, f)  # Prioritize pth files
-                    elif f.endswith('.safetensors'):
-                        taehv_candidates.append(f)  # Fallback to safetensors if available
-            
-            output_to_terminal_successful(f"Found {len(taehv_candidates)} TAEHV candidates: {taehv_candidates}")
-            
-            if not taehv_candidates:
-                output_to_terminal_error("No TAEHV models found in vae_approx folder")
-                output_to_terminal_error("Download models like 'taew2_1.pth' to ComfyUI/models/vae_approx/")
-                return None
-            
-            # Try to load each candidate
-            for model_name in taehv_candidates:
-                try:
-                    model_path = folder_paths.get_full_path("vae_approx", model_name)
-                    output_to_terminal_successful(f"Loading TAEHV model: {model_name}")
-                    
-                    # Load state dict
-                    state_dict = load_torch_file(model_path, safe_load=True)
-                    
-                    # Create TAEHV model using the official implementation
-                    taehv_model = TAEHV(state_dict=state_dict)
-                    
-                    # Move to device
-                    device = mm.unet_offload_device()
-                    taehv_model.to(device=device, dtype=torch.float16)
-                    taehv_model.eval()
-                    
-                    output_to_terminal_successful(f"TAEHV model {model_name} loaded successfully on {device}")
-                    return taehv_model
-                    
-                except Exception as e:
-                    output_to_terminal_error(f"Failed to load {model_name}: {e}")
-                    continue
-            
-            output_to_terminal_error("No compatible TAEHV models could be loaded")
-            return None
-            
-        except ImportError as e:
-            output_to_terminal_error(f"Failed to import TAEHV: {e}")
-            return None
-        except Exception as e:
-            output_to_terminal_error(f"TAEHV loading error: {e}")
-            return None
-
-    def test_internet_connectivity(self):
-        """Test internet connectivity by checking GitHub availability."""
-        test_urls = [
-            "https://github.com",
-            "https://raw.githubusercontent.com",
-            "https://github.com/madebyollin/taehv"
-        ]
-        
-        for url in test_urls:
-            try:
-                if REQUESTS_AVAILABLE:
-                    response = requests.get(url, timeout=5)
-                    if response.status_code == 200:
-                        return True
-                elif URLLIB_AVAILABLE:
-                    urllib.request.urlopen(url, timeout=5)
-                    return True
-            except Exception:
-                continue
-        
-        return False
-
-    def _test_url_availability(self, url):
-        """Test if a URL is accessible."""
-        try:
-            if REQUESTS_AVAILABLE:
-                response = requests.head(url, timeout=10)
-                return response.status_code == 200
-            elif URLLIB_AVAILABLE:
-                urllib.request.urlopen(url, timeout=10)
-                return True
-        except Exception as e:
-            output_to_terminal_error(f"URL test failed for {url}: {e}")
-            return False
-        return False
-
-    def download_taehv_models(self):
-        """
-        Download TAEHV models automatically from official repositories.
-        
-        Downloads models from the official TAEHV repository for Wan2.1 preview support.
-        Returns True if at least one model was downloaded successfully, False otherwise.
-        """
-        if not (REQUESTS_AVAILABLE or URLLIB_AVAILABLE):
-            output_to_terminal_error("Neither 'requests' nor 'urllib' available for downloading")
-            output_to_terminal_error("Manual installation:")
-            output_to_terminal_error("1. Download models from https://github.com/madebyollin/taehv/")
-            output_to_terminal_error("2. Place them in ComfyUI/models/vae_approx/")
-            return False
-            
-        try:
-            # Get vae_approx directory
-            vae_approx_paths = folder_paths.get_folder_paths("vae_approx")
-            if not vae_approx_paths:
-                output_to_terminal_error("vae_approx folder not found in ComfyUI")
-                return False
-            
-            vae_approx_dir = vae_approx_paths[0]
-            os.makedirs(vae_approx_dir, exist_ok=True)
-            
-            # Official TAEHV models from madebyollin/taehv repository
-            models = [
-                {
-                    "name": "taew2_1.pth",
-                    "url": "https://github.com/madebyollin/taehv/raw/main/taew2_1.pth",
-                    "description": "TAEHV for Wan 2.1"                    
-                },
-                {
-                    "name": "taehv.pth",
-                    "url": "https://github.com/madebyollin/taehv/raw/main/taehv.pth",
-                    "description": "TAEHV for Hunyuan Video"
-                },
-                {
-                    "name": "taecvx.pth", 
-                    "url": "https://github.com/madebyollin/taehv/raw/main/taecvx.pth",
-                    "description": "TAEHV for CogVideoX"
-                },
-                {
-                    "name": "taeos1_3.pth", 
-                    "url": "https://github.com/madebyollin/taehv/raw/main/taeos1_3.pth",
-                    "description": "TAEHV for Open-Sora 1.3"
-                }
-            ]
-            
-            # Also download official TAESD models for reference
-            taesd_models = [
-                {
-                    "name": "taesd_decoder.pth",
-                    "url": "https://github.com/madebyollin/taesd/raw/main/taesd_decoder.pth",
-                    "description": "TAESD decoder for SD1/2"
-                },
-                {
-                    "name": "taesdxl_decoder.pth",
-                    "url": "https://github.com/madebyollin/taesd/raw/main/taesdxl_decoder.pth",
-                    "description": "TAESD decoder for SDXL"
-                },
-                {
-                    "name": "taesd3_decoder.pth",
-                    "url": "https://github.com/madebyollin/taesd/raw/main/taesd3_decoder.pth",
-                    "description": "TAESD decoder for SD3"
-                },
-                {
-                    "name": "taef1_decoder.pth",
-                    "url": "https://github.com/madebyollin/taesd/raw/main/taef1_decoder.pth",
-                    "description": "TAESD decoder for FLUX.1"
-                }
-            ]
-            
-            all_models = models + taesd_models
-            
-            output_to_terminal_successful("Downloading official TAEHV and TAESD models...")
-            output_to_terminal_successful(f"Target directory: {vae_approx_dir}")
-            output_to_terminal_successful(f"Available download methods: requests={REQUESTS_AVAILABLE}, urllib={URLLIB_AVAILABLE}")
-            
-            # Test connectivity
-            test_url = models[0]["url"]
-            output_to_terminal_successful(f"Testing connectivity to: {test_url}")
-            if not self._test_url_availability(test_url):
-                output_to_terminal_error("Cannot connect to GitHub. Check your internet connection.")
-                return False
-            else:
-                output_to_terminal_successful("GitHub connectivity confirmed")
-            
-            success_count = 0
-            
-            for model in all_models:
-                filepath = os.path.join(vae_approx_dir, model["name"])
-                
-                # Skip if already exists
-                if os.path.exists(filepath):
-                    output_to_terminal_successful(f"{model['name']} already exists, skipping")
-                    success_count += 1
-                    continue
-                
-                try:
-                    output_to_terminal_successful(f"Downloading {model['name']}...")
-                    
-                    # Try requests first, fallback to urllib
-                    if REQUESTS_AVAILABLE:
-                        self._download_file_with_requests(model["url"], filepath, model["description"])
-                    else:
-                        self._download_file_with_urllib(model["url"], filepath, model["description"])
-                        
-                    output_to_terminal_successful(f"{model['name']} downloaded successfully")
-                    success_count += 1
-                    
-                except Exception as e:
-                    output_to_terminal_error(f"Failed to download {model['name']}: {e}")
-            
-            output_to_terminal_successful(f"Download complete: {success_count}/{len(all_models)} models")
-            
-            if success_count > 0:
-                output_to_terminal_successful("Official TAEHV and TAESD models are now available!")
-                return True
-            else:
-                output_to_terminal_error("No models were downloaded successfully.")
-                return False
-                
-        except Exception as e:
-            output_to_terminal_error(f"Download error: {e}")
-            output_to_terminal_error("Manual installation:")
-            output_to_terminal_error("1. Download models from https://github.com/madebyollin/taehv/ and https://github.com/madebyollin/taesd/")
-            output_to_terminal_error("2. Place them in ComfyUI/models/vae_approx/")
-            return False
-
-    def _download_file_with_requests(self, url, filepath, description="Downloading"):
-        """Download a file using requests with progress tracking."""
-        response = requests.get(url, stream=True)
-        response.raise_for_status()
-        
-        total_size = int(response.headers.get('content-length', 0))
-        
-        # Use a simple progress indicator since tqdm might not work well in ComfyUI console
-        output_to_terminal_successful(f"{description} - {total_size // (1024*1024)} MB")
-        
-        with open(filepath, 'wb') as file:
-            downloaded = 0
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    file.write(chunk)
-                    downloaded += len(chunk)
-                    # Simple progress indicator every 10MB
-                    if total_size > 0 and downloaded % (10 * 1024 * 1024) == 0:
-                        progress = (downloaded / total_size * 100)
-                        output_to_terminal_successful(f"Progress: {progress:.1f}%")
-
-    def _download_file_with_urllib(self, url, filepath, description="Downloading"):
-        """Download a file using urllib as fallback."""
-        
-        def show_progress(block_num, block_size, total_size):
-            downloaded = block_num * block_size
-            if total_size > 0 and downloaded % (10 * 1024 * 1024) == 0:  # Every 10MB
-                progress = (downloaded / total_size * 100)
-                output_to_terminal_successful(f"Progress: {progress:.1f}%")
-        
-        try:
-            output_to_terminal_successful(f"{description} - Starting download with urllib...")
-            urllib.request.urlretrieve(url, filepath, reporthook=show_progress)
-        except urllib.error.URLError as e:
-            raise Exception(f"urllib download failed: {e}")
-        except Exception as e:
-            raise Exception(f"Download failed: {e}")
-    
     def initialize_tea_cache_and_slg(self, use_tea_cache, use_SLG, SLG_blocks):
         """
         Initialize TeaCache and SkipLayerGuidanceWanVideo components.
