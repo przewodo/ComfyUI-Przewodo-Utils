@@ -1,7 +1,7 @@
 [project]
 name = "przewodo-utils"
 description = "Utilities to make it easy to develop advanced Workflows without having to use a lot of nodes for simple stuff."
-version = "1.0.4"
+version = "1.0.5"
 license = { text = "MIT License" }
 dependencies = [
     "teacache>=1.7.0",
