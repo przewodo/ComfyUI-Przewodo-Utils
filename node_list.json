@@ -1,0 +1,23 @@
+[
+    "przewodo CompareNumbersToCombo",
+    "przewodo WanGetMaxImageResolutionByAspectRatio", 
+    "przewodo ImageScaleFactor",
+    "przewodo ImageSizer",
+    "przewodo SwapAnyCondition",
+    "przewodo SwapAnyComparison",
+    "przewodo SwapImageComparison",
+    "przewodo WanFirstLastFirstFrameToVideo",
+    "przewodo WanImageToVideoAdvancedSampler",
+    "przewodo IsInputDisabled",
+    "przewodo FloatIfElse",
+    "przewodo HasInputvalue",
+    "przewodo BatchImagesFromPath",
+    "przewodo AppendToAnyList",
+    "przewodo WanModelTypeSelector",
+    "przewodo WanVideoEnhanceAVideo",
+    "przewodo DebugLatentShapes",
+    "przewodo WanVideoGenerationModeSelector",
+    "przewodo WanVideoVaeDecode",
+    "przewodo WanVideoLoraStack",
+    "przewodo WanPromptChunkStacker"
+]
