@@ -325,7 +325,7 @@ class WanImageToVideoAdvancedSampler:
 
         # Generate video chunks sequentially with quality preservation
         images_chunck = []
-        original_image = start_image.clone() if start_image is not None else None
+        original_image = start_image if start_image is not None else None
         last_latent = None  # Store latent for continuity
         reference_clip_vision = None  # Store reference CLIP vision features for consistency
         
@@ -399,7 +399,7 @@ class WanImageToVideoAdvancedSampler:
                     output_to_terminal_successful(f"Using weighted average of last {overlap_frames} frames for temporal coherence")
                 else:
                     # Fallback to single frame with noise reduction
-                    start_image = prev_chunk[-1:].clone()
+                    start_image = prev_chunk[-1:]
                     
                 # Apply artifact reduction if enabled
                 if artifact_reduction:
@@ -413,7 +413,7 @@ class WanImageToVideoAdvancedSampler:
                         output_to_terminal_error(f"Artifact reduction failed: {e}")
             elif chunk_index > 0 and images_chunck:
                 # Basic fallback: just use last frame
-                start_image = images_chunck[-1][-1:].clone()
+                start_image = images_chunck[-1][-1:]
                 output_to_terminal_successful("Using simple last frame transition (quality preservation disabled)")
             mm.throw_exception_if_processing_interrupted()
 
@@ -526,9 +526,9 @@ class WanImageToVideoAdvancedSampler:
             if enable_quality_preservation:
                 # Handle both tensor and dict formats from KSampler
                 if isinstance(out_latent, dict) and 'samples' in out_latent:
-                    last_latent = out_latent['samples'].clone() if out_latent['samples'] is not None else None
+                    last_latent = out_latent['samples'] if out_latent['samples'] is not None else None
                 elif hasattr(out_latent, 'clone'):
-                    last_latent = out_latent.clone() if out_latent is not None else None
+                    last_latent = out_latent if out_latent is not None else None
                 else:
                     last_latent = out_latent  # Fallback for other types
             mm.throw_exception_if_processing_interrupted()
