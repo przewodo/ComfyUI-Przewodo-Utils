@@ -118,7 +118,7 @@ class WanImageToVideoAdvancedSampler:
                 # ═════════════════════════════════════════════════════════════════
                 ("enable_quality_preservation", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable advanced quality preservation techniques for multi-chunk video generation. Reduces degradation over time."})),
                 ("temporal_overlap_frames", ("INT", {"default": 3, "min": 1, "max": 8, "step": 1, "advanced": True, "tooltip": "Number of frames to overlap between chunks for temporal coherence. More frames = smoother transitions but slower generation."})),
-                ("latent_blend_strength", ("FLOAT", {"default": 0.2, "min": 0.0, "max": 0.8, "step": 0.05, "advanced": True, "tooltip": "Strength of latent space blending between chunks. Higher values preserve more continuity but may reduce variation."})),
+                ("latent_blend_strength", ("FLOAT", {"default": 0.2, "min": 0.0, "max": 1.0, "step": 0.05, "advanced": True, "tooltip": "Strength of latent space blending between chunks. Higher values preserve more continuity but may reduce variation."})),
                 ("artifact_reduction", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Apply gaussian blur artifact reduction to transition frames. Helps reduce compression artifacts between chunks."})),
                 
                 # ═════════════════════════════════════════════════════════════════
@@ -565,14 +565,14 @@ class WanImageToVideoAdvancedSampler:
                         else:
                             merged_chunks.append(current_chunk)
 
-                    # Concatenate all processed chunks
-                    output_image = torch.cat(merged_chunks, dim=0)
-                    output_to_terminal_successful(f"Final video shape after smart concatenation: {output_image.shape}")
-                    
-                    # Clean up intermediate chunks to save memory
-                    del merged_chunks
-                    gc.collect()
-                    torch.cuda.empty_cache()
+                # Concatenate all processed chunks after the loop
+                output_image = torch.cat(merged_chunks, dim=0)
+                output_to_terminal_successful(f"Final video shape after smart concatenation: {output_image.shape}")
+                
+                # Clean up intermediate chunks to save memory
+                del merged_chunks
+                gc.collect()
+                torch.cuda.empty_cache()
                 
                 # Verify temporal consistency
                 total_expected_frames = sum(chunk.shape[0] for chunk in images_chunck) - (len(images_chunck) - 1)
@@ -1358,17 +1358,17 @@ class WanImageToVideoAdvancedSampler:
             # Apply CausVid LoRA for High CFG model
             if (causvid_lora != NONE and high_cfg_causvid_strength > 0.0):
                 output_to_terminal_successful(f"Applying CausVid LoRA for High CFG with strength: {high_cfg_causvid_strength}")
-                model_high_cfg, updated_clip, = lora_loader.load_lora(model_high_cfg, updated_clip, causvid_lora, causvid_lora, high_cfg_causvid_strength)
+                model_high_cfg, updated_clip, = lora_loader.load_lora(model_high_cfg, updated_clip, causvid_lora, high_cfg_causvid_strength, high_cfg_causvid_strength)
             
             # Apply CausVid LoRA for Low CFG model  
             if (causvid_lora != NONE and low_cfg_causvid_strength > 0.0):
                 output_to_terminal_successful(f"Applying CausVid LoRA for Low CFG with strength: {low_cfg_causvid_strength}")
-                model_low_cfg, updated_clip, = lora_loader.load_lora(model_low_cfg, updated_clip, causvid_lora, causvid_lora, low_cfg_causvid_strength)
+                model_low_cfg, updated_clip, = lora_loader.load_lora(model_low_cfg, updated_clip, causvid_lora, low_cfg_causvid_strength, low_cfg_causvid_strength)
         else:
             # Single sampler - only apply to high CFG model
             if (causvid_lora != NONE and high_cfg_causvid_strength > 0.0):
                 output_to_terminal_successful(f"Applying CausVid LoRA with strength: {high_cfg_causvid_strength}")
-                model_high_cfg, updated_clip, = lora_loader.load_lora(model_high_cfg, updated_clip, causvid_lora, causvid_lora, high_cfg_causvid_strength)
+                model_high_cfg, updated_clip, = lora_loader.load_lora(model_high_cfg, updated_clip, causvid_lora, high_cfg_causvid_strength, high_cfg_causvid_strength)
         
         return model_high_cfg, model_low_cfg, updated_clip
     
