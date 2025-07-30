@@ -397,8 +397,7 @@ class WanImageToVideoAdvancedSampler:
 
             # Quality preservation: Use multiple frames for smoother transition
             if enable_quality_preservation and chunk_index > 0 and images_chunck:
-                # Extract last few frames for better temporal coherence
-                prev_chunk = images_chunck[-1]
+                prev_chunk = images_chunck
                 overlap_frames = min(temporal_overlap_frames, prev_chunk.shape[0])
                 
                 # Use weighted average of last frames to reduce single-frame artifacts
