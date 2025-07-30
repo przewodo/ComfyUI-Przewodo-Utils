@@ -52,6 +52,23 @@ class ImageSizer:
         # Calculate width and height
         width = math.sqrt(pixels * aspect_ratio_decimal)
         height = pixels / width
+        max_side = max(width, height)
+
+        # Step 1: Scale so that the largest side is equal to max_side
+        if width >= height:
+            scale = max_side / width
+        else:
+            scale = max_side / height
+
+        new_width = int(round(width * scale))
+        new_height = int(round(height * scale))
+        total_pixels = new_width * new_height
+
+        # Step 2: If pixel count exceeds limit, scale down further
+        if total_pixels > pixels:
+            reduction_scale = math.sqrt(pixels / total_pixels)
+            new_width = int(round(new_width * reduction_scale))
+            new_height = int(round(new_height * reduction_scale))
         
         # Return the width and height as a tuple of integers
         return (int(round(width)), int(round(height)),)

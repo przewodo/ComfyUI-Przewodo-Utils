@@ -293,6 +293,7 @@ class WanImageToVideoAdvancedSampler:
         if (image_generation_mode == TEXT_TO_VIDEO):
             imageSizer = ImageSizer()
             image_width, image_height, = imageSizer.run(wan_model_size, 9, 16)
+            wan_max_resolution
 
         mm.throw_exception_if_processing_interrupted()
 
@@ -1248,21 +1249,14 @@ class WanImageToVideoAdvancedSampler:
             )
 
         # Get original end_image dimensions if available
-        if end_image is not None and (image_generation_mode == TEXT_TO_VIDEO or image_generation_mode == END_TO_START_IMAGE or image_generation_mode == START_TO_END_TO_START_IMAGE):
+        if end_image is not None and (image_generation_mode == END_TO_START_IMAGE):
             # ComfyUI images are tensors with shape [batch, height, width, channels]
             output_to_terminal_successful(f"Original end_image dimensions: {end_image.shape[2]}x{end_image.shape[1]}")
 
-            # Process End Image
-            if (image_generation_mode == TEXT_TO_VIDEO or image_generation_mode == END_TO_START_IMAGE):
-                end_image, image_width, image_height, clip_vision_end_image = self.process_image(
-                    end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution,
-                    CLIPVisionEncoder, large_image_side, wan_model_size, end_image.shape[2], end_image.shape[1], "End Image"
-                )
-            else:
-                end_image, _, _, clip_vision_end_image = self.process_image(
-                    end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution,
-                    CLIPVisionEncoder, large_image_side, wan_model_size, image_width, image_height, "End Image"
-                )
+            end_image, image_width, image_height, clip_vision_end_image = self.process_image(
+                end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution,
+                CLIPVisionEncoder, large_image_side, wan_model_size, end_image.shape[2], end_image.shape[1], "End Image"
+            )
         
         return start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image
 
