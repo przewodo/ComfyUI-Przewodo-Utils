@@ -397,7 +397,7 @@ class WanImageToVideoAdvancedSampler:
 
             # Quality preservation: Use multiple frames for smoother transition
             if enable_quality_preservation and chunk_index > 0 and images_chunck:
-                prev_chunk = images_chunck
+                prev_chunk = images_chunck[-1]  # Get the last chunk from the list
                 overlap_frames = min(temporal_overlap_frames, prev_chunk.shape[0])
                 
                 # Use weighted average of last frames to reduce single-frame artifacts
@@ -589,18 +589,17 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_successful("Vae Decode started...")
             output_image, = wan_video_vae_decode.decode(out_latent, vae, 0, image_generation_mode)
 
-            # Enhanced color matching: Match to original OR previous chunk
+            # Enhanced color matching: ALWAYS use start_image (original_image) as reference
             if chunk_index == 0:
-                # First chunk: match to original image
+                # First chunk: match to start_image (original_image)
                 output_image = self.apply_color_match(original_image, output_image, apply_color_match, colorMatch)
             else:
-                # Subsequent chunks: maintain color consistency with previous chunk
+                # Subsequent chunks: ALWAYS use start_image (original_image) as reference for consistency
                 if apply_color_match and images_chunck and enable_quality_preservation:
-                    prev_reference = images_chunck[-1][-1:]  # Last frame of previous chunk
-                    output_image = self.apply_color_match(prev_reference, output_image, True, colorMatch)
-                    output_to_terminal_successful("Applied color matching to previous chunk for consistency")
+                    output_image = self.apply_color_match(original_image, output_image, True, colorMatch)
+                    output_to_terminal_successful("Applied color matching using start_image as reference for consistency")
                 elif apply_color_match and original_image is not None:
-                    # Fallback to original image color matching
+                    # Fallback: use start_image (original_image) as reference
                     output_image = self.apply_color_match(original_image, output_image, apply_color_match, colorMatch)
             mm.throw_exception_if_processing_interrupted()
             
@@ -619,18 +618,18 @@ class WanImageToVideoAdvancedSampler:
                 # Use memory-efficient approach by building list first, then concatenating once
                 chunks_to_merge = [images_chunck[0]]  # Start with first chunk
                 
-                for i in range(1, len(images_chunck)):
+                for i in range(1, len(images_chunck)):  # Start from chunk 1, since chunk 0 is already added
                     mm.throw_exception_if_processing_interrupted()
                     current_chunk = images_chunck[i]
                     
                     # Skip the first frame of subsequent chunks to avoid overlap
                     # (since we used the last frame of previous chunk as start)
                     if current_chunk.shape[0] > 1:
-                        chunks_to_merge.append(current_chunk)  # Skip first frame
-                        output_to_terminal_successful(f"Prepared chunk {i + 1} for merging with overlap removal")
+                        chunks_to_merge.append(current_chunk[1:])  # Skip first frame by slicing [1:]
+                        output_to_terminal_successful(f"Prepared chunk {i + 1} for merging with overlap removal (skipped first frame)")
                     else:
                         # If chunk has only 1 frame, keep it but blend with previous
-                        if i > 0 and chunks_to_merge:
+                        if chunks_to_merge:
                             # Blend the single frame with the last frame for smoother transition
                             prev_chunk = chunks_to_merge[-1]
                             prev_last = prev_chunk[-1:]
@@ -722,10 +721,12 @@ class WanImageToVideoAdvancedSampler:
             mm.soft_empty_cache()
             output_to_terminal_successful(f"Starting interpolation with engine: {frames_engine}, multiplier: {frames_multiplier}, clear cache after {frames_clear_cache_after_n_frames} frames, use CUDA graph: {frames_use_cuda_graph}")
             interpolationEngine = RifeTensorrt()
+            output_to_terminal_error(f"Total Frames: {output_image.shape[0]}")
             output_image, = interpolationEngine.vfi(output_image, frames_engine, frames_clear_cache_after_n_frames, frames_multiplier, frames_use_cuda_graph, False)
             self.default_fps = self.default_fps * float(frames_multiplier)
-
-        return (output_image, self.default_fps,)
+            return (output_image[:-frames_multiplier+1], self.default_fps,)
+        else:
+            return (output_image[:-1], self.default_fps,)
 
     def get_current_prompt(self, prompt_stack, chunk_index, default_positive, default_negative):
         """
@@ -1233,12 +1234,12 @@ class WanImageToVideoAdvancedSampler:
             )
 
         # Get original end_image dimensions if available
-        if end_image is not None and (image_generation_mode == END_IMAGE or image_generation_mode == END_TO_START_IMAGE or image_generation_mode == START_TO_END_TO_START_IMAGE):
+        if end_image is not None and (image_generation_mode == TEXT_TO_VIDEO or image_generation_mode == END_TO_START_IMAGE or image_generation_mode == START_TO_END_TO_START_IMAGE):
             # ComfyUI images are tensors with shape [batch, height, width, channels]
             output_to_terminal_successful(f"Original end_image dimensions: {end_image.shape[2]}x{end_image.shape[1]}")
 
             # Process End Image
-            if (image_generation_mode == END_IMAGE or image_generation_mode == END_TO_START_IMAGE):
+            if (image_generation_mode == TEXT_TO_VIDEO or image_generation_mode == END_TO_START_IMAGE):
                 end_image, image_width, image_height, clip_vision_end_image = self.process_image(
                     end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution,
                     CLIPVisionEncoder, large_image_side, wan_model_size, end_image.shape[2], end_image.shape[1], "End Image"

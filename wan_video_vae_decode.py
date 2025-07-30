@@ -35,27 +35,21 @@ class WanVideoVaeDecode:
             # Remove first start_shift frames and last end_shift frames from decoded images
             if (start_shift + end_shift) > 0:
                 output_to_terminal_successful(f"Removing first {start_shift} and last {end_shift + 1} frames")
-                out_images = out_images[start_shift:-end_shift - 1]
-            else:
-                out_images = out_images[:-1]
+                out_images = out_images[start_shift:-end_shift]
 
         elif (generation_mode == START_END_IMAGE):
             output_to_terminal_successful("Decoding start -> end frame sequence")
             # Remove first start_shift frames and last end_shift frames from decoded images
             if (start_shift + end_shift) > 0:
                 output_to_terminal_successful(f"Removing first {start_shift} and last {end_shift + 1} frames")
-                out_images = out_images[start_shift:-end_shift - 1]
-            else:
-                out_images = out_images[:-1]
+                out_images = out_images[start_shift:-end_shift]
 
         elif (generation_mode == END_TO_START_IMAGE):
             output_to_terminal_successful("Decoding end -> start frame sequence")
             # Remove first start_shift frames and last end_shift frames from decoded images
             if (start_shift + end_shift) > 0:
                 output_to_terminal_successful(f"Removing first {start_shift} and last {end_shift + 1} frames")
-                out_images = out_images[start_shift:-end_shift - 1]
-            else:
-                out_images = out_images[:-1]
+                out_images = out_images[start_shift:-end_shift]
 
         elif (generation_mode == START_IMAGE):
             output_to_terminal_successful("Decoding start frame sequence")
@@ -63,16 +57,12 @@ class WanVideoVaeDecode:
             if (total_shift) > 0:
                 output_to_terminal_successful(f"Removing first {total_shift + 1} frames")
                 out_images = out_images[total_shift:-1]
-            else:
-                out_images = out_images[:-1]
 
-        elif (generation_mode == END_IMAGE):
+        elif (generation_mode == TEXT_TO_VIDEO):
             output_to_terminal_successful("Decoding end frame sequence")
             if (total_shift) > 0:
                 output_to_terminal_successful(f"Removing last {total_shift + 1} frames")
-                out_images = out_images[:-total_shift - 1]
-            else:
-                out_images = out_images[:-1]
+                out_images = out_images[:-total_shift]
 
         return (out_images,)
     
