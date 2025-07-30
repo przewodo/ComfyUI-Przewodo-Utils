@@ -292,7 +292,7 @@ class WanImageToVideoAdvancedSampler:
 
         if (image_generation_mode == TEXT_TO_VIDEO):
             imageSizer = ImageSizer()
-            image_width, image_height, =imageSizer.run(image_generation_mode, 9, 16)
+            image_width, image_height, =imageSizer.run(large_image_side, 9, 16)
 
         mm.throw_exception_if_processing_interrupted()
 
