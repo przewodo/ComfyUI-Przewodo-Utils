@@ -49,6 +49,16 @@ class WanFirstLastFirstFrameToVideo:
 
     def encode(self, positive, negative, vae, width, height, length, start_image=None, end_image=None, clip_vision_start_image=None, clip_vision_end_image=None, first_end_frame_shift=3, first_end_frame_denoise=0, clip_vision_strength=1.0, fill_denoise=0.5, generation_mode=START_IMAGE):
         
+        if (generation_mode == TEXT_TO_VIDEO):
+            latent = torch.zeros([batch_size, 16, ((total_length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
+            out_latent = {}
+            out_latent["samples"] = latent
+            return (positive, negative, out_latent)
+        
+        latent = torch.zeros([batch_size, 16, ((total_length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
+        image = torch.ones((total_length, height, width, 3)) * fill_denoise
+        mask = torch.ones((1, 1, latent.shape[2] * 4, latent.shape[-2], latent.shape[-1]))
+
         batch_size = 1
         total_shift = (first_end_frame_shift * 4)
         total_length = length + total_shift
@@ -60,10 +70,6 @@ class WanFirstLastFirstFrameToVideo:
 
         if end_image is not None:
             end_image = comfy.utils.common_upscale(end_image[-total_length:].movedim(-1, 1), width, height, "lanczos", "center").movedim(1, -1)
-
-        latent = torch.zeros([batch_size, 16, ((total_length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
-        image = torch.ones((total_length, height, width, 3)) * fill_denoise
-        mask = torch.ones((1, 1, latent.shape[2] * 4, latent.shape[-2], latent.shape[-1]))
 
         if start_image is not None or end_image is not None:
             start_shift = (total_shift // 2) + 1 if first_end_frame_shift != 0 else 0
@@ -117,7 +123,8 @@ class WanFirstLastFirstFrameToVideo:
 
             elif (generation_mode == TEXT_TO_VIDEO):
                 output_to_terminal_successful("Generating text to video sequence")
-                mask[:, :, -end_image.shape[0]:] = 0
+                image[:start_image.shape[0]] = start_image
+                mask[:, :, :start_image.shape[0]] = first_end_frame_denoise
 
             # Force the first frame to not be denoised
             if first_end_frame_denoise > 0:
@@ -197,12 +204,12 @@ class WanFirstLastFirstFrameToVideo:
 
             elif (generation_mode == TEXT_TO_VIDEO and clip_vision_start_image is not None):
                 output_to_terminal_successful("Running clipvision for text to video sequence")
-                end_hidden = clip_vision_start_image.penultimate_hidden_states
+                start_hidden = clip_vision_start_image.penultimate_hidden_states
 
-                end_hidden = end_hidden * clip_vision_strength
+                start_hidden = start_hidden * clip_vision_strength
 
                 clip_vision_output = comfy.clip_vision.Output()
-                clip_vision_output.penultimate_hidden_states = end_hidden
+                clip_vision_output.penultimate_hidden_states = start_hidden
 
             if clip_vision_output is not None:
                 positive = node_helpers.conditioning_set_values(positive, {"clip_vision_output": clip_vision_output})

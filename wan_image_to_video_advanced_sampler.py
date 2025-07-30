@@ -477,9 +477,10 @@ class WanImageToVideoAdvancedSampler:
             temp_negative_clip, = text_encode.encode(generation_clip, enhanced_negative)
             mm.throw_exception_if_processing_interrupted()
 
-            output_to_terminal_successful("Wan Image to Video started...")
-            temp_positive_clip, temp_negative_clip, in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, fill_noise_latent, image_generation_mode)
-            mm.throw_exception_if_processing_interrupted()
+            if (image_generation_mode != TEXT_TO_VIDEO):
+                output_to_terminal_successful("Wan Image to Video started...")
+                temp_positive_clip, temp_negative_clip, in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, fill_noise_latent, image_generation_mode)
+                mm.throw_exception_if_processing_interrupted()
 
             # Enhanced latent space continuity with feature consistency
             if enable_quality_preservation and chunk_index > 0 and last_latent is not None and latent_blend_strength > 0:

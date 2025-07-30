@@ -59,7 +59,7 @@ class WanVideoVaeDecode:
                 out_images = out_images[total_shift:-1]
 
         elif (generation_mode == TEXT_TO_VIDEO):
-            output_to_terminal_successful("Decoding end frame sequence")
+            output_to_terminal_successful("Decoding text to video sequence")
             if (total_shift) > 0:
                 output_to_terminal_successful(f"Removing last {total_shift + 1} frames")
                 out_images = out_images[:-total_shift]
