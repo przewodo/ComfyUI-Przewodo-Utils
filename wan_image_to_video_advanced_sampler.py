@@ -25,7 +25,6 @@ except ImportError:
 # Import external custom nodes using the centralized import function
 imported_nodes = {}
 teacache_imports = import_nodes(["teacache"], ["TeaCache"])
-default_fps = 16.0
 
 # Import nodes from different custom node packages
 kjnodes_imports = import_nodes(["comfyui-kjnodes"], ["SkipLayerGuidanceWanVideo", "PathchSageAttentionKJ", "ImageResizeKJv2", "ModelPatchTorchSettings", "ColorMatch"])
@@ -196,6 +195,7 @@ class WanImageToVideoAdvancedSampler:
     CATEGORY = "PrzewodoUtils/Wan"
 
     def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, enable_quality_preservation=True, temporal_overlap_frames=3, latent_blend_strength=0.2, artifact_reduction=True, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, feature_consistency_strength=0.8, reference_frame_interval=3, detail_preservation_mode="medium", enable_aggressive_memory_optimization=True, fill_noise_latent=0.5, cuda_memory_fraction=100.0, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True):
+        self.default_fps = 16.0
         # Aggressive memory optimization setup
         if enable_aggressive_memory_optimization:
             output_to_terminal_successful("Enabling aggressive memory optimization...")
@@ -627,7 +627,7 @@ class WanImageToVideoAdvancedSampler:
                     # Skip the first frame of subsequent chunks to avoid overlap
                     # (since we used the last frame of previous chunk as start)
                     if current_chunk.shape[0] > 1:
-                        chunks_to_merge.append(current_chunk[1:])  # Skip first frame
+                        chunks_to_merge.append(current_chunk)  # Skip first frame
                         output_to_terminal_successful(f"Prepared chunk {i + 1} for merging with overlap removal")
                     else:
                         # If chunk has only 1 frame, keep it but blend with previous
@@ -718,12 +718,15 @@ class WanImageToVideoAdvancedSampler:
         # frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph
         mm.throw_exception_if_processing_interrupted()
         if (frames_interpolation and frames_engine != NONE):
+            gc.collect()
+            torch.cuda.empty_cache()
+            mm.soft_empty_cache()
             output_to_terminal_successful(f"Starting interpolation with engine: {frames_engine}, multiplier: {frames_multiplier}, clear cache after {frames_clear_cache_after_n_frames} frames, use CUDA graph: {frames_use_cuda_graph}")
             interpolationEngine = RifeTensorrt()
             output_image, = interpolationEngine.vfi(output_image, frames_engine, frames_clear_cache_after_n_frames, frames_multiplier, frames_use_cuda_graph, False)
-            default_fps = default_fps * float(frames_multiplier)
+            self.default_fps = self.default_fps * float(frames_multiplier)
 
-        return (output_image, default_fps,)
+        return (output_image, self.default_fps,)
 
     def get_current_prompt(self, prompt_stack, chunk_index, default_positive, default_negative):
         """
