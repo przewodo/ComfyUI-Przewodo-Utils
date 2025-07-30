@@ -13,6 +13,7 @@ from .wan_first_last_first_frame_to_video import WanFirstLastFirstFrameToVideo
 from .wan_video_vae_decode import WanVideoVaeDecode
 from .wan_get_max_image_resolution_by_aspect_ratio import WanGetMaxImageResolutionByAspectRatio
 from .wan_video_enhance_a_video import WanVideoEnhanceAVideo
+from .image_sizer_node import ImageSizer
 
 # Optional imports with try/catch blocks
 
@@ -275,8 +276,8 @@ class WanImageToVideoAdvancedSampler:
         CLIPVisionLoader = nodes.CLIPVisionLoader()
         CLIPVisionEncoder = nodes.CLIPVisionEncode()
         resizer = ImageResizeKJv2()
-        image_width = 512
-        image_height = 512
+        image_width = large_image_side
+        image_height = large_image_side
         in_latent = None
         out_latent = None
         total_frames = (total_video_seconds * 16) + 1
@@ -284,6 +285,14 @@ class WanImageToVideoAdvancedSampler:
         wanVideoEnhanceAVideo = WanVideoEnhanceAVideo()
         cfgZeroStar = CFGZeroStar()
         colorMatch = ColorMatch()
+
+        if (image_generation_mode == TEXT_TO_VIDEO):
+            start_image = None
+            end_image = None
+
+        if (image_generation_mode == TEXT_TO_VIDEO):
+            imageSizer = ImageSizer()
+            image_width, image_height, =imageSizer.run(image_generation_mode, 9, 16)
 
         mm.throw_exception_if_processing_interrupted()
 
@@ -329,17 +338,23 @@ class WanImageToVideoAdvancedSampler:
         last_latent = None  # Store latent for continuity
         reference_clip_vision = None  # Store reference CLIP vision features for consistency
         
-        # Prepare reference features for consistency
-        if feature_consistency_strength > 0 and original_image is not None and clip_vision is not None:
-            try:
-                reference_clip_vision, = CLIPVisionEncoder.encode(clip_vision, original_image, "center")
-                output_to_terminal_successful(f"Reference CLIP vision features extracted for consistency (strength: {feature_consistency_strength})")
-            except Exception as e:
-                output_to_terminal_error(f"Failed to extract reference features: {e}")
-                reference_clip_vision = None
-        mm.throw_exception_if_processing_interrupted()
-        
         for chunk_index in range(total_video_chunks):
+            if (image_generation_mode == TEXT_TO_VIDEO and chunk_index == 1):
+                start_image = images_chunck[-1][0]  # Use last frame of previous chunk as start image
+                original_image = start_image
+
+            if (chunk_index == 1 and image_generation_mode == TEXT_TO_VIDEO):
+                image_generation_mode = START_IMAGE  # Switch to START_IMAGE mode after first chunk
+                # Prepare reference features for consistency
+                if feature_consistency_strength > 0 and original_image is not None and clip_vision is not None:
+                    try:
+                        reference_clip_vision, = CLIPVisionEncoder.encode(clip_vision, original_image, "center")
+                        output_to_terminal_successful(f"Reference CLIP vision features extracted for consistency (strength: {feature_consistency_strength})")
+                    except Exception as e:
+                        output_to_terminal_error(f"Failed to extract reference features: {e}")
+                        reference_clip_vision = None
+                mm.throw_exception_if_processing_interrupted()
+
             output_to_terminal_successful(f"Generating video chunk {chunk_index + 1}/{total_video_chunks}...")
             mm.throw_exception_if_processing_interrupted()
             
@@ -590,7 +605,7 @@ class WanImageToVideoAdvancedSampler:
             output_image, = wan_video_vae_decode.decode(out_latent, vae, 0, image_generation_mode)
 
             # Enhanced color matching: ALWAYS use start_image (original_image) as reference
-            if chunk_index == 0:
+            if chunk_index == 0 and original_image is not None:
                 # First chunk: match to start_image (original_image)
                 output_image = self.apply_color_match(original_image, output_image, apply_color_match, colorMatch)
             else:
@@ -721,7 +736,6 @@ class WanImageToVideoAdvancedSampler:
             mm.soft_empty_cache()
             output_to_terminal_successful(f"Starting interpolation with engine: {frames_engine}, multiplier: {frames_multiplier}, clear cache after {frames_clear_cache_after_n_frames} frames, use CUDA graph: {frames_use_cuda_graph}")
             interpolationEngine = RifeTensorrt()
-            output_to_terminal_error(f"Total Frames: {output_image.shape[0]}")
             output_image, = interpolationEngine.vfi(output_image, frames_engine, frames_clear_cache_after_n_frames, frames_multiplier, frames_use_cuda_graph, False)
             self.default_fps = self.default_fps * float(frames_multiplier)
             return (output_image[:-frames_multiplier+1], self.default_fps,)

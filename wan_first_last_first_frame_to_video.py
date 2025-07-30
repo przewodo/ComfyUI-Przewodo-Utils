@@ -115,11 +115,9 @@ class WanFirstLastFirstFrameToVideo:
                 image[:start_image.shape[0]] = start_image
                 mask[:, :, :start_image.shape[0]] = first_end_frame_denoise
 
-            elif (generation_mode == END_IMAGE and end_image is not None):
-                output_to_terminal_successful("Generating end frame sequence")
-                # Fix last frame (cycle closure)
-                image[-end_image.shape[0]:] = end_image
-                mask[:, :, -end_image.shape[0]:] = first_end_frame_denoise
+            elif (generation_mode == TEXT_TO_VIDEO):
+                output_to_terminal_successful("Generating text to video sequence")
+                mask[:, :, -end_image.shape[0]:] = 0
 
             # Force the first frame to not be denoised
             if first_end_frame_denoise > 0:
@@ -197,9 +195,9 @@ class WanFirstLastFirstFrameToVideo:
                 clip_vision_output = comfy.clip_vision.Output()
                 clip_vision_output.penultimate_hidden_states = start_hidden
 
-            elif (generation_mode == END_IMAGE and clip_vision_end_image is not None):
-                output_to_terminal_successful("Running clipvision for end sequence")
-                end_hidden = clip_vision_end_image.penultimate_hidden_states
+            elif (generation_mode == TEXT_TO_VIDEO and clip_vision_start_image is not None):
+                output_to_terminal_successful("Running clipvision for text to video sequence")
+                end_hidden = clip_vision_start_image.penultimate_hidden_states
 
                 end_hidden = end_hidden * clip_vision_strength
 

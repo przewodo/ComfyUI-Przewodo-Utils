@@ -1,4 +1,5 @@
 import math
+from .core import *
 
 class ImageSizer:
     def __init__(self):
@@ -8,7 +9,7 @@ class ImageSizer:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model_type": (["SD","SDXL","Video 480p","Video 720p", "Flux Kontext", "Flux 1D"], {"tooltip": "Model type that determines the base resolution and total pixel count. Each model has optimized dimensions: SD (512x512), SDXL (1024x1024), Video 480p (832x480), Video 720p (1280x720), Flux Kontext (1024x1024), Flux 1D (1536x1536)."}),
+                "model_type": (["SD","SDXL", WAN_480P, WAN_720P, "Flux Kontext", "Flux 1D"], {"tooltip": "Model type that determines the base resolution and total pixel count. Each model has optimized dimensions: SD (512x512), SDXL (1024x1024), Video 480p (832x480), Video 720p (1280x720), Flux Kontext (1024x1024), Flux 1D (1536x1536)."}),
                 "aspect_ratio_width": ("INT",{
                     "default": 1,
                     "step":1,
@@ -53,4 +54,4 @@ class ImageSizer:
         height = pixels / width
         
         # Return the width and height as a tuple of integers
-        return (int(round(width)), int(round(height)))
+        return (int(round(width)), int(round(height)),)
