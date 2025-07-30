@@ -447,14 +447,15 @@ class WanImageToVideoAdvancedSampler:
                 output_to_terminal_successful("Using simple last frame transition (quality preservation disabled)")
             mm.throw_exception_if_processing_interrupted()
 
-            # Process start and end images with enhanced feature consistency
-            start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image = self.process_start_and_end_images_with_consistency(
-                start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled,
-                clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
-                image_generation_mode, reference_clip_vision, feature_consistency_strength, 
-                chunk_index, reference_frame_interval, detail_preservation_mode
-            )
-            mm.throw_exception_if_processing_interrupted()
+            if (image_generation_mode != TEXT_TO_VIDEO):
+                # Process start and end images with enhanced feature consistency
+                start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image = self.process_start_and_end_images_with_consistency(
+                    start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled,
+                    clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
+                    image_generation_mode, reference_clip_vision, feature_consistency_strength, 
+                    chunk_index, reference_frame_interval, detail_preservation_mode
+                )
+                mm.throw_exception_if_processing_interrupted()
 
             # Apply CausVid LoRA processing for current chunk
             model_high_cfg, model_low_cfg, generation_clip = self.apply_causvid_lora_processing(
