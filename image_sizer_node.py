@@ -37,8 +37,8 @@ class ImageSizer:
         total_pixels = {
             'SD': 512 * 512,
             'SDXL': 1024 * 1024,
-            'Video 480p': 832 * 480,
-            'Video 720p': 1280 * 720,
+            WAN_480P: 832 * 480,
+            WAN_720P: 1280 * 720,
             'Flux Kontext': 1024 * 1024,
             'Flux 1D': 1536 * 1536
         }
