@@ -204,7 +204,7 @@ class WanImageToVideoAdvancedSampler:
             # Force aggressive garbage collection
             gc.collect()
             torch.cuda.empty_cache()
-            mm.soft_empty_cache()
+            #mm.soft_empty_cache()
             
             # Set memory fraction if available (handle both old and new PyTorch APIs)
             memory_fraction = cuda_memory_fraction / 100.0  # Convert percentage to fraction
@@ -229,19 +229,21 @@ class WanImageToVideoAdvancedSampler:
                 torch.backends.cuda.enable_flash_sdp(True)
                 torch.backends.cuda.enable_mem_efficient_sdp(True)
                 output_to_terminal_successful("Enabled efficient attention backends")
+        mm.throw_exception_if_processing_interrupted()
         
         gc.collect()
         torch.cuda.empty_cache()
-        mm.soft_empty_cache()
-        mm.throw_exception_if_processing_interrupted()
+        #mm.soft_empty_cache()
         model = self.load_model(GGUF, Diffusor, Use_Model_Type, Diffusor_weight_dtype)
         output_to_terminal_successful("Loading VAE...")
         vae, = nodes.VAELoader().load_vae(vae)
+        mm.throw_exception_if_processing_interrupted()
 
         output_to_terminal_successful("Loading CLIP...")
         clip, = nodes.CLIPLoader().load_clip(clip, clip_type, clip_device)
         clip_set_last_layer = nodes.CLIPSetLastLayer()
         clip, = clip_set_last_layer.set_last_layer(clip, -1)  # Use all layers but truncate tokens
+        mm.throw_exception_if_processing_interrupted()
 
         tea_cache = None
         sage_attention = None
@@ -377,7 +379,7 @@ class WanImageToVideoAdvancedSampler:
                     for _ in range(3):
                         gc.collect()
                         torch.cuda.empty_cache()
-                        mm.soft_empty_cache()
+                        #mm.soft_empty_cache()
                     
                     # Report memory status
                     if torch.cuda.is_available():
@@ -388,7 +390,7 @@ class WanImageToVideoAdvancedSampler:
             # Initialize variables with explicit GPU memory management
             gc.collect()
             torch.cuda.empty_cache()
-            mm.soft_empty_cache()
+            #mm.soft_empty_cache()
             
             # Use context manager pattern for better memory cleanup
             output_image = None
@@ -545,7 +547,7 @@ class WanImageToVideoAdvancedSampler:
             mm.throw_exception_if_processing_interrupted()
             gc.collect()
             torch.cuda.empty_cache()
-            mm.soft_empty_cache()
+            #mm.soft_empty_cache()
             if (use_dual_samplers):
                 # Apply dual sampler processing
                 out_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, generation_clip, noise_seed, total_steps, high_cfg, low_cfg, temp_positive_clip, temp_negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
@@ -577,7 +579,7 @@ class WanImageToVideoAdvancedSampler:
                 for _ in range(2):
                     gc.collect()
                     torch.cuda.empty_cache()
-                    mm.soft_empty_cache()
+                    #mm.soft_empty_cache()
 
             # Store latent for next chunk continuity with memory optimization
             if enable_quality_preservation:
@@ -713,7 +715,7 @@ class WanImageToVideoAdvancedSampler:
             for cleanup_round in range(3):
                 gc.collect()
                 torch.cuda.empty_cache()
-                mm.soft_empty_cache()
+                #mm.soft_empty_cache()
                 if cleanup_round < 2:  # Brief pause between rounds
                     import time
                     time.sleep(0.1)
@@ -735,7 +737,7 @@ class WanImageToVideoAdvancedSampler:
         if (frames_interpolation and frames_engine != NONE):
             gc.collect()
             torch.cuda.empty_cache()
-            mm.soft_empty_cache()
+            #mm.soft_empty_cache()
             output_to_terminal_successful(f"Starting interpolation with engine: {frames_engine}, multiplier: {frames_multiplier}, clear cache after {frames_clear_cache_after_n_frames} frames, use CUDA graph: {frames_use_cuda_graph}")
             interpolationEngine = RifeTensorrt()
             output_image, = interpolationEngine.vfi(output_image, frames_engine, frames_clear_cache_after_n_frames, frames_multiplier, frames_use_cuda_graph, False)
@@ -1427,13 +1429,13 @@ class WanImageToVideoAdvancedSampler:
 
         gc.collect()
         torch.cuda.empty_cache()
-        mm.soft_empty_cache()
+        #mm.soft_empty_cache()
         output_to_terminal_successful("High CFG KSampler started...")
         out_latent, = k_sampler.sample(model_high_cfg, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, stop_steps, "enabled", high_denoise)
 
         gc.collect()
         torch.cuda.empty_cache()
-        mm.soft_empty_cache()
+        #mm.soft_empty_cache()
         output_to_terminal_successful("Low CFG KSampler started...")
         out_latent, = k_sampler.sample(model_low_cfg, "disable", noise_seed, total_steps, low_cfg, "lcm", "simple", temp_positive_clip, temp_negative_clip, out_latent, stop_steps, 1000, "disable", low_denoise)
         
