@@ -1489,17 +1489,17 @@ class WanImageToVideoAdvancedSampler:
             # Apply CausVid LoRA for High CFG model
             if (causvid_lora != NONE and high_cfg_causvid_strength > 0.0):
                 output_to_terminal_successful(f"Applying CausVid LoRA for High CFG with strength: {high_cfg_causvid_strength}")
-                model_high_cfg, updated_clip, = lora_loader.load_lora(model_high_cfg, updated_clip, causvid_lora, high_cfg_causvid_strength, high_cfg_causvid_strength)
+                model_high_cfg, updated_clip, = lora_loader.load_lora(model_high_cfg, updated_clip, causvid_lora, high_cfg_causvid_strength, 1.0)
             
             # Apply CausVid LoRA for Low CFG model  
             if (causvid_lora != NONE and low_cfg_causvid_strength > 0.0):
                 output_to_terminal_successful(f"Applying CausVid LoRA for Low CFG with strength: {low_cfg_causvid_strength}")
-                model_low_cfg, updated_clip, = lora_loader.load_lora(model_low_cfg, updated_clip, causvid_lora, low_cfg_causvid_strength, low_cfg_causvid_strength)
+                model_low_cfg, updated_clip, = lora_loader.load_lora(model_low_cfg, updated_clip, causvid_lora, low_cfg_causvid_strength, 1.0)
         else:
             # Single sampler - only apply to high CFG model
             if (causvid_lora != NONE and high_cfg_causvid_strength > 0.0):
                 output_to_terminal_successful(f"Applying CausVid LoRA with strength: {high_cfg_causvid_strength}")
-                model_high_cfg, updated_clip, = lora_loader.load_lora(model_high_cfg, updated_clip, causvid_lora, high_cfg_causvid_strength, high_cfg_causvid_strength)
+                model_high_cfg, updated_clip, = lora_loader.load_lora(model_high_cfg, updated_clip, causvid_lora, high_cfg_causvid_strength, 1.0)
         
         return model_high_cfg, model_low_cfg, updated_clip
     
