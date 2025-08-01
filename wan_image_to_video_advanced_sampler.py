@@ -1,4 +1,5 @@
 ﻿import os
+from cv2 import resize
 import torch
 import nodes
 import folder_paths
@@ -316,7 +317,6 @@ class WanImageToVideoAdvancedSampler:
 
         working_model = model.clone()
         k_sampler = nodes.KSamplerAdvanced()
-        text_encode = nodes.CLIPTextEncode()
         wan_image_to_video = WanFirstLastFirstFrameToVideo()
         wan_video_vae_decode = WanVideoVaeDecode()
         wan_max_resolution = WanGetMaxImageResolutionByAspectRatio()
@@ -413,6 +413,23 @@ class WanImageToVideoAdvancedSampler:
             torch.cuda.empty_cache()
             if hasattr(torch.cuda, 'synchronize'):
                 torch.cuda.synchronize()  # Ensure all operations complete before cleanup
+            
+            # Force Python to break any lingering circular references
+            import weakref
+            import sys
+            
+            # Additional cleanup to prevent memory leaks
+            locals_to_clear = []
+            for name, obj in list(locals().items()):
+                if hasattr(obj, '__dict__') and 'model' in name.lower():
+                    locals_to_clear.append(name)
+            
+            for name in locals_to_clear:
+                if name in locals():
+                    del locals()[name]
+                    
+            # Force garbage collection
+            gc.collect()
             #mm.soft_empty_cache()
 
 #            if (image_generation_mode == TEXT_TO_VIDEO and chunk_index == 1):
@@ -476,6 +493,9 @@ class WanImageToVideoAdvancedSampler:
             torch.cuda.empty_cache()
             mm.throw_exception_if_processing_interrupted()
 
+            # Create fresh text encoder to avoid circular references
+            text_encode = nodes.CLIPTextEncode()
+            
             output_to_terminal_successful("Encoding Positive CLIP text...")
             positive_clip, = text_encode.encode(generation_clip, positive)
             mm.throw_exception_if_processing_interrupted()
@@ -484,6 +504,9 @@ class WanImageToVideoAdvancedSampler:
             negative_clip, = text_encode.encode(generation_clip, negative)
             mm.throw_exception_if_processing_interrupted()
 
+            # Clean up text encoder reference immediately
+            del text_encode
+            
             # Clean up memory after text encoding
             gc.collect()
             torch.cuda.empty_cache()
@@ -493,6 +516,12 @@ class WanImageToVideoAdvancedSampler:
             
             output_to_terminal_successful("Wan Image to Video started...")
             positive_clip, negative_clip, in_latent, = wan_image_to_video.encode(positive_clip, negative_clip, vae, image_width, image_height, current_chunk_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, fill_noise_latent, image_generation_mode)
+            
+            # Clear WAN image to video encoder reference to prevent memory leaks
+            del wan_image_to_video
+            
+            # Recreate encoder for next iteration
+            wan_image_to_video = WanFirstLastFirstFrameToVideo()
             
             # Clean up CLIP vision images after encoding
             if clip_vision_start_image is not None:
@@ -527,12 +556,25 @@ class WanImageToVideoAdvancedSampler:
             
             # Aggressive memory cleanup after sampling
             del in_latent  # Free input latent memory
+            
+            # Force cleanup of any remaining model references
+            try:
+                del model_high_cfg, model_low_cfg
+            except:
+                pass  # Models might already be deleted in sampler functions
+                
             gc.collect()
             torch.cuda.empty_cache()
             mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Vae Decode started...")
             output_image, = wan_video_vae_decode.decode(out_latent, vae, 0, image_generation_mode)
+            
+            # Clear VAE decoder reference to prevent memory leaks
+            del wan_video_vae_decode
+            
+            # Recreate VAE decoder for next iteration
+            wan_video_vae_decode = WanVideoVaeDecode()
             
             # Aggressive memory cleanup after VAE decode (but keep out_latent for overlap extraction)
             gc.collect()
@@ -608,6 +650,16 @@ class WanImageToVideoAdvancedSampler:
             
             # Clean up model clones to free memory
             del generation_model, generation_clip
+            
+            # Force cleanup of model references to prevent memory leaks
+            if 'model_high_cfg' in locals():
+                del model_high_cfg
+            if 'model_low_cfg' in locals():
+                del model_low_cfg
+            if 'positive_clip' in locals():
+                del positive_clip
+            if 'negative_clip' in locals():
+                del negative_clip
             
             # Final aggressive cleanup after chunk completion
             gc.collect()
@@ -908,14 +960,14 @@ class WanImageToVideoAdvancedSampler:
         
         if (image is not None):
             output_to_terminal_successful(f"Resizing {image_type}...")
-            image, image_width, image_height = resizer.resize(image, large_image_side, large_image_side, "resize", "lanczos", 2, "0, 0, 0", "center", "cpu")
+            image, image_width, image_height, _ = resizer.resize(image, large_image_side, large_image_side, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
             tmp_width, tmp_height, = wan_max_resolution.run(wan_model_size, image)
             tmpTotalPixels = tmp_width * tmp_height
             imageTotalPixels = image_width * image_height
             if (tmpTotalPixels < imageTotalPixels):
                 image_width = tmp_width
                 image_height = tmp_height
-                image, image_width, image_height = resizer.resize(image, image_width, image_height, "resize", "lanczos", 2, "0, 0, 0", "center", "cpu")
+                image, image_width, image_height, _ = resizer.resize(image, image_width, image_height, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
 
             output_to_terminal_successful(f"{image_type} final size: {image_width}x{image_height}")
 
@@ -1322,7 +1374,7 @@ class WanImageToVideoAdvancedSampler:
     
     def apply_latent_blending(self, current_latent, chunk_overlap_data, overlap_frames, temporal_overlap_strength, chunk_index):
         """
-        Apply multi-scale latent blending with previous chunk overlap.
+        Apply motion-preserving latent blending with previous chunk overlap.
         
         Args:
             current_latent: Current chunk's latent representation
@@ -1332,39 +1384,47 @@ class WanImageToVideoAdvancedSampler:
             chunk_index: Current chunk index
             
         Returns:
-            Blended latent representation
+            Motion-blended latent representation
         """
         if chunk_index == 0 or overlap_frames <= 0 or not chunk_overlap_data:
             return current_latent
         
-        output_to_terminal_successful(f"Applying latent blending with {overlap_frames} overlap frames")
+        output_to_terminal_successful(f"Applying motion-preserving latent blending with {overlap_frames} overlap frames")
         
         try:
             # Get previous chunk's overlap latent
             prev_overlap_latent = chunk_overlap_data[-1]['latent']
             
-            # Blend the overlapping region
+            # Blend the overlapping region for motion continuity
             if prev_overlap_latent.shape == current_latent['samples'][:, :, :overlap_frames].shape:
-                # Create blend mask with progressive transition (start strong, fade quickly)
-                # Use power curve instead of linear to reduce static appearance
+                # Create motion-preserving weights (non-linear for smooth motion flow)
+                # Use exponential decay to preserve motion dynamics better
                 linear_weights = torch.linspace(1.0, 0.0, overlap_frames).to(current_latent['samples'].device)
-                # Apply power curve to make transition more gradual and less static
-                blend_weights = (linear_weights ** 2) * temporal_overlap_strength  # Square for smoother curve
-                blend_weights = blend_weights.view(1, 1, overlap_frames, 1, 1)
                 
-                # Apply weighted blending with better motion preservation
-                blended_region = (prev_overlap_latent * blend_weights + 
-                                current_latent['samples'][:, :, :overlap_frames] * (1 - blend_weights))
+                # Apply exponential curve for better motion preservation
+                # This reduces the "fade" effect and maintains motion flow
+                motion_weights = torch.exp(-3 * (1 - linear_weights)) * temporal_overlap_strength
+                motion_weights = motion_weights.view(1, 1, overlap_frames, 1, 1)
+                
+                # Apply motion-preserving blending
+                # Focus on maintaining the motion vector rather than simple alpha blending
+                blended_region = (prev_overlap_latent * motion_weights + 
+                                current_latent['samples'][:, :, :overlap_frames] * (1 - motion_weights))
+                
+                # For better motion continuity, apply slight bias towards the current chunk
+                # This helps maintain forward motion flow
+                motion_bias = 0.1  # Slight bias towards new motion
+                blended_region = blended_region * (1 - motion_bias) + current_latent['samples'][:, :, :overlap_frames] * motion_bias
                 
                 # Replace overlapping region in current latent
                 current_latent['samples'][:, :, :overlap_frames] = blended_region
                 
-                output_to_terminal_successful(f"Successfully blended {overlap_frames} frames with strength {temporal_overlap_strength}")
+                output_to_terminal_successful(f"Successfully applied motion-preserving blend for {overlap_frames} frames with strength {temporal_overlap_strength}")
             else:
                 output_to_terminal_error(f"Latent shape mismatch for blending: {prev_overlap_latent.shape} vs {current_latent['samples'][:, :, :overlap_frames].shape}")
         
         except Exception as e:
-            output_to_terminal_error(f"Error in latent blending: {str(e)}")
+            output_to_terminal_error(f"Error in motion-preserving latent blending: {str(e)}")
         
         return current_latent
     
@@ -1391,20 +1451,21 @@ class WanImageToVideoAdvancedSampler:
             if 'anchor_frame' in chunk_overlap_data[-1]:
                 anchor_latent = chunk_overlap_data[-1]['anchor_frame']
                 
-                # Apply progressive blending to the first few frames instead of just the first frame
-                # This creates a smoother transition while still maintaining continuity
-                transition_frames = min(2, current_latent['samples'].shape[2])  # Use first 2 frames for transition
+                # Apply very subtle anchor frame influence for motion continuity
+                # Reduce strength significantly to avoid fade effects
+                transition_frames = min(1, current_latent['samples'].shape[2])  # Use only first frame
                 
                 for frame_idx in range(transition_frames):
-                    # Reduce strength for subsequent frames to create smooth transition
-                    frame_strength = anchor_frame_strength * (1.0 - (frame_idx * 0.5))  # Reduce by 50% each frame
-                    if frame_strength > 0.1:  # Only apply if strength is meaningful
+                    # Use much lower strength to maintain motion flow
+                    # Anchor should guide motion direction, not create fade effects
+                    motion_guide_strength = anchor_frame_strength * 0.3  # Reduce to 30% of original
+                    if motion_guide_strength > 0.05:  # Only apply if strength is meaningful
                         current_latent['samples'][:, :, frame_idx:frame_idx+1] = (
-                            anchor_latent * frame_strength + 
-                            current_latent['samples'][:, :, frame_idx:frame_idx+1] * (1 - frame_strength)
+                            anchor_latent * motion_guide_strength + 
+                            current_latent['samples'][:, :, frame_idx:frame_idx+1] * (1 - motion_guide_strength)
                         )
                 
-                output_to_terminal_successful(f"Anchor frame preservation applied to {transition_frames} frames")
+                output_to_terminal_successful(f"Motion-preserving anchor guidance applied to {transition_frames} frames with reduced strength")
         
         except Exception as e:
             output_to_terminal_error(f"Error in anchor frame preservation: {str(e)}")
@@ -1573,7 +1634,7 @@ class WanImageToVideoAdvancedSampler:
     
     def merge_chunks_with_temporal_blending(self, images_chunk, chunk_overlap_data, overlap_frames, temporal_overlap_strength):
         """
-        Merge video chunks with advanced temporal blending.
+        Merge video chunks with motion-preserving temporal blending.
         
         Args:
             images_chunk: List of image chunks
@@ -1582,51 +1643,77 @@ class WanImageToVideoAdvancedSampler:
             temporal_overlap_strength: Strength of temporal blending
             
         Returns:
-            Merged video with temporal blending
+            Merged video with seamless motion
         """
-        if overlap_frames <= 0 or not chunk_overlap_data:
+        if overlap_frames <= 0:
             return torch.cat(images_chunk, dim=0)
         
-        output_to_terminal_successful("Applying advanced temporal blending between chunks")
+        output_to_terminal_successful("Applying motion-preserving temporal blending between chunks")
         
         try:
-            merged_chunks = [images_chunk[0]]  # Start with first chunk
+            # Start with first chunk (complete)
+            merged_video = images_chunk[0]
             
             for i in range(1, len(images_chunk)):
                 current_chunk = images_chunk[i]
                 
-                if i-1 < len(chunk_overlap_data) and 'image' in chunk_overlap_data[i-1]:
-                    prev_overlap = chunk_overlap_data[i-1]['image']
+                # For seamless motion, we want to:
+                # 1. Use the stored overlap data for precise blending
+                # 2. Smoothly transition to the current chunk's motion
+                # 3. Avoid fade effects that break motion continuity
+                
+                if overlap_frames > 0 and len(chunk_overlap_data) >= i and merged_video.shape[0] >= overlap_frames:
+                    # Use the stored overlap data from the previous chunk
+                    overlap_data = chunk_overlap_data[i-1]  # Previous chunk's overlap data
                     
-                    # Create blend weights for smooth transition
-                    blend_weights = torch.linspace(temporal_overlap_strength, 0, overlap_frames)
-                    blend_weights = blend_weights.view(overlap_frames, 1, 1, 1).to(current_chunk.device)
-                    
-                    # Blend overlapping region
-                    if prev_overlap.shape[0] >= overlap_frames and current_chunk.shape[0] >= overlap_frames:
-                        blended_region = (prev_overlap[-overlap_frames:] * blend_weights + 
-                                        current_chunk[:overlap_frames] * (1 - blend_weights))
+                    if 'image' in overlap_data and current_chunk.shape[0] >= overlap_frames:
+                        # Get the stored overlap frames from previous chunk
+                        prev_overlap_frames = overlap_data['image']  # These are the last frames from previous chunk
+                        current_motion_start = current_chunk[:overlap_frames]
                         
-                        # Construct merged chunk: previous + blended + remaining current
-                        if current_chunk.shape[0] > overlap_frames:
-                            merged_chunk = torch.cat([blended_region, current_chunk[overlap_frames:]], dim=0)
+                        # Verify shapes match for blending
+                        if prev_overlap_frames.shape[0] == overlap_frames and current_motion_start.shape[0] == overlap_frames:
+                            # Create motion-preserving weights (non-linear for better motion flow)
+                            # Use power curve to preserve motion dynamics
+                            linear_weights = torch.linspace(1.0, 0.0, overlap_frames)
+                            motion_weights = (linear_weights ** 1.5) * temporal_overlap_strength  # Power curve for smoother motion
+                            motion_weights = motion_weights.view(overlap_frames, 1, 1, 1).to(current_chunk.device)
+                            
+                            # Blend using stored overlap data for motion continuity
+                            motion_blended = (prev_overlap_frames * motion_weights + 
+                                            current_motion_start * (1 - motion_weights))
+                            
+                            # Remove overlapping frames from merged_video and add blended transition
+                            merged_video = merged_video[:-overlap_frames]
+                            
+                            # Add the motion-blended transition
+                            merged_video = torch.cat([merged_video, motion_blended], dim=0)
+                            
+                            # Add remaining frames from current chunk (if any)
+                            if current_chunk.shape[0] > overlap_frames:
+                                merged_video = torch.cat([merged_video, current_chunk[overlap_frames:]], dim=0)
+                            
+                            output_to_terminal_successful(f"Applied overlap data blending for chunk {i} with {overlap_frames} frames")
                         else:
-                            merged_chunk = blended_region
-                        
-                        merged_chunks.append(merged_chunk)
+                            output_to_terminal_error(f"Shape mismatch in overlap data: prev={prev_overlap_frames.shape[0]}, current={current_motion_start.shape[0]}, expected={overlap_frames}")
+                            # Fallback to simple concatenation for this chunk
+                            merged_video = torch.cat([merged_video, current_chunk], dim=0)
                     else:
-                        # Fallback to simple concatenation if shapes don't match
-                        merged_chunks.append(current_chunk)
+                        output_to_terminal_error(f"No valid overlap data found for chunk {i}, using simple concatenation")
+                        # Fallback to simple concatenation
+                        merged_video = torch.cat([merged_video, current_chunk], dim=0)
                 else:
-                    merged_chunks.append(current_chunk)
+                    # No overlap or insufficient frames/data - simple concatenation
+                    merged_video = torch.cat([merged_video, current_chunk], dim=0)
             
-            # Final concatenation
-            final_output = torch.cat(merged_chunks, dim=0)
-            output_to_terminal_successful(f"Advanced temporal blending complete. Final shape: {final_output.shape}")
+            output_to_terminal_successful(f"Motion-preserving temporal blending complete. Final shape: {merged_video.shape}")
             
-            return final_output
+            return merged_video
         
         except Exception as e:
+            output_to_terminal_error(f"Error in motion-preserving temporal blending: {str(e)}")
+            # Fallback to simple concatenation
+            return torch.cat(images_chunk, dim=0)
             output_to_terminal_error(f"Error in temporal blending: {str(e)}")
             # Fallback to simple concatenation
             return torch.cat(images_chunk, dim=0)
