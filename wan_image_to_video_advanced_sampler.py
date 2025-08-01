@@ -233,8 +233,6 @@ class WanImageToVideoAdvancedSampler:
 
     def postprocess(self, model, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph):
 
-        output_to_terminal_successful("Generation started...")
-
         working_model = model.clone()
         k_sampler = nodes.KSamplerAdvanced()
         text_encode = nodes.CLIPTextEncode()
@@ -309,6 +307,8 @@ class WanImageToVideoAdvancedSampler:
         original_image = start_image
         output_image = None
         
+        output_to_terminal_successful("Generation started...")
+
         for chunk_index in range(total_video_chunks):
             mm.throw_exception_if_processing_interrupted()
             gc.collect()
@@ -387,7 +387,7 @@ class WanImageToVideoAdvancedSampler:
             mm.throw_exception_if_processing_interrupted()
             
             if (total_video_chunks > 1):
-                start_image = output_image[-1].clone()
+                start_image = output_image[:, -1:, :, :, :].clone()
                 images_chunk.append(output_image[:-1])
             else:
                 images_chunk.append(output_image)
