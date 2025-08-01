@@ -387,7 +387,7 @@ class WanImageToVideoAdvancedSampler:
             mm.throw_exception_if_processing_interrupted()
             
             if (total_video_chunks > 1):
-                start_image = output_image[:, -1:, :, :, :].clone()
+                start_image = output_image[output_image.shape[0] - 1:output_image.shape[0] + 1].clone()
                 images_chunk.append(output_image[:-1])
             else:
                 images_chunk.append(output_image)
@@ -467,7 +467,7 @@ class WanImageToVideoAdvancedSampler:
                 output_to_terminal_successful(f"Loading GGUF model: {GGUF}")
                 
                 gguf_loader = UnetLoaderGGUF()
-                model, = gguf_loader.load_unet(unet_name=GGUF)
+                model, = gguf_loader.load_unet(GGUF, None, None, True)
                 output_to_terminal_successful(f"GGUF model {GGUF} loaded successfully using UnetLoaderGGUF")
                 return model
             else:
