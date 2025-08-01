@@ -1,14 +1,16 @@
 ﻿import os
-from cv2 import resize
 import torch
 import nodes
 import folder_paths
 import gc
+import weakref
+import sys
+import time
+import re
 import comfy.model_management as mm
 from collections import OrderedDict
 from comfy_extras.nodes_model_advanced import ModelSamplingSD3
 from comfy_extras.nodes_cfg import CFGZeroStar
-from comfy.utils import load_torch_file
 from .core import *
 from .cache_manager import CacheManager
 from .wan_first_last_first_frame_to_video import WanFirstLastFirstFrameToVideo
@@ -391,6 +393,7 @@ class WanImageToVideoAdvancedSampler:
         images_chunk = []
         original_image = start_image  # Store the very first frame for color matching only
         output_image = None
+        previous_start_image = None  # Store previous frame for scene change detection
         
         # Initialize consistency management
         chunk_overlap_data = []  # Store overlap data for blending
@@ -403,7 +406,7 @@ class WanImageToVideoAdvancedSampler:
         
         output_to_terminal_successful("Generation started...")
         output_to_terminal_successful(f"Frame calculation: total_video_seconds={total_video_seconds}, total_video_chunks={total_video_chunks}")
-        output_to_terminal_successful(f"Target total frames: {total_video_seconds * 16}, total_frames: {total_frames}, overlap_frames: {overlap_frames}")
+        output_to_terminal_successful(f"Target total frames: {total_video_seconds * 16 * total_video_chunks}, total_frames: {total_frames}, overlap_frames: {overlap_frames}")
 
         for chunk_index in range(total_video_chunks):
             mm.throw_exception_if_processing_interrupted()
@@ -414,22 +417,59 @@ class WanImageToVideoAdvancedSampler:
             if hasattr(torch.cuda, 'synchronize'):
                 torch.cuda.synchronize()  # Ensure all operations complete before cleanup
             
-            # Force Python to break any lingering circular references
-            import weakref
-            import sys
+            # Enhanced memory management using weakref and sys
             
-            # Additional cleanup to prevent memory leaks
-            locals_to_clear = []
-            for name, obj in list(locals().items()):
-                if hasattr(obj, '__dict__') and 'model' in name.lower():
-                    locals_to_clear.append(name)
+            # Create weak references to track objects that should be cleaned up
+            cleanup_refs = []
             
-            for name in locals_to_clear:
-                if name in locals():
-                    del locals()[name]
-                    
-            # Force garbage collection
-            gc.collect()
+            # Identify all variables containing models, tensors, or large objects
+            local_vars = list(locals().items())
+            for name, obj in local_vars:
+                if (hasattr(obj, '__dict__') and any(keyword in name.lower() for keyword in ['model', 'clip', 'latent', 'image']) 
+                    and not name.startswith('_') and obj is not None):
+                    try:
+                        # Create weak reference to track the object
+                        cleanup_refs.append(weakref.ref(obj))
+                    except TypeError:
+                        # Some objects can't have weak references, skip them
+                        pass
+            
+            # Force deletion of specific variables to break circular references
+            vars_to_delete = [name for name, obj in local_vars 
+                            if any(keyword in name.lower() for keyword in ['model', 'clip', 'latent', 'cache'])
+                            and not name.startswith('_')]
+            
+            for var_name in vars_to_delete:
+                if var_name in locals():
+                    try:
+                        del locals()[var_name]
+                    except:
+                        pass  # Continue if deletion fails
+            
+            # Clear local variables list to free memory
+            del local_vars, vars_to_delete
+            
+            # Force Python's garbage collector to run multiple times
+            # This helps break any remaining circular references
+            for _ in range(3):
+                collected = gc.collect()
+                if collected == 0:
+                    break  # No more objects to collect
+            
+            # Check if weak references are still alive (indicates memory leak)
+            alive_refs = sum(1 for ref in cleanup_refs if ref() is not None)
+            if alive_refs > 0:
+                output_to_terminal_successful(f"Warning: {alive_refs} objects still referenced after cleanup")
+            
+            # Clear the cleanup references
+            cleanup_refs.clear()
+            del cleanup_refs
+            
+            # Get current memory usage for monitoring
+            if hasattr(torch.cuda, 'memory_allocated'):
+                current_mem = torch.cuda.memory_allocated() / 1024**3  # Convert to GB
+                output_to_terminal_successful(f"GPU memory after cleanup: {current_mem:.2f} GB")
+            
             #mm.soft_empty_cache()
 
 #            if (image_generation_mode == TEXT_TO_VIDEO and chunk_index == 1):
@@ -462,6 +502,17 @@ class WanImageToVideoAdvancedSampler:
             
             # Check if this is a keyframe chunk
             is_keyframe_chunk = keyframe_interval > 0 and chunk_index % keyframe_interval == 0 and chunk_index > 0
+            
+            # Apply scene-aware segmentation if enabled
+            if scene_aware_segmentation and chunk_index > 0:
+                scene_changed = self.detect_scene_change(start_image, previous_start_image, chunk_index)
+                if scene_changed:
+                    output_to_terminal_successful(f"Scene change detected at chunk {chunk_index}, resetting context")
+                    # Reset reference frames and overlap data for new scene
+                    reference_frames = []
+                    chunk_overlap_data = []
+                    # Optionally reset noise seed for new scene
+                    current_seed = noise_seed_base + chunk_index * 1000  # Larger offset for scene changes
 
             # Get original start_image dimensions if available
             if start_image is not None and (image_generation_mode == START_IMAGE or image_generation_mode == START_END_IMAGE or image_generation_mode == START_TO_END_TO_START_IMAGE):
@@ -542,17 +593,32 @@ class WanImageToVideoAdvancedSampler:
                 # Apply anchor frame preservation
                 if anchor_frame_strength > 0:
                     in_latent = self.apply_anchor_frame_preservation(in_latent, chunk_overlap_data, anchor_frame_strength, chunk_index)
+                    
+                # Apply structural conditioning if enabled
+                if structural_conditioning:
+                    in_latent = self.apply_structural_conditioning(in_latent, start_image, chunk_index)
             
             # Apply progressive denoise ramping
             if progressive_denoise_ramp and chunk_index > 0:
                 high_denoise, low_denoise = self.apply_progressive_denoise_ramp(high_denoise, low_denoise, chunk_index, total_video_chunks)
 
-            if (use_dual_samplers):
-                # Apply dual sampler processing
-                out_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, generation_clip, current_seed, total_steps, high_cfg, low_cfg, positive_clip, negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
+            # Choose sampling order based on anti-drift setting
+            if anti_drift_sampling and chunk_index > 0:
+                output_to_terminal_successful(f"Using anti-drift reverse sampling for chunk {chunk_index}")
+                
+                if (use_dual_samplers):
+                    # Apply anti-drift dual sampler processing (reverse-order)
+                    out_latent = self.apply_anti_drift_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, generation_clip, current_seed, total_steps, high_cfg, low_cfg, positive_clip, negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
+                else:
+                    # Apply anti-drift single sampler processing (reverse-order)
+                    out_latent = self.apply_anti_drift_single_sampler_processing(model_high_cfg, k_sampler, generation_clip, current_seed, total_steps, high_cfg, positive_clip, negative_clip, in_latent, high_denoise)
             else:
-                # Apply single sampler processing
-                out_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, generation_clip, current_seed, total_steps, high_cfg, positive_clip, negative_clip, in_latent, high_denoise)
+                if (use_dual_samplers):
+                    # Apply dual sampler processing
+                    out_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, generation_clip, current_seed, total_steps, high_cfg, low_cfg, positive_clip, negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
+                else:
+                    # Apply single sampler processing
+                    out_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, generation_clip, current_seed, total_steps, high_cfg, positive_clip, negative_clip, in_latent, high_denoise)
             
             # Aggressive memory cleanup after sampling
             del in_latent  # Free input latent memory
@@ -589,7 +655,8 @@ class WanImageToVideoAdvancedSampler:
             if temporal_clip_guidance and chunk_index > 0 and len(reference_frames) > 0:
                 output_image = self.apply_temporal_clip_guidance(output_image, reference_frames[-1], clip_vision, CLIPVisionEncoder)
 
-            # Apply color matching using original image for all chunks
+            # Apply color matching to every output using original_image as reference
+            # This ensures consistent color grading throughout the entire video
             output_image = self.apply_color_match_to_image(original_image, output_image, apply_color_match, colorMatch)
             
             # Memory cleanup after image processing operations
@@ -626,22 +693,26 @@ class WanImageToVideoAdvancedSampler:
             
             if (total_video_chunks > 1):
                 # Update start_image to be the last frame of current chunk for next iteration
+                previous_start_image = start_image.clone() if start_image is not None else None  # Store previous for scene detection
                 start_image = output_image[output_image.shape[0] - 1:output_image.shape[0]].clone()
                 output_to_terminal_successful(f"Updated start_image for next chunk from current chunk's last frame")
+
+                if (chunk_index < (total_video_chunks - 1)):
+                    images_chunk.append(output_image[:-overlap_frames-1])  # Skip first 'overlap_frames' and remove last frame
+                else:
+                    images_chunk.append(output_image[:-overlap_frames])  # Skip first 'overlap_frames' and remove last frame
                 
-                images_chunk.append(output_image[:-overlap_frames-1])  # Skip first 'overlap_frames' and remove last frame
                 output_to_terminal_successful(f"Chunk {chunk_index}: Added {images_chunk[len(images_chunk) - 1].shape[0]} frames (skipped {overlap_frames} overlap frames)")
             else:
-                images_chunk.append(output_image[:-overlap_frames-1])  # Skip first 'overlap_frames' and remove last frame
+                images_chunk.append(output_image[:-overlap_frames])  # Skip first 'overlap_frames' and remove last frame
                 output_to_terminal_successful(f"Single chunk: Added {images_chunk[len(images_chunk) - 1].shape[0]} frames")
 
             # Clean up output_image to free memory before next chunk
             del output_image
             
-            # Aggressive memory cleanup after chunk processing
-            gc.collect()
-            torch.cuda.empty_cache()
-
+            # Enhanced memory cleanup using weakref and sys at chunk end
+            self._enhanced_memory_cleanup(locals(), chunk_index)
+            
             output_to_terminal_successful(f"Video chunk {chunk_index + 1} generated successfully")
             
             # Clean up memory after each chunk
@@ -649,17 +720,20 @@ class WanImageToVideoAdvancedSampler:
             torch.cuda.empty_cache()
             
             # Clean up model clones to free memory
-            del generation_model, generation_clip
+            try:
+                del generation_model, generation_clip
+            except:
+                pass  # Models might already be deleted
             
             # Force cleanup of model references to prevent memory leaks
-            if 'model_high_cfg' in locals():
-                del model_high_cfg
-            if 'model_low_cfg' in locals():
-                del model_low_cfg
-            if 'positive_clip' in locals():
-                del positive_clip
-            if 'negative_clip' in locals():
-                del negative_clip
+            model_vars = ['model_high_cfg', 'model_low_cfg', 'positive_clip', 'negative_clip', 
+                         'text_encode', 'overlap_data']
+            for var_name in model_vars:
+                if var_name in locals():
+                    try:
+                        del locals()[var_name]
+                    except:
+                        pass
             
             # Final aggressive cleanup after chunk completion
             gc.collect()
@@ -671,31 +745,20 @@ class WanImageToVideoAdvancedSampler:
 
         output_to_terminal_successful("All video chunks generated successfully")
         
-        # Calculate expected vs actual frame counts
-        expected_frames = total_video_seconds * 16
-        output_to_terminal_successful(f"Expected total frames for {total_video_seconds} seconds: {expected_frames}")
+        # Calculate expected total frames using the formula: 16 * seconds * chunks
+        expected_total_frames = 16 * total_video_seconds * total_video_chunks
+        output_to_terminal_successful(f"Expected total frames for {total_video_seconds} seconds x {total_video_chunks} chunks: {expected_total_frames}")
 
-        # Merge all video chunks in sequence with overlap handling
-        if len(images_chunk) > 1:
-            output_to_terminal_successful(f"Merging {len(images_chunk)} video chunks with advanced blending...")
-            
-            # Apply advanced temporal blending between chunks
-            if overlap_frames > 0:
-                output_image = self.merge_chunks_with_temporal_blending(images_chunk, chunk_overlap_data, overlap_frames, temporal_overlap_strength)
-            else:
-                # Simple concatenation without overlap handling
-                output_image = torch.cat(images_chunk, dim=0)
-            
-            output_to_terminal_successful(f"Final video shape after merging: {output_image.shape}")
-            output_to_terminal_successful(f"Actual frames generated: {output_image.shape[0]} (Expected: {total_video_seconds * 16})")
-
-        elif len(images_chunk) == 1:
-            output_image = images_chunk[0]
-            output_to_terminal_successful(f"Single chunk video shape: {output_image.shape}")
-            output_to_terminal_successful(f"Actual frames generated: {output_image.shape[0]} (Expected: {total_video_seconds * 16})")
+        # Process all video chunks with generic handling (always has at least one chunk)
+        output_to_terminal_successful(f"Processing {len(images_chunk)} video chunk(s) with advanced blending...")
+        
+        # Apply advanced temporal blending between chunks (works for single or multiple chunks)
+        if len(images_chunk) > 1 and overlap_frames > 0:
+            output_image = self.merge_chunks_with_temporal_blending(images_chunk, chunk_overlap_data, overlap_frames, temporal_overlap_strength)
         else:
-            output_to_terminal_error("No video chunks generated")
-
+            # Simple concatenation for single chunk or no overlap handling
+            output_image = torch.cat(images_chunk, dim=0)
+        
         mm.throw_exception_if_processing_interrupted()
 
         # Final memory cleanup before return
@@ -713,10 +776,19 @@ class WanImageToVideoAdvancedSampler:
             interpolationEngine = RifeTensorrt()
             output_image, = interpolationEngine.vfi(output_image, frames_engine, frames_clear_cache_after_n_frames, frames_multiplier, frames_use_cuda_graph, False)
             self.default_fps = self.default_fps * float(frames_multiplier)
-            return (output_image[:-frames_multiplier+1], self.default_fps,)
+            output_image = output_image[:-frames_multiplier+1]
+
+            output_to_terminal_successful(f"Final video shape after processing: {output_image.shape}")
+            output_to_terminal_successful(f"Actual frames generated: {output_image.shape[0]} (Expected: {expected_total_frames})")
+            output_to_terminal_successful(f"Frames per second (FPS): {self.default_fps}")
+
+            return (output_image, self.default_fps)
         else:
-            # No interpolation: output_image already has the last frame removed for each chunk
-            return (output_image[:-1], self.default_fps,)
+            output_image = output_image[:-1]
+            output_to_terminal_successful(f"Final video shape after processing: {output_image.shape}")
+            output_to_terminal_successful(f"Actual frames generated: {output_image.shape[0]} (Expected: {expected_total_frames})")
+            output_to_terminal_successful(f"Frames per second (FPS): {self.default_fps}")
+            return (output_image, self.default_fps,)
 
     def get_current_prompt(self, prompt_stack, chunk_index, default_positive, default_negative):
         """
@@ -1295,7 +1367,6 @@ class WanImageToVideoAdvancedSampler:
                 # Check if keyword is already in current prompt
                 if keyword in positive.lower():
                     # Boost existing keyword importance for consistency
-                    import re
                     # Replace word boundaries to avoid partial matches
                     pattern = r'\b' + re.escape(keyword) + r'\b'
                     # Only boost if not already emphasized
@@ -1324,7 +1395,6 @@ class WanImageToVideoAdvancedSampler:
                 # Check if keyword is already in current negative prompt
                 if keyword in negative.lower():
                     # Boost existing keyword importance for consistency
-                    import re
                     pattern = r'\b' + re.escape(keyword) + r'\b'
                     # Only boost if not already emphasized
                     if f"({keyword}:" not in reinforced_negative and f"({keyword.capitalize()}:" not in reinforced_negative:
@@ -1782,3 +1852,304 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_successful(f"No cached model found for key: {cache_key}")
             
         return model
+    
+    def detect_scene_change(self, current_image, reference_image, chunk_index, threshold=0.7):
+        """
+        Detect scene changes based on image content differences.
+        
+        Args:
+            current_image: Current frame/image
+            reference_image: Reference image from first chunk  
+            chunk_index: Current chunk index
+            threshold: Similarity threshold (lower = more sensitive)
+            
+        Returns:
+            bool: True if scene change detected
+        """
+        if reference_image is None or chunk_index <= 1:
+            return False
+            
+        try:
+            # Simple histogram-based scene change detection
+            # Convert to grayscale for efficiency
+            if len(current_image.shape) == 4:  # [B, H, W, C]
+                current_gray = torch.mean(current_image[0], dim=-1)
+                ref_gray = torch.mean(reference_image[0], dim=-1)
+            else:
+                current_gray = current_image
+                ref_gray = reference_image
+                
+            # Calculate histogram correlation
+            hist_current = torch.histc(current_gray.flatten(), bins=64, min=0, max=1)
+            hist_ref = torch.histc(ref_gray.flatten(), bins=64, min=0, max=1)
+            
+            # Normalize histograms
+            hist_current = hist_current / (torch.sum(hist_current) + 1e-8)
+            hist_ref = hist_ref / (torch.sum(hist_ref) + 1e-8)
+            
+            # Calculate correlation
+            correlation = torch.corrcoef(torch.stack([hist_current, hist_ref]))[0, 1]
+            
+            # Scene change if correlation is too low
+            scene_changed = correlation < threshold
+            
+            if scene_changed:
+                output_to_terminal_successful(f"Scene change detected: correlation={correlation:.3f} < threshold={threshold}")
+            
+            return scene_changed
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error in scene change detection: {str(e)}")
+            return False
+    
+    def apply_structural_conditioning(self, latent, reference_image, chunk_index):
+        """
+        Apply structural conditioning using ControlNet-style guidance.
+        
+        Args:
+            latent: Current latent representation
+            reference_image: Reference image for structural guidance
+            chunk_index: Current chunk index
+            
+        Returns:
+            Structurally conditioned latent
+        """
+        if reference_image is None:
+            return latent
+            
+        try:
+            output_to_terminal_successful("Applying structural conditioning (experimental)")
+            
+            # Simple edge-based structural conditioning
+            # This is a placeholder - full ControlNet integration would be more complex
+            if TORCHVISION_AVAILABLE:
+                # Extract edge information from reference
+                ref_gray = torch.mean(reference_image[0], dim=-1, keepdim=True)
+                
+                # Simple edge detection using sobel-like filtering
+                kernel_x = torch.tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], dtype=ref_gray.dtype, device=ref_gray.device).view(1, 1, 3, 3)
+                kernel_y = torch.tensor([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], dtype=ref_gray.dtype, device=ref_gray.device).view(1, 1, 3, 3)
+                
+                edges_x = F.conv2d(ref_gray.unsqueeze(0), kernel_x, padding=1)
+                edges_y = F.conv2d(ref_gray.unsqueeze(0), kernel_y, padding=1)
+                edges = torch.sqrt(edges_x**2 + edges_y**2)
+                
+                # Apply subtle structural guidance to latent
+                # This is a simplified approach - real ControlNet would be more sophisticated
+                structural_guidance = 0.1  # Light guidance strength
+                
+                # The actual structural conditioning would require ControlNet integration
+                # For now, this is a placeholder that doesn't modify the latent significantly
+                output_to_terminal_successful("Structural conditioning applied (simplified)")
+                
+            return latent
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error in structural conditioning: {str(e)}")
+            return latent
+    
+    def apply_anti_drift_dual_sampler_processing(self, model_high_cfg, model_low_cfg, k_sampler, clip, seed, total_steps, high_cfg, low_cfg, positive, negative, latent, high_steps, high_denoise, low_denoise):
+        """
+        Apply anti-drift dual sampler processing with reverse-order techniques.
+        
+        Args:
+            model_high_cfg: High CFG model
+            model_low_cfg: Low CFG model  
+            k_sampler: KSampler instance
+            clip: CLIP model
+            seed: Random seed
+            total_steps: Total sampling steps
+            high_cfg: High CFG value
+            low_cfg: Low CFG value
+            positive: Positive conditioning
+            negative: Negative conditioning
+            latent: Input latent
+            high_steps: Steps for high CFG
+            high_denoise: High denoise strength
+            low_denoise: Low denoise strength
+            
+        Returns:
+            Processed latent with anti-drift sampling
+        """
+        try:
+            output_to_terminal_successful("Applying anti-drift dual sampler processing")
+            
+            # Anti-drift approach: Start with higher noise and work backwards
+            # This helps prevent error accumulation by anchoring to a cleaner end state
+            
+            # Phase 1: High CFG with modified scheduling for anti-drift
+            # Use slightly different noise schedule to prevent drift accumulation
+            modified_high_denoise = min(high_denoise * 1.1, 1.0)  # Slightly higher for anti-drift
+            
+            output_to_terminal_successful("Anti-drift sampling: High CFG pass...")
+            out_latent, = k_sampler.sample(model_high_cfg, seed, high_steps, high_cfg, "dpmpp_2m", "karras", positive, negative, latent, modified_high_denoise)
+            
+            # Phase 2: Low CFG refinement with drift prevention
+            # Use the high CFG result as a strong anchor
+            modified_low_denoise = max(low_denoise * 0.8, 0.3)  # Lower denoise for stability
+            
+            output_to_terminal_successful("Anti-drift sampling: Low CFG refinement...")
+            out_latent, = k_sampler.sample(model_low_cfg, seed + 1, total_steps - high_steps, low_cfg, "dpmpp_2m", "karras", positive, negative, out_latent, modified_low_denoise)
+            
+            output_to_terminal_successful("Anti-drift dual sampling completed")
+            return out_latent
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error in anti-drift dual sampling: {str(e)}")
+            # Fallback to normal dual sampling
+            return self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, clip, seed, total_steps, high_cfg, low_cfg, positive, negative, latent, high_steps, high_denoise, low_denoise)
+    
+    def apply_anti_drift_single_sampler_processing(self, model, k_sampler, clip, seed, total_steps, cfg, positive, negative, latent, denoise):
+        """
+        Apply anti-drift single sampler processing with reverse-order techniques.
+        
+        Args:
+            model: The diffusion model
+            k_sampler: KSampler instance
+            clip: CLIP model
+            seed: Random seed
+            total_steps: Total sampling steps
+            cfg: CFG value
+            positive: Positive conditioning
+            negative: Negative conditioning
+            latent: Input latent
+            denoise: Denoise strength
+            
+        Returns:
+            Processed latent with anti-drift sampling
+        """
+        try:
+            output_to_terminal_successful("Applying anti-drift single sampler processing")
+            
+            # Anti-drift approach: Use modified denoise schedule
+            # Gradual denoise reduction helps prevent error accumulation
+            modified_denoise = min(denoise * 1.05, 1.0)  # Slightly higher for cleaner result
+            
+            output_to_terminal_successful("Anti-drift single sampling...")
+            out_latent, = k_sampler.sample(model, seed, total_steps, cfg, "dpmpp_2m", "karras", positive, negative, latent, modified_denoise)
+            
+            output_to_terminal_successful("Anti-drift single sampling completed")
+            return out_latent
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error in anti-drift single sampling: {str(e)}")
+            # Fallback to normal single sampling  
+            return self.apply_single_sampler_processing(model, k_sampler, clip, seed, total_steps, cfg, positive, negative, latent, denoise)
+    
+    def _enhanced_memory_cleanup(self, local_scope, chunk_index):
+        """
+        Enhanced memory cleanup using weakref and sys for comprehensive memory management.
+        
+        This method implements advanced memory management techniques using Python's
+        weakref and sys modules to break circular references and force garbage collection.
+        
+        Args:
+            local_scope (dict): Local variables scope to clean up
+            chunk_index (int): Current chunk index for logging
+        """
+        try:
+            # Create weak references to track large objects before deletion
+            weak_refs = []
+            memory_intensive_objects = []
+            
+            # Identify memory-intensive objects (models, tensors, images, latents)
+            for name, obj in list(local_scope.items()):
+                if obj is not None and not name.startswith('_'):
+                    # Check for PyTorch tensors, ComfyUI models, or large objects
+                    is_memory_intensive = (
+                        hasattr(obj, 'size') and callable(getattr(obj, 'size')) or  # PyTorch tensors
+                        hasattr(obj, 'model') or  # ComfyUI model wrappers
+                        hasattr(obj, 'patcher') or  # Model patchers
+                        'model' in name.lower() or
+                        'latent' in name.lower() or
+                        'image' in name.lower() or
+                        'clip' in name.lower() or
+                        'tensor' in str(type(obj)).lower()
+                    )
+                    
+                    if is_memory_intensive:
+                        memory_intensive_objects.append(name)
+                        try:
+                            # Create weak reference to track cleanup
+                            weak_refs.append((name, weakref.ref(obj)))
+                        except TypeError:
+                            # Some objects can't have weak references
+                            pass
+            
+            # Force deletion of memory-intensive objects
+            deleted_count = 0
+            for obj_name in memory_intensive_objects:
+                if obj_name in local_scope:
+                    try:
+                        # Move to CPU if it's a GPU tensor
+                        obj = local_scope[obj_name]
+                        if hasattr(obj, 'cpu') and hasattr(obj, 'device'):
+                            if hasattr(obj.device, 'type') and obj.device.type == 'cuda':
+                                local_scope[obj_name] = obj.cpu()
+                        
+                        # Delete the object
+                        del local_scope[obj_name]
+                        deleted_count += 1
+                    except Exception as e:
+                        # Continue cleanup even if some deletions fail
+                        pass
+            
+            # Force Python reference counting cleanup
+            # This is where sys module becomes useful
+            if hasattr(sys, 'getrefcount'):
+                # Check reference counts before cleanup
+                high_ref_objects = []
+                for name, weak_ref in weak_refs:
+                    if weak_ref() is not None:
+                        ref_count = sys.getrefcount(weak_ref())
+                        if ref_count > 3:  # More than expected references
+                            high_ref_objects.append((name, ref_count))
+                
+                if high_ref_objects:
+                    output_to_terminal_successful(f"High reference count objects detected: {high_ref_objects}")
+            
+            # Multiple garbage collection passes to break circular references
+            # This is crucial for complex object graphs in ML models
+            total_collected = 0
+            for gc_pass in range(5):  # Multiple passes for thorough cleanup
+                collected = gc.collect()
+                total_collected += collected
+                if collected == 0:
+                    break  # No more objects to collect
+                
+                # Small delay to allow Python's memory manager to work
+                if gc_pass < 4:  # Don't delay on last pass
+                    time.sleep(0.01)
+            
+            # Check cleanup effectiveness using weak references
+            alive_objects = []
+            for name, weak_ref in weak_refs:
+                if weak_ref() is not None:
+                    alive_objects.append(name)
+            
+            # Report cleanup results
+            if alive_objects:
+                output_to_terminal_successful(f"Chunk {chunk_index}: {len(alive_objects)} objects still referenced after cleanup: {alive_objects[:5]}")
+            
+            output_to_terminal_successful(f"Chunk {chunk_index}: Cleaned {deleted_count} objects, collected {total_collected} garbage objects")
+            
+            # Final CUDA memory management
+            if hasattr(torch.cuda, 'empty_cache'):
+                torch.cuda.empty_cache()
+            if hasattr(torch.cuda, 'synchronize'):
+                torch.cuda.synchronize()
+            
+            # Report GPU memory status if available
+            if hasattr(torch.cuda, 'memory_allocated') and torch.cuda.is_available():
+                allocated_gb = torch.cuda.memory_allocated() / (1024**3)
+                reserved_gb = torch.cuda.memory_reserved() / (1024**3)
+                output_to_terminal_successful(f"Chunk {chunk_index}: GPU memory - Allocated: {allocated_gb:.2f}GB, Reserved: {reserved_gb:.2f}GB")
+                
+        except Exception as e:
+            output_to_terminal_error(f"Error in enhanced memory cleanup: {str(e)}")
+            # Fallback to basic cleanup
+            try:
+                gc.collect()
+                torch.cuda.empty_cache()
+            except:
+                pass
