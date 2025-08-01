@@ -164,7 +164,6 @@ class WanImageToVideoAdvancedSampler:
                 # ═════════════════════════════════════════════════════════════════
                 # 🚀 MEMORY OPTIMIZATION
                 # ═════════════════════════════════════════════════════════════════
-                ("enable_aggressive_memory_optimization", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable aggressive VRAM optimization. Reduces memory usage at the cost of some performance."})),
                 ("cuda_memory_fraction", ("FLOAT", {"default": 100.0, "min": 0.0, "max": 100.0, "step":0.01, "tooltip": "Percentage of available GPU VRAM to reserve for CUDA operations. 100% uses all available memory, lower values leave memory for other processes. Useful when running multiple AI applications simultaneously."})),
             ]),
             "optional": OrderedDict([
@@ -182,13 +181,9 @@ class WanImageToVideoAdvancedSampler:
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, enable_aggressive_memory_optimization=True, fill_noise_latent=0.5, cuda_memory_fraction=100.0, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True):
+    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, cuda_memory_fraction=100.0, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True):
         self.default_fps = 16.0
 
-        # Aggressive memory optimization setup
-        self.EnableAggressiveMemoryOptimization(enable_aggressive_memory_optimization, cuda_memory_fraction)
-        mm.throw_exception_if_processing_interrupted()
-        
         gc.collect()
         torch.cuda.empty_cache()
         #mm.soft_empty_cache()
@@ -222,9 +217,9 @@ class WanImageToVideoAdvancedSampler:
         model_shift = self.initialize_model_shift(use_shift, shift)
         mm.throw_exception_if_processing_interrupted()
 
-        return self.postprocess(model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, enable_aggressive_memory_optimization, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph)
+        return self.postprocess(model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph)
 
-    def postprocess(self, model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, enable_aggressive_memory_optimization, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph):
+    def postprocess(self, model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph):
 
         output_to_terminal_successful("Generation started...")
 
@@ -299,39 +294,23 @@ class WanImageToVideoAdvancedSampler:
         original_image = start_image if start_image is not None else None
         
         for chunk_index in range(total_video_chunks):
+            mm.throw_exception_if_processing_interrupted()
+            gc.collect()
+            torch.cuda.empty_cache()
+            #mm.soft_empty_cache()
 
             if (image_generation_mode == TEXT_TO_VIDEO and chunk_index == 1):
                 start_image = images_chunk[-1][-1]  # Use last frame of previous chunk as start image
                 original_image = images_chunk[-1][0] # Use first frame of previous chunk as original image
                 image_generation_mode = START_IMAGE  # Switch to START_IMAGE mode after first chunk
 
-            mm.throw_exception_if_processing_interrupted()
-
             output_to_terminal_successful(f"Generating video chunk {chunk_index + 1}/{total_video_chunks}...")
             mm.throw_exception_if_processing_interrupted()
-            
-            # Aggressive memory cleanup before each chunk
-            self.EnableAggressiveMemoryOptimizationPostprocess(enable_aggressive_memory_optimization, chunk_index)
-            
-            # Initialize variables with explicit GPU memory management
-            gc.collect()
-            torch.cuda.empty_cache()
-            #mm.soft_empty_cache()
-            
-            # Use context manager pattern for better memory cleanup
-            output_image = None
-            clip_vision = None
-            clip_vision_start_image = None
-            clip_vision_end_image = None
             
             # Clone models with explicit cleanup of source references
             generation_model = working_model.clone()
             generation_clip = clip.clone()
             
-            # Clear any lingering references to original models in this scope
-            if enable_aggressive_memory_optimization:
-                torch.cuda.empty_cache()
-
             if (lora_stack is not None):
                 generation_model, generation_clip = self.process_lora_stack(lora_stack, generation_model, generation_clip)
             mm.throw_exception_if_processing_interrupted()
@@ -347,7 +326,7 @@ class WanImageToVideoAdvancedSampler:
 
             if (image_generation_mode != TEXT_TO_VIDEO):
                 # Process start and end images
-                start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image = self.process_start_and_end_images(start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled,clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size)
+                start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image = self.process_start_and_end_images(start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size, image_generation_mode)
                 mm.throw_exception_if_processing_interrupted()
 
             # Apply CausVid LoRA processing for current chunk
@@ -366,10 +345,6 @@ class WanImageToVideoAdvancedSampler:
             temp_positive_clip, temp_negative_clip, in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, fill_noise_latent, image_generation_mode)
             mm.throw_exception_if_processing_interrupted()
 
-            gc.collect()
-            torch.cuda.empty_cache()
-            #mm.soft_empty_cache()
-
             if (use_dual_samplers):
                 # Apply dual sampler processing
                 out_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, generation_clip, noise_seed, total_steps, high_cfg, low_cfg, temp_positive_clip, temp_negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
@@ -378,35 +353,9 @@ class WanImageToVideoAdvancedSampler:
                 out_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, generation_clip, noise_seed, total_steps, high_cfg, temp_positive_clip, temp_negative_clip, in_latent, high_denoise)
             mm.throw_exception_if_processing_interrupted()
 
-            # Memory cleanup after sampling with enhanced cleanup
-            if enable_aggressive_memory_optimization:
-                # Clear intermediate variables with explicit deletion
-                vars_to_cleanup = ['temp_positive_clip', 'temp_negative_clip', 'in_latent', 
-                                 'model_high_cfg', 'model_low_cfg', 'generation_model', 'generation_clip']
-                for var_name in vars_to_cleanup:
-                    if var_name in locals():
-                        try:
-                            var_ref = locals()[var_name]
-                            # For model objects, explicitly move to CPU before deletion
-                            if hasattr(var_ref, 'cpu'):
-                                try:
-                                    var_ref.cpu()
-                                except:
-                                    pass
-                            del var_ref
-                            del locals()[var_name]
-                        except:
-                            pass
-                
-                # Force immediate cleanup
-                for _ in range(2):
-                    gc.collect()
-                    torch.cuda.empty_cache()
-                    #mm.soft_empty_cache()
-            mm.throw_exception_if_processing_interrupted()
-
             output_to_terminal_successful("Vae Decode started...")
             output_image, = wan_video_vae_decode.decode(out_latent, vae, 0, image_generation_mode)
+            mm.throw_exception_if_processing_interrupted()
 
             # Subsequent chunks: use original_image as reference for consistency
             if apply_color_match:
@@ -415,6 +364,7 @@ class WanImageToVideoAdvancedSampler:
             mm.throw_exception_if_processing_interrupted()
             
             images_chunk.append(output_image)
+            start_image = images_chunk[-1][-1]
 
             output_to_terminal_successful(f"Video chunk {chunk_index + 1} generated successfully")
 
@@ -433,50 +383,9 @@ class WanImageToVideoAdvancedSampler:
         else:
             output_to_terminal_error("No video chunks generated")
 
-        # Final memory cleanup and reporting with comprehensive cleanup
-        if enable_aggressive_memory_optimization:
-            # Clean up any remaining variables with enhanced cleanup
-            cleanup_vars = ['images_chunk', 'merged_chunks', 'working_model', 'generation_model', 
-                          'generation_clip', 'last_latent']
-            for var_name in cleanup_vars:
-                if var_name in locals():
-                    try:
-                        var_ref = locals()[var_name]
-                        # Move tensors to CPU before deletion
-                        if hasattr(var_ref, 'cpu'):
-                            try:
-                                var_ref.cpu()
-                            except:
-                                pass
-                        del var_ref
-                        del locals()[var_name]
-                    except:
-                        pass
-            
-            mm.throw_exception_if_processing_interrupted()
-            # Comprehensive memory cleanup sequence
-            for cleanup_round in range(3):
-                gc.collect()
-                torch.cuda.empty_cache()
-                #mm.soft_empty_cache()
-                if cleanup_round < 2:  # Brief pause between rounds
-                    import time
-                    time.sleep(0.1)
-            
-            # Final memory report
-            if torch.cuda.is_available():
-                current_memory = torch.cuda.memory_allocated() / 1024**3
-                max_memory = torch.cuda.max_memory_allocated() / 1024**3
-                output_to_terminal_successful(f"Final VRAM usage: Current {current_memory:.2f}GB, Peak {max_memory:.2f}GB")
-                
-                # Reset peak memory tracker for next run
-                torch.cuda.reset_peak_memory_stats()
-                
-                # Final cache clearing
-                torch.cuda.empty_cache()
-
         # frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph
         mm.throw_exception_if_processing_interrupted()
+
         if (frames_interpolation and frames_engine != NONE):
             gc.collect()
             torch.cuda.empty_cache()
@@ -706,41 +615,7 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_error("No clip vision model selected, skipping...")
             return None
 
-    def process_start_and_end_images(self, start_image, start_image_clip_vision_enabled, 
-                                   end_image, end_image_clip_vision_enabled, clip_vision, 
-                                   resizer, wan_max_resolution, CLIPVisionEncoder, 
-                                   large_image_side, wan_model_size):
-        """
-        Original method for processing start and end images.
-        This is kept as a separate method for backward compatibility and cleaner code.
-        """
-        
-        image_width = 512
-        image_height = 512
-        clip_vision_start_image = None
-        clip_vision_end_image = None
-        
-        # Process start image
-        if start_image is not None:
-            start_image, image_width, image_height, clip_vision_start_image = self.process_image(
-                start_image, start_image_clip_vision_enabled, clip_vision, resizer,
-                wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
-                image_width, image_height, "start image"
-            )
-        
-        # Process end image
-        if end_image is not None:
-            end_image, _, _, clip_vision_end_image = self.process_image(
-                end_image, end_image_clip_vision_enabled, clip_vision, resizer,
-                wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
-                image_width, image_height, "end image"
-            )
-        
-        return start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image
-
-    def process_image(self, image, image_clip_vision_enabled, clip_vision, resizer, 
-                     wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
-                     image_width, image_height, image_type):
+    def process_image(self, image, image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size, image_width, image_height, image_type):
         """
         Process and resize an image, and encode CLIP vision if enabled.
         
@@ -783,9 +658,7 @@ class WanImageToVideoAdvancedSampler:
             
         return image, image_width, image_height, clip_vision_image
 
-    def process_start_and_end_images(self, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled,
-                                    clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
-                                    image_generation_mode):
+    def process_start_and_end_images(self, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size, image_generation_mode):
         """
         Process start and end images, getting their dimensions and processing them.
         
@@ -1088,85 +961,3 @@ class WanImageToVideoAdvancedSampler:
             output_image, = colorMatch.colormatch(start_image, output_image, "hm-mvgd-hm", strength=1.0)
             
         return output_image
-
-    def EnableAggressiveMemoryOptimization(self, enable_aggressive_memory_optimization, cuda_memory_fraction):
-        """
-        Enable aggressive memory optimization settings for VRAM management.
-        
-        Args:
-            enable_aggressive_memory_optimization (bool): Whether to enable aggressive memory optimization
-            cuda_memory_fraction (float): Percentage of available GPU VRAM to reserve for CUDA operations
-        """
-        if enable_aggressive_memory_optimization:
-            output_to_terminal_successful("Enabling aggressive memory optimization...")
-            
-            # Force aggressive garbage collection
-            gc.collect()
-            torch.cuda.empty_cache()
-            #mm.soft_empty_cache()
-            
-            # Set memory fraction if available (handle both old and new PyTorch APIs)
-            memory_fraction = cuda_memory_fraction / 100.0  # Convert percentage to fraction
-            if hasattr(torch.cuda, 'set_per_process_memory_fraction'):
-                try:
-                    torch.cuda.set_per_process_memory_fraction(memory_fraction)
-                    output_to_terminal_successful(f"Set CUDA per-process memory fraction to {cuda_memory_fraction}%")
-                except Exception as e:
-                    output_to_terminal_error(f"Failed to set per-process memory fraction: {e}")
-            elif hasattr(torch.cuda, 'set_memory_fraction'):
-                try:
-                    torch.cuda.set_memory_fraction(memory_fraction)
-                    output_to_terminal_successful(f"Set CUDA memory fraction to {cuda_memory_fraction}%")
-                except Exception as e:
-                    output_to_terminal_error(f"Failed to set memory fraction: {e}")
-            else:
-                output_to_terminal_error("Neither set_per_process_memory_fraction nor set_memory_fraction available in this PyTorch version")
-            
-            # Enable memory efficient attention if available
-            if hasattr(torch.backends.cuda, 'enable_math_sdp'):
-                torch.backends.cuda.enable_math_sdp(True)
-                torch.backends.cuda.enable_flash_sdp(True)
-                torch.backends.cuda.enable_mem_efficient_sdp(True)
-                output_to_terminal_successful("Enabled efficient attention backends")
-
-    def EnableAggressiveMemoryOptimizationPostprocess(self, enable_aggressive_memory_optimization, chunk_index):
-        """
-        Enable aggressive memory optimization for post-processing between video chunks.
-        
-        This function handles GPU memory cleanup between video chunk generations to prevent
-        out-of-memory errors and optimize VRAM usage during sequential chunk processing.
-        
-        Args:
-            enable_aggressive_memory_optimization (bool): Whether to enable aggressive memory cleanup
-            chunk_index (int): Current chunk index being processed
-            
-        Features:
-            - Explicit variable deletion for GPU memory cleanup
-            - Multiple rounds of garbage collection and CUDA cache clearing
-            - VRAM usage monitoring and reporting
-            - GPU memory management for multi-chunk video generation
-        """
-        if enable_aggressive_memory_optimization:
-            # Clean up previous chunk data
-            if chunk_index > 0:
-                # Explicitly delete variables that might hold GPU memory
-                vars_to_delete = ['output_image', 'out_latent', 'in_latent', 'temp_positive_clip', 'temp_negative_clip', 
-                                'generation_model', 'generation_clip', 'model_high_cfg', 'model_low_cfg']
-                for var_name in vars_to_delete:
-                    if var_name in locals():
-                        try:
-                            del locals()[var_name]
-                        except:
-                            pass
-                
-                # Force multiple rounds of cleanup for stubborn references
-                for _ in range(3):
-                    gc.collect()
-                    torch.cuda.empty_cache()
-                    #mm.soft_empty_cache()
-                
-                # Report memory status
-                if torch.cuda.is_available():
-                    current_memory = torch.cuda.memory_allocated() / 1024**3
-                    max_memory = torch.cuda.max_memory_allocated() / 1024**3
-                    output_to_terminal_successful(f"VRAM: Current {current_memory:.2f}GB, Peak {max_memory:.2f}GB")
