@@ -9,6 +9,7 @@ from comfy_extras.nodes_model_advanced import ModelSamplingSD3
 from comfy_extras.nodes_cfg import CFGZeroStar
 from comfy.utils import load_torch_file
 from .core import *
+from .cache_manager import CacheManager
 from .wan_first_last_first_frame_to_video import WanFirstLastFirstFrameToVideo
 from .wan_video_vae_decode import WanVideoVaeDecode
 from .wan_get_max_image_resolution_by_aspect_ratio import WanGetMaxImageResolutionByAspectRatio
@@ -51,6 +52,9 @@ RifeTensorrt = imported_nodes.get("RifeTensorrt")
 
 
 class WanImageToVideoAdvancedSampler:
+    # Class-level generic cache manager
+    _cache_manager = CacheManager()
+    
     @classmethod
     def INPUT_TYPES(s):
         
@@ -127,8 +131,6 @@ class WanImageToVideoAdvancedSampler:
                 ("start_image_clip_vision_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CLIP vision for the start image. If disabled, the start image will be used as a static frame."})),
                 ("end_image_clip_vision_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CLIP vision for the end image. If disabled, the end image will be used as a static frame."})),
                 
-
-                
                 # ═════════════════════════════════════════════════════════════════
                 # ⚙️ SAMPLING CONFIGURATION
                 # ═════════════════════════════════════════════════════════════════
@@ -160,11 +162,6 @@ class WanImageToVideoAdvancedSampler:
                 ("frames_multiplier", ("INT", {"default": 2, "min": 2, "max": 100, "step":1, "advanced": True, "tooltip": "Multiplier for the number of frames generated during interpolation."})),
                 ("frames_clear_cache_after_n_frames", ("INT", {"default": 100, "min": 1, "max": 1000, "tooltip": "Clear the cache after processing this many frames. Helps manage memory usage during long video generation."})),
                 ("frames_use_cuda_graph", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Use CUDA Graphs for frame interpolation. Improves performance by reducing overhead during inference."})),
-
-                # ═════════════════════════════════════════════════════════════════
-                # 🚀 MEMORY OPTIMIZATION
-                # ═════════════════════════════════════════════════════════════════
-                ("cuda_memory_fraction", ("FLOAT", {"default": 100.0, "min": 0.0, "max": 100.0, "step":0.01, "tooltip": "Percentage of available GPU VRAM to reserve for CUDA operations. 100% uses all available memory, lower values leave memory for other processes. Useful when running multiple AI applications simultaneously."})),
             ]),
             "optional": OrderedDict([
                 ("lora_stack", (any_type, {"default": None, "advanced": True, "tooltip": "Stack of LoRAs to apply to the diffusion model. Each LoRA modifies the model's behavior."})),
@@ -181,7 +178,7 @@ class WanImageToVideoAdvancedSampler:
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, cuda_memory_fraction=100.0, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True):
+    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True):
         self.default_fps = 16.0
 
         gc.collect()
@@ -189,14 +186,29 @@ class WanImageToVideoAdvancedSampler:
         #mm.soft_empty_cache()
 
         model = self.load_model(GGUF, Diffusor, Use_Model_Type, Diffusor_weight_dtype)
+        mm.throw_exception_if_processing_interrupted()
+
         output_to_terminal_successful("Loading VAE...")
         vae, = nodes.VAELoader().load_vae(vae)
         mm.throw_exception_if_processing_interrupted()
 
         output_to_terminal_successful("Loading CLIP...")
-        clip, = nodes.CLIPLoader().load_clip(clip, clip_type, clip_device)
-        clip_set_last_layer = nodes.CLIPSetLastLayer()
-        clip, = clip_set_last_layer.set_last_layer(clip, -1)  # Use all layers but truncate tokens
+        # Create cache key for CLIP model
+        clip_cache_key = f"{clip}_{clip_type}_{clip_device}"
+        # Check if CLIP model is already cached
+        clip_model = self._cache_manager.get_from_cache(clip_cache_key, 'cpu')
+        
+        if clip_model is not None:
+            output_to_terminal_successful(f"Loaded CLIP from cache...")
+        else:
+            clip_model, = nodes.CLIPLoader().load_clip(clip, clip_type, clip_device)
+            clip_set_last_layer = nodes.CLIPSetLastLayer()
+            clip_model, = clip_set_last_layer.set_last_layer(clip_model, -1)  # Use all layers but truncate tokens
+            
+            # Store new model in cache (move to CPU to save VRAM)
+            self._cache_manager.store_in_cache(clip_cache_key, clip_model, storage_device='cpu')
+            output_to_terminal_successful(f"Loaded CLIP from disk...")
+        
         mm.throw_exception_if_processing_interrupted()
 
         tea_cache = None
@@ -217,9 +229,9 @@ class WanImageToVideoAdvancedSampler:
         model_shift = self.initialize_model_shift(use_shift, shift)
         mm.throw_exception_if_processing_interrupted()
 
-        return self.postprocess(model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph)
+        return self.postprocess(model, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph)
 
-    def postprocess(self, model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph):
+    def postprocess(self, model, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph):
 
         output_to_terminal_successful("Generation started...")
 
@@ -241,17 +253,20 @@ class WanImageToVideoAdvancedSampler:
         wanVideoEnhanceAVideo = WanVideoEnhanceAVideo()
         cfgZeroStar = CFGZeroStar()
         colorMatch = ColorMatch()
+        clip_vision_start_image = None
+        clip_vision_end_image = None
+        positive_clip = None
+        negative_clip = None
+        clip_vision = None
 
-        if (image_generation_mode == TEXT_TO_VIDEO):
-            start_image = None
-            end_image = None
-
-        if (image_generation_mode == TEXT_TO_VIDEO):
-            imageSizer = ImageSizer()
-            image_width, image_height, = imageSizer.run(wan_model_size, 9, 16)
-            wan_max_resolution
-
-        mm.throw_exception_if_processing_interrupted()
+#        if (image_generation_mode == TEXT_TO_VIDEO):
+#            start_image = None
+#            end_image = None
+#
+#        if (image_generation_mode == TEXT_TO_VIDEO):
+#            imageSizer = ImageSizer()
+#            image_width, image_height, = imageSizer.run(wan_model_size, 9, 16)
+#            wan_max_resolution
 
         # Load CLIP Vision Model
         clip_vision = self.load_clip_vision_model(clip_vision_model, CLIPVisionLoader)
@@ -286,12 +301,13 @@ class WanImageToVideoAdvancedSampler:
         mm.throw_exception_if_processing_interrupted()
 
         # Process LoRA stack
-        working_model, clip = self.process_lora_stack(lora_stack, working_model, clip)
+        working_model, clip_model = self.process_lora_stack(lora_stack, working_model, clip_model)
         mm.throw_exception_if_processing_interrupted()
 
         # Generate video chunks sequentially
         images_chunk = []
-        original_image = start_image if start_image is not None else None
+        original_image = start_image
+        output_image = None
         
         for chunk_index in range(total_video_chunks):
             mm.throw_exception_if_processing_interrupted()
@@ -299,58 +315,67 @@ class WanImageToVideoAdvancedSampler:
             torch.cuda.empty_cache()
             #mm.soft_empty_cache()
 
-            if (image_generation_mode == TEXT_TO_VIDEO and chunk_index == 1):
-                start_image = images_chunk[-1][-1]  # Use last frame of previous chunk as start image
-                original_image = images_chunk[-1][0] # Use first frame of previous chunk as original image
-                image_generation_mode = START_IMAGE  # Switch to START_IMAGE mode after first chunk
+#            if (image_generation_mode == TEXT_TO_VIDEO and chunk_index == 1):
+#                start_image = images_chunk[len(images_chunk) - 1][len(images_chunk[len(images_chunk) - 1]) - 1]  # Use last frame of previous chunk as start image
+#                original_image = images_chunk[len(images_chunk) - 1][0] # Use first frame of previous chunk as original image
+#                image_generation_mode = START_IMAGE  # Switch to START_IMAGE mode after first chunk
 
             output_to_terminal_successful(f"Generating video chunk {chunk_index + 1}/{total_video_chunks}...")
             mm.throw_exception_if_processing_interrupted()
             
             # Clone models with explicit cleanup of source references
             generation_model = working_model.clone()
-            generation_clip = clip.clone()
+            generation_clip = clip_model.clone()
             
-            if (lora_stack is not None):
-                generation_model, generation_clip = self.process_lora_stack(lora_stack, generation_model, generation_clip)
-            mm.throw_exception_if_processing_interrupted()
-
             if (prompt_stack is not None):
                 positive, negative, prompt_loras = self.get_current_prompt(prompt_stack, chunk_index, positive, negative)
                 generation_model, generation_clip = self.process_lora_stack(prompt_loras, generation_model, generation_clip)
-            mm.throw_exception_if_processing_interrupted()
-
-            # Quality preservation: Use multiple frames for smoother transition
-            # Removed quality preservation functionality
-            mm.throw_exception_if_processing_interrupted()
-
-            if (image_generation_mode != TEXT_TO_VIDEO):
-                # Process start and end images
-                start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image = self.process_start_and_end_images(start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size, image_generation_mode)
                 mm.throw_exception_if_processing_interrupted()
+
+            # Get original start_image dimensions if available
+            if start_image is not None and (image_generation_mode == START_IMAGE or image_generation_mode == START_END_IMAGE or image_generation_mode == START_TO_END_TO_START_IMAGE):
+                # ComfyUI images are tensors with shape [batch, height, width, channels]
+                output_to_terminal_successful(f"Original start_image dimensions: {start_image.shape[2]}x{start_image.shape[1]}")
+
+                # Process Start Image
+                start_image, image_width, image_height, clip_vision_start_image = self.process_image(
+                    start_image, start_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, 
+                    CLIPVisionEncoder, large_image_side, wan_model_size, start_image.shape[2], start_image.shape[1], "Start Image"
+                )
+
+            # Get original end_image dimensions if available
+            if end_image is not None and (image_generation_mode == END_TO_START_IMAGE):
+                # ComfyUI images are tensors with shape [batch, height, width, channels]
+                output_to_terminal_successful(f"Original end_image dimensions: {end_image.shape[2]}x{end_image.shape[1]}")
+
+                end_image, image_width, image_height, clip_vision_end_image = self.process_image(
+                    end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution,
+                    CLIPVisionEncoder, large_image_side, wan_model_size, end_image.shape[2], end_image.shape[1], "End Image"
+                )
+            mm.throw_exception_if_processing_interrupted()
 
             # Apply CausVid LoRA processing for current chunk
             model_high_cfg, model_low_cfg, generation_clip = self.apply_causvid_lora_processing(generation_model, generation_clip, lora_loader, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, use_dual_samplers)
             mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Encoding Positive CLIP text...")
-            temp_positive_clip, = text_encode.encode(generation_clip, positive)
+            positive_clip, = text_encode.encode(generation_clip, positive)
             mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Encoding Negative CLIP text...")
-            temp_negative_clip, = text_encode.encode(generation_clip, negative)
+            negative_clip, = text_encode.encode(generation_clip, negative)
             mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Wan Image to Video started...")
-            temp_positive_clip, temp_negative_clip, in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, fill_noise_latent, image_generation_mode)
+            positive_clip, negative_clip, in_latent, = wan_image_to_video.encode(positive_clip, negative_clip, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, fill_noise_latent, image_generation_mode)
             mm.throw_exception_if_processing_interrupted()
 
             if (use_dual_samplers):
                 # Apply dual sampler processing
-                out_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, generation_clip, noise_seed, total_steps, high_cfg, low_cfg, temp_positive_clip, temp_negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
+                out_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, generation_clip, noise_seed, total_steps, high_cfg, low_cfg, positive_clip, negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
             else:
                 # Apply single sampler processing
-                out_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, generation_clip, noise_seed, total_steps, high_cfg, temp_positive_clip, temp_negative_clip, in_latent, high_denoise)
+                out_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, generation_clip, noise_seed, total_steps, high_cfg, positive_clip, negative_clip, in_latent, high_denoise)
             mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Vae Decode started...")
@@ -358,17 +383,19 @@ class WanImageToVideoAdvancedSampler:
             mm.throw_exception_if_processing_interrupted()
 
             # Subsequent chunks: use original_image as reference for consistency
-            if apply_color_match:
-                output_image = self.apply_color_match(original_image, output_image, True, colorMatch)
-                output_to_terminal_successful("Applied color matching using original image as reference for consistency")
+            output_image = self.apply_color_match_to_image(original_image, output_image, apply_color_match, colorMatch)
             mm.throw_exception_if_processing_interrupted()
             
-            images_chunk.append(output_image)
-            start_image = images_chunk[-1][-1]
+            if (total_video_chunks > 1):
+                start_image = output_image[-1].clone()
+                images_chunk.append(output_image[:-1])
+            else:
+                images_chunk.append(output_image)
 
             output_to_terminal_successful(f"Video chunk {chunk_index + 1} generated successfully")
 
         output_to_terminal_successful("All video chunks generated successfully")
+
         # Merge all video chunks in sequence with overlap handling
         if len(images_chunk) > 1:
             output_to_terminal_successful(f"Merging {len(images_chunk)} video chunks with simple concatenation...")
@@ -383,8 +410,10 @@ class WanImageToVideoAdvancedSampler:
         else:
             output_to_terminal_error("No video chunks generated")
 
-        # frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph
         mm.throw_exception_if_processing_interrupted()
+
+        if (output_image is None):
+            return (None, self.default_fps,)
 
         if (frames_interpolation and frames_engine != NONE):
             gc.collect()
@@ -436,6 +465,7 @@ class WanImageToVideoAdvancedSampler:
             if UnetLoaderGGUF is not None and GGUF != NONE:
                 # Use UnetLoaderGGUF to load the GGUF model
                 output_to_terminal_successful(f"Loading GGUF model: {GGUF}")
+                
                 gguf_loader = UnetLoaderGGUF()
                 model, = gguf_loader.load_unet(unet_name=GGUF)
                 output_to_terminal_successful(f"GGUF model {GGUF} loaded successfully using UnetLoaderGGUF")
@@ -657,51 +687,6 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_error(f"{image_type} is not provided, skipping...")
             
         return image, image_width, image_height, clip_vision_image
-
-    def process_start_and_end_images(self, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size, image_generation_mode):
-        """
-        Process start and end images, getting their dimensions and processing them.
-        
-        Args:
-            start_image: The start image tensor
-            start_image_clip_vision_enabled (bool): Whether CLIP vision is enabled for start image
-            end_image: The end image tensor  
-            end_image_clip_vision_enabled (bool): Whether CLIP vision is enabled for end image
-            clip_vision: The CLIP vision model
-            resizer: The image resizer instance
-            wan_max_resolution: The max resolution calculator
-            CLIPVisionEncoder: The CLIP vision encoder
-            large_image_side (int): The target size for the larger side
-            wan_model_size (str): The model size configuration
-            
-        Returns:
-            tuple: (start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image)
-        """
-        clip_vision_end_image = None
-        clip_vision_start_image = None
-
-        # Get original start_image dimensions if available
-        if start_image is not None and (image_generation_mode == START_IMAGE or image_generation_mode == START_END_IMAGE or image_generation_mode == START_TO_END_TO_START_IMAGE):
-            # ComfyUI images are tensors with shape [batch, height, width, channels]
-            output_to_terminal_successful(f"Original start_image dimensions: {start_image.shape[2]}x{start_image.shape[1]}")
-
-            # Process Start Image
-            start_image, image_width, image_height, clip_vision_start_image = self.process_image(
-                start_image, start_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, 
-                CLIPVisionEncoder, large_image_side, wan_model_size, start_image.shape[2], start_image.shape[1], "Start Image"
-            )
-
-        # Get original end_image dimensions if available
-        if end_image is not None and (image_generation_mode == END_TO_START_IMAGE):
-            # ComfyUI images are tensors with shape [batch, height, width, channels]
-            output_to_terminal_successful(f"Original end_image dimensions: {end_image.shape[2]}x{end_image.shape[1]}")
-
-            end_image, image_width, image_height, clip_vision_end_image = self.process_image(
-                end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution,
-                CLIPVisionEncoder, large_image_side, wan_model_size, end_image.shape[2], end_image.shape[1], "End Image"
-            )
-        
-        return start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image
 
     def apply_sage_attention(self, sage_attention, working_model, sage_attention_mode):
         """
@@ -943,12 +928,12 @@ class WanImageToVideoAdvancedSampler:
         
         return model_high_cfg, model_low_cfg, updated_clip
     
-    def apply_color_match(self, start_image, output_image, apply_color_match, colorMatch):
+    def apply_color_match_to_image(self, original_image, image, apply_color_match, colorMatch):
         """
-        Apply color matching between start and output images if enabled.
+        Apply color matching between original_image and images if enabled.
         
         Args:
-            start_image: Reference image for color matching (or None)
+            original_image: Reference image for color matching (or None)
             output_image: Target image to apply color correction to
             apply_color_match: Boolean flag to enable/disable color matching
             colorMatch: Color matching utility object
@@ -956,8 +941,73 @@ class WanImageToVideoAdvancedSampler:
         Returns:
             output_image: Processed image with or without color matching applied
         """
-        if (start_image is not None and apply_color_match):
+        if (image is not None and apply_color_match):
             output_to_terminal_successful("Applying color match to images...")
-            output_image, = colorMatch.colormatch(start_image, output_image, "hm-mvgd-hm", strength=1.0)
+            image, = colorMatch.colormatch(original_image, image, "hm-mvgd-hm", strength=1.0)
+
+        return image
+    
+    @classmethod
+    def clear_cache(cls, cache_key=None):
+        """
+        Clear cache entries using the generic cache manager.
+        
+        Args:
+            cache_key (str, optional): Specific key to clear. If None, clears all cache.
+        """
+        cls._cache_manager.clear_cache(cache_key)
+        if cache_key:
+            output_to_terminal_successful(f"Cache entry '{cache_key}' cleared")
+        else:
+            output_to_terminal_successful("All cache entries cleared")
+    
+    @classmethod
+    def get_cache_info(cls):
+        """Get information about cached objects."""
+        cache_keys = cls._cache_manager.get_cache_info()
+        cache_count = cls._cache_manager.cache_size()
+        
+        if cache_count > 0:
+            output_to_terminal_successful(f"Cache contains {cache_count} entries: {cache_keys}")
+            return cache_keys
+        else:
+            output_to_terminal_successful("Cache is empty")
+            return []
+    
+    @classmethod 
+    def cache_model(cls, cache_key, model, storage_device='cpu'):
+        """
+        Generic method to cache any model with user-provided key.
+        
+        Args:
+            cache_key (str): The cache key to store under
+            model: The model to cache
+            storage_device (str): Device to store on ('cpu' to save VRAM, 'cuda' to keep on GPU)
             
-        return output_image
+        Returns:
+            str: The cache key used for storage
+        """
+        cls._cache_manager.store_in_cache(cache_key, model, storage_device=storage_device)
+        output_to_terminal_successful(f"Model cached with key: {cache_key}")
+        return cache_key
+    
+    @classmethod
+    def load_cached_model(cls, cache_key, target_device="cuda"):
+        """
+        Generic method to load any cached model with user-provided key.
+        
+        Args:
+            cache_key (str): The cache key to look up
+            target_device (str): Device to move the model to
+            
+        Returns:
+            The cached model moved to target device, or None if not found
+        """
+        model = cls._cache_manager.get_from_cache(cache_key, target_device)
+        
+        if model is not None:
+            output_to_terminal_successful(f"Model loaded from cache: {cache_key}")
+        else:
+            output_to_terminal_successful(f"No cached model found for key: {cache_key}")
+            
+        return model
