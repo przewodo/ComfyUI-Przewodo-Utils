@@ -120,27 +120,14 @@ class WanImageToVideoAdvancedSampler:
                 ("total_video_chunks", ("INT", {"default": 1, "min": 1, "max": 1000, "step":1, "advanced": True, "tooltip": "Number of sequential video chunks to generate. Each chunk extends the total video duration. Higher values create longer videos by generating chunks in sequence."})),
                 
                 # ═════════════════════════════════════════════════════════════════
-                # 🔄 QUALITY PRESERVATION FOR MULTI-CHUNK GENERATION
-                # ═════════════════════════════════════════════════════════════════
-                ("enable_quality_preservation", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable advanced quality preservation techniques for multi-chunk video generation. Reduces degradation over time."})),
-                ("temporal_overlap_frames", ("INT", {"default": 3, "min": 1, "max": 8, "step": 1, "advanced": True, "tooltip": "Number of frames to overlap between chunks for temporal coherence. More frames = smoother transitions but slower generation."})),
-                ("latent_blend_strength", ("FLOAT", {"default": 0.2, "min": 0.0, "max": 1.0, "step": 0.05, "advanced": True, "tooltip": "Strength of latent space blending between chunks. Higher values preserve more continuity but may reduce variation."})),
-                ("artifact_reduction", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Apply gaussian blur artifact reduction to transition frames. Helps reduce compression artifacts between chunks."})),
-                
-                # ═════════════════════════════════════════════════════════════════
-                # 👁️ CLIP VISION SETTINGS
+                # ️ CLIP VISION SETTINGS
                 # ═════════════════════════════════════════════════════════════════
                 ("clip_vision_model", (clip_vision_models, {"default": NONE, "advanced": True, "tooltip": "CLIP Vision model for processing input images. Required for image-to-video generation."})),
                 ("clip_vision_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 100.0, "step":0.01, "tooltip": "Strength of CLIP vision influence on the generation. Higher values make the output more similar to input images."})),
                 ("start_image_clip_vision_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CLIP vision for the start image. If disabled, the start image will be used as a static frame."})),
                 ("end_image_clip_vision_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CLIP vision for the end image. If disabled, the end image will be used as a static frame."})),
                 
-                # ═════════════════════════════════════════════════════════════════
-                # 🎯 FEATURE CONSISTENCY SETTINGS
-                # ═════════════════════════════════════════════════════════════════
-                ("feature_consistency_strength", ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.05, "advanced": True, "tooltip": "Strength of feature consistency enforcement. Higher values better preserve all body features including face, body shape, hands, feet, genitals, tattoos, jewelry, clothing patterns across frames."})),
-                ("reference_frame_interval", ("INT", {"default": 3, "min": 1, "max": 10, "step": 1, "advanced": True, "tooltip": "How often to re-inject reference image features during generation. Lower values = more consistency but may reduce motion."})),
-                ("detail_preservation_mode", (["disabled", "light", "medium", "strong"], {"default": "medium", "advanced": True, "tooltip": "Detail preservation mode. Strong mode best preserves features but may reduce motion fluidity."})),
+
                 
                 # ═════════════════════════════════════════════════════════════════
                 # ⚙️ SAMPLING CONFIGURATION
@@ -195,45 +182,17 @@ class WanImageToVideoAdvancedSampler:
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, enable_quality_preservation=True, temporal_overlap_frames=3, latent_blend_strength=0.2, artifact_reduction=True, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, feature_consistency_strength=0.8, reference_frame_interval=3, detail_preservation_mode="medium", enable_aggressive_memory_optimization=True, fill_noise_latent=0.5, cuda_memory_fraction=100.0, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True):
+    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, enable_aggressive_memory_optimization=True, fill_noise_latent=0.5, cuda_memory_fraction=100.0, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True):
         self.default_fps = 16.0
+
         # Aggressive memory optimization setup
-        if enable_aggressive_memory_optimization:
-            output_to_terminal_successful("Enabling aggressive memory optimization...")
-            
-            # Force aggressive garbage collection
-            gc.collect()
-            torch.cuda.empty_cache()
-            #mm.soft_empty_cache()
-            
-            # Set memory fraction if available (handle both old and new PyTorch APIs)
-            memory_fraction = cuda_memory_fraction / 100.0  # Convert percentage to fraction
-            if hasattr(torch.cuda, 'set_per_process_memory_fraction'):
-                try:
-                    torch.cuda.set_per_process_memory_fraction(memory_fraction)
-                    output_to_terminal_successful(f"Set CUDA per-process memory fraction to {cuda_memory_fraction}%")
-                except Exception as e:
-                    output_to_terminal_error(f"Failed to set per-process memory fraction: {e}")
-            elif hasattr(torch.cuda, 'set_memory_fraction'):
-                try:
-                    torch.cuda.set_memory_fraction(memory_fraction)
-                    output_to_terminal_successful(f"Set CUDA memory fraction to {cuda_memory_fraction}%")
-                except Exception as e:
-                    output_to_terminal_error(f"Failed to set memory fraction: {e}")
-            else:
-                output_to_terminal_error("Neither set_per_process_memory_fraction nor set_memory_fraction available in this PyTorch version")
-            
-            # Enable memory efficient attention if available
-            if hasattr(torch.backends.cuda, 'enable_math_sdp'):
-                torch.backends.cuda.enable_math_sdp(True)
-                torch.backends.cuda.enable_flash_sdp(True)
-                torch.backends.cuda.enable_mem_efficient_sdp(True)
-                output_to_terminal_successful("Enabled efficient attention backends")
+        self.EnableAggressiveMemoryOptimization(enable_aggressive_memory_optimization, cuda_memory_fraction)
         mm.throw_exception_if_processing_interrupted()
         
         gc.collect()
         torch.cuda.empty_cache()
         #mm.soft_empty_cache()
+
         model = self.load_model(GGUF, Diffusor, Use_Model_Type, Diffusor_weight_dtype)
         output_to_terminal_successful("Loading VAE...")
         vae, = nodes.VAELoader().load_vae(vae)
@@ -263,9 +222,9 @@ class WanImageToVideoAdvancedSampler:
         model_shift = self.initialize_model_shift(use_shift, shift)
         mm.throw_exception_if_processing_interrupted()
 
-        return self.postprocess(model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, enable_quality_preservation, temporal_overlap_frames, latent_blend_strength, artifact_reduction, prompt_stack, feature_consistency_strength, reference_frame_interval, detail_preservation_mode, enable_aggressive_memory_optimization, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph)
+        return self.postprocess(model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, enable_aggressive_memory_optimization, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph)
 
-    def postprocess(self, model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, enable_quality_preservation, temporal_overlap_frames, latent_blend_strength, artifact_reduction, prompt_stack, feature_consistency_strength, reference_frame_interval, detail_preservation_mode, enable_aggressive_memory_optimization, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph):
+    def postprocess(self, model, vae, clip, clip_type, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, enable_aggressive_memory_optimization, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph):
 
         output_to_terminal_successful("Generation started...")
 
@@ -335,57 +294,24 @@ class WanImageToVideoAdvancedSampler:
         working_model, clip = self.process_lora_stack(lora_stack, working_model, clip)
         mm.throw_exception_if_processing_interrupted()
 
-        # Generate video chunks sequentially with quality preservation
-        images_chunck = []
+        # Generate video chunks sequentially
+        images_chunk = []
         original_image = start_image if start_image is not None else None
-        last_latent = None  # Store latent for continuity
-        reference_clip_vision = None  # Store reference CLIP vision features for consistency
         
         for chunk_index in range(total_video_chunks):
-            if (image_generation_mode == TEXT_TO_VIDEO and chunk_index == 1):
-                start_image = images_chunck[-1][0]  # Use last frame of previous chunk as start image
-                original_image = start_image
 
-            if (chunk_index == 1 and image_generation_mode == TEXT_TO_VIDEO):
+            if (image_generation_mode == TEXT_TO_VIDEO and chunk_index == 1):
+                start_image = images_chunk[-1][-1]  # Use last frame of previous chunk as start image
+                original_image = images_chunk[-1][0] # Use first frame of previous chunk as original image
                 image_generation_mode = START_IMAGE  # Switch to START_IMAGE mode after first chunk
-                # Prepare reference features for consistency
-                if feature_consistency_strength > 0 and original_image is not None and clip_vision is not None:
-                    try:
-                        reference_clip_vision, = CLIPVisionEncoder.encode(clip_vision, original_image, "center")
-                        output_to_terminal_successful(f"Reference CLIP vision features extracted for consistency (strength: {feature_consistency_strength})")
-                    except Exception as e:
-                        output_to_terminal_error(f"Failed to extract reference features: {e}")
-                        reference_clip_vision = None
-                mm.throw_exception_if_processing_interrupted()
+
+            mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful(f"Generating video chunk {chunk_index + 1}/{total_video_chunks}...")
             mm.throw_exception_if_processing_interrupted()
             
             # Aggressive memory cleanup before each chunk
-            if enable_aggressive_memory_optimization:
-                # Clean up previous chunk data
-                if chunk_index > 0:
-                    # Explicitly delete variables that might hold GPU memory
-                    vars_to_delete = ['output_image', 'out_latent', 'in_latent', 'temp_positive_clip', 'temp_negative_clip', 
-                                    'generation_model', 'generation_clip', 'model_high_cfg', 'model_low_cfg']
-                    for var_name in vars_to_delete:
-                        if var_name in locals():
-                            try:
-                                del locals()[var_name]
-                            except:
-                                pass
-                    
-                    # Force multiple rounds of cleanup for stubborn references
-                    for _ in range(3):
-                        gc.collect()
-                        torch.cuda.empty_cache()
-                        #mm.soft_empty_cache()
-                    
-                    # Report memory status
-                    if torch.cuda.is_available():
-                        current_memory = torch.cuda.memory_allocated() / 1024**3
-                        max_memory = torch.cuda.max_memory_allocated() / 1024**3
-                        output_to_terminal_successful(f"VRAM: Current {current_memory:.2f}GB, Peak {max_memory:.2f}GB")
+            self.EnableAggressiveMemoryOptimizationPostprocess(enable_aggressive_memory_optimization, chunk_index)
             
             # Initialize variables with explicit GPU memory management
             gc.collect()
@@ -406,154 +332,51 @@ class WanImageToVideoAdvancedSampler:
             if enable_aggressive_memory_optimization:
                 torch.cuda.empty_cache()
 
-            positive, negative, loras = self.get_current_prompt(prompt_stack, chunk_index, positive, negative)
+            if (lora_stack is not None):
+                generation_model, generation_clip = self.process_lora_stack(lora_stack, generation_model, generation_clip)
             mm.throw_exception_if_processing_interrupted()
 
-            if (loras is not None):
-                generation_model, generation_clip = self.process_lora_stack(loras, generation_model, generation_clip)
+            if (prompt_stack is not None):
+                positive, negative, prompt_loras = self.get_current_prompt(prompt_stack, chunk_index, positive, negative)
+                generation_model, generation_clip = self.process_lora_stack(prompt_loras, generation_model, generation_clip)
             mm.throw_exception_if_processing_interrupted()
 
             # Quality preservation: Use multiple frames for smoother transition
-            if enable_quality_preservation and chunk_index > 0 and images_chunck:
-                prev_chunk = images_chunck[-1]  # Get the last chunk from the list
-                overlap_frames = min(temporal_overlap_frames, prev_chunk.shape[0])
-                
-                # Use weighted average of last frames to reduce single-frame artifacts
-                if overlap_frames > 1:
-                    # Take last N frames and compute weighted average (more weight to recent frames)
-                    weights = torch.linspace(0.3, 1.0, overlap_frames).unsqueeze(1).unsqueeze(2).unsqueeze(3)
-                    weights = weights.to(prev_chunk.device)
-                    
-                    last_frames = prev_chunk[-overlap_frames:]
-                    weighted_frames = last_frames * weights
-                    start_image = weighted_frames.mean(dim=0, keepdim=True)
-                    
-                    output_to_terminal_successful(f"Using weighted average of last {overlap_frames} frames for temporal coherence")
-                else:
-                    # Fallback to single frame with noise reduction
-                    start_image = prev_chunk[-1:]
-                    
-                # Apply artifact reduction if enabled
-                if artifact_reduction:
-                    try:
-                        if TORCHVISION_AVAILABLE:
-                            start_image = gaussian_blur(start_image, kernel_size=3, sigma=0.5)
-                            output_to_terminal_successful("Applied artifact reduction to transition frame")
-                        else:
-                            output_to_terminal_error("torchvision not available for artifact reduction, skipping...")
-                    except Exception as e:
-                        output_to_terminal_error(f"Artifact reduction failed: {e}")
-            elif chunk_index > 0 and images_chunck:
-                # Basic fallback: just use last frame
-                start_image = images_chunck[-1][-1:]
-                output_to_terminal_successful("Using simple last frame transition (quality preservation disabled)")
+            # Removed quality preservation functionality
             mm.throw_exception_if_processing_interrupted()
 
             if (image_generation_mode != TEXT_TO_VIDEO):
-                # Process start and end images with enhanced feature consistency
-                start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image = self.process_start_and_end_images_with_consistency(
-                    start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled,
-                    clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
-                    image_generation_mode, reference_clip_vision, feature_consistency_strength, 
-                    chunk_index, reference_frame_interval, detail_preservation_mode
-                )
+                # Process start and end images
+                start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image = self.process_start_and_end_images(start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled,clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size)
                 mm.throw_exception_if_processing_interrupted()
 
             # Apply CausVid LoRA processing for current chunk
-            model_high_cfg, model_low_cfg, generation_clip = self.apply_causvid_lora_processing(
-                generation_model, generation_clip, lora_loader, causvid_lora, 
-                high_cfg_causvid_strength, low_cfg_causvid_strength, use_dual_samplers
-            )
+            model_high_cfg, model_low_cfg, generation_clip = self.apply_causvid_lora_processing(generation_model, generation_clip, lora_loader, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, use_dual_samplers)
             mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Encoding Positive CLIP text...")
-            
-            # Enhance positive prompt with consistency keywords based on detail preservation mode
-            enhanced_positive = self.enhance_prompt_for_consistency(positive, detail_preservation_mode, chunk_index)
-            temp_positive_clip, = text_encode.encode(generation_clip, enhanced_positive)
+            temp_positive_clip, = text_encode.encode(generation_clip, positive)
             mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Encoding Negative CLIP text...")
-            
-            # Enhance negative prompt to avoid inconsistencies
-            enhanced_negative = self.enhance_negative_prompt_for_consistency(negative, detail_preservation_mode)
-            temp_negative_clip, = text_encode.encode(generation_clip, enhanced_negative)
+            temp_negative_clip, = text_encode.encode(generation_clip, negative)
             mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Wan Image to Video started...")
             temp_positive_clip, temp_negative_clip, in_latent, = wan_image_to_video.encode(temp_positive_clip, temp_negative_clip, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, fill_noise_latent, image_generation_mode)
             mm.throw_exception_if_processing_interrupted()
 
-            # Enhanced latent space continuity with feature consistency
-            if enable_quality_preservation and chunk_index > 0 and last_latent is not None and latent_blend_strength > 0:
-                try:
-                    # Extract the actual tensor from last_latent (handle both dict and tensor formats)
-                    if isinstance(last_latent, dict) and 'samples' in last_latent:
-                        last_latent_tensor = last_latent['samples']
-                    else:
-                        last_latent_tensor = last_latent
-                    
-                    # Extract the actual tensor from in_latent (handle both dict and tensor formats)
-                    if isinstance(in_latent, dict) and 'samples' in in_latent:
-                        in_latent_tensor = in_latent['samples']
-                        is_in_latent_dict = True
-                    else:
-                        in_latent_tensor = in_latent
-                        is_in_latent_dict = False
-                    
-                    # Blend the new latent with the last latent for smoother transition
-                    if in_latent_tensor.shape == last_latent_tensor.shape:
-                        # Enhanced blending with feature consistency consideration
-                        effective_blend_strength = latent_blend_strength
-                        
-                        # Increase blending strength for better feature consistency
-                        if detail_preservation_mode == "strong":
-                            effective_blend_strength = min(0.6, latent_blend_strength * 1.5)
-                        elif detail_preservation_mode == "medium":
-                            effective_blend_strength = min(0.5, latent_blend_strength * 1.2)
-                        
-                        # Take more frames for stronger consistency
-                        blend_frames = min(3 if detail_preservation_mode == "strong" else 2, 
-                                         last_latent_tensor.shape[2])
-                        
-                        # Create blended frames with memory-efficient operations
-                        with torch.no_grad():  # Disable gradient computation for memory efficiency
-                            blended_frames = (
-                                in_latent_tensor[:, :, :blend_frames] * (1 - effective_blend_strength) + 
-                                last_latent_tensor[:, :, -blend_frames:] * effective_blend_strength
-                            )
-                        
-                        # Update the latent with blended frames
-                        if is_in_latent_dict:
-                            in_latent['samples'][:, :, :blend_frames] = blended_frames
-                        else:
-                            in_latent[:, :, :blend_frames] = blended_frames
-                            
-                        # Clean up temporary tensor
-                        del blended_frames
-                        if enable_aggressive_memory_optimization:
-                            torch.cuda.empty_cache()
-                            
-                        output_to_terminal_successful(f"Applied enhanced latent space blending (strength: {effective_blend_strength:.2f}, frames: {blend_frames}, mode: {detail_preservation_mode})")
-                    else:
-                        output_to_terminal_error(f"Latent shape mismatch: {in_latent_tensor.shape} vs {last_latent_tensor.shape}, skipping blend")
-                except Exception as e:
-                    output_to_terminal_error(f"Enhanced latent blending failed, continuing without: {e}")
-                finally:
-                    # Ensure cleanup even if blending fails
-                    if enable_aggressive_memory_optimization:
-                        torch.cuda.empty_cache()
-
-            mm.throw_exception_if_processing_interrupted()
             gc.collect()
             torch.cuda.empty_cache()
             #mm.soft_empty_cache()
+
             if (use_dual_samplers):
                 # Apply dual sampler processing
                 out_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, generation_clip, noise_seed, total_steps, high_cfg, low_cfg, temp_positive_clip, temp_negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
             else:
                 # Apply single sampler processing
                 out_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, generation_clip, noise_seed, total_steps, high_cfg, temp_positive_clip, temp_negative_clip, in_latent, high_denoise)
+            mm.throw_exception_if_processing_interrupted()
 
             # Memory cleanup after sampling with enhanced cleanup
             if enable_aggressive_memory_optimization:
@@ -580,112 +403,32 @@ class WanImageToVideoAdvancedSampler:
                     gc.collect()
                     torch.cuda.empty_cache()
                     #mm.soft_empty_cache()
-
-            # Store latent for next chunk continuity with memory optimization
-            if enable_quality_preservation:
-                # Handle both tensor and dict formats from KSampler with explicit cleanup
-                if isinstance(out_latent, dict) and 'samples' in out_latent:
-                    # Clone the tensor to avoid holding references to the full sampler output
-                    if out_latent['samples'] is not None:
-                        with torch.no_grad():
-                            last_latent = out_latent['samples'].clone().detach()
-                    else:
-                        last_latent = None
-                elif hasattr(out_latent, 'clone'):
-                    if out_latent is not None:
-                        with torch.no_grad():
-                            last_latent = out_latent.clone().detach()
-                    else:
-                        last_latent = None
-                else:
-                    last_latent = out_latent  # Fallback for other types
-                
-                # Clear out_latent reference to reduce memory pressure
-                if enable_aggressive_memory_optimization:
-                    torch.cuda.empty_cache()
             mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Vae Decode started...")
             output_image, = wan_video_vae_decode.decode(out_latent, vae, 0, image_generation_mode)
 
-            # Enhanced color matching: ALWAYS use start_image (original_image) as reference
-            if chunk_index == 0 and original_image is not None:
-                # First chunk: match to start_image (original_image)
-                output_image = self.apply_color_match(original_image, output_image, apply_color_match, colorMatch)
-            else:
-                # Subsequent chunks: ALWAYS use start_image (original_image) as reference for consistency
-                if apply_color_match and images_chunck and enable_quality_preservation:
-                    output_image = self.apply_color_match(original_image, output_image, True, colorMatch)
-                    output_to_terminal_successful("Applied color matching using start_image as reference for consistency")
-                elif apply_color_match and original_image is not None:
-                    # Fallback: use start_image (original_image) as reference
-                    output_image = self.apply_color_match(original_image, output_image, apply_color_match, colorMatch)
+            # Subsequent chunks: use original_image as reference for consistency
+            if apply_color_match:
+                output_image = self.apply_color_match(original_image, output_image, True, colorMatch)
+                output_to_terminal_successful("Applied color matching using original image as reference for consistency")
             mm.throw_exception_if_processing_interrupted()
             
-            images_chunck.append(output_image)
-            
-            quality_status = "with quality preservation" if enable_quality_preservation else "standard"
-            output_to_terminal_successful(f"Video chunk {chunk_index + 1} generated successfully {quality_status}")
+            images_chunk.append(output_image)
+
+            output_to_terminal_successful(f"Video chunk {chunk_index + 1} generated successfully")
 
         output_to_terminal_successful("All video chunks generated successfully")
         # Merge all video chunks in sequence with overlap handling
-        if len(images_chunck) > 1:
-            output_to_terminal_successful(f"Merging {len(images_chunck)} video chunks with smart concatenation...")
+        if len(images_chunk) > 1:
+            output_to_terminal_successful(f"Merging {len(images_chunk)} video chunks with simple concatenation...")
 
-            if enable_quality_preservation:
-                # Smart concatenation: remove overlapping frames to avoid duplicates
-                # Use memory-efficient approach by building list first, then concatenating once
-                chunks_to_merge = [images_chunck[0]]  # Start with first chunk
-                
-                for i in range(1, len(images_chunck)):  # Start from chunk 1, since chunk 0 is already added
-                    mm.throw_exception_if_processing_interrupted()
-                    current_chunk = images_chunck[i]
-                    
-                    # Skip the first frame of subsequent chunks to avoid overlap
-                    # (since we used the last frame of previous chunk as start)
-                    if current_chunk.shape[0] > 1:
-                        chunks_to_merge.append(current_chunk[1:])  # Skip first frame by slicing [1:]
-                        output_to_terminal_successful(f"Prepared chunk {i + 1} for merging with overlap removal (skipped first frame)")
-                    else:
-                        # If chunk has only 1 frame, keep it but blend with previous
-                        if chunks_to_merge:
-                            # Blend the single frame with the last frame for smoother transition
-                            prev_chunk = chunks_to_merge[-1]
-                            prev_last = prev_chunk[-1:]
-                            with torch.no_grad():  # Memory efficient blending
-                                blended_frame = (prev_last * 0.3 + current_chunk * 0.7)
-                            chunks_to_merge.append(blended_frame)
-                            del blended_frame, prev_last  # Clean up immediately
-                            output_to_terminal_successful(f"Blended single-frame chunk {i + 1}")
-                        else:
-                            chunks_to_merge.append(current_chunk)
-                    
-                    # Periodic memory cleanup during chunk preparation
-                    if enable_aggressive_memory_optimization and i % 5 == 0:
-                        torch.cuda.empty_cache()
+            # Simple concatenation without overlap handling
+            output_image = torch.cat(images_chunk, dim=0)
+            output_to_terminal_successful(f"Final video shape after simple concatenation: {output_image.shape}")
 
-                # Concatenate all processed chunks in one operation (more memory efficient)
-                with torch.no_grad():
-                    output_image = torch.cat(chunks_to_merge, dim=0)
-                output_to_terminal_successful(f"Final video shape after smart concatenation: {output_image.shape}")
-                
-                # Clean up intermediate chunks to save memory
-                del chunks_to_merge
-                if enable_aggressive_memory_optimization:
-                    gc.collect()
-                    torch.cuda.empty_cache()
-                
-                # Verify temporal consistency
-                total_expected_frames = sum(chunk.shape[0] for chunk in images_chunck) - (len(images_chunck) - 1)
-                actual_frames = output_image.shape[0]
-                output_to_terminal_successful(f"Frame count: Expected ~{total_expected_frames}, Got {actual_frames}")
-            else:
-                # Simple concatenation without overlap handling
-                output_image = torch.cat(images_chunck, dim=0)
-                output_to_terminal_successful(f"Final video shape after simple concatenation: {output_image.shape}")
-            
-        elif len(images_chunck) == 1:
-            output_image = images_chunck[0]
+        elif len(images_chunk) == 1:
+            output_image = images_chunk[0]
             output_to_terminal_successful(f"Single chunk video shape: {output_image.shape}")
         else:
             output_to_terminal_error("No video chunks generated")
@@ -693,8 +436,8 @@ class WanImageToVideoAdvancedSampler:
         # Final memory cleanup and reporting with comprehensive cleanup
         if enable_aggressive_memory_optimization:
             # Clean up any remaining variables with enhanced cleanup
-            cleanup_vars = ['images_chunck', 'merged_chunks', 'working_model', 'generation_model', 
-                          'generation_clip', 'last_latent', 'reference_clip_vision']
+            cleanup_vars = ['images_chunk', 'merged_chunks', 'working_model', 'generation_model', 
+                          'generation_clip', 'last_latent']
             for var_name in cleanup_vars:
                 if var_name in locals():
                     try:
@@ -963,104 +706,10 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_error("No clip vision model selected, skipping...")
             return None
 
-    def process_start_and_end_images_with_consistency(self, start_image, start_image_clip_vision_enabled, 
-                                                    end_image, end_image_clip_vision_enabled, clip_vision, 
-                                                    resizer, wan_max_resolution, CLIPVisionEncoder, 
-                                                    large_image_side, wan_model_size, image_generation_mode,
-                                                    reference_clip_vision, feature_consistency_strength,
-                                                    chunk_index, reference_frame_interval, detail_preservation_mode):
-        """
-        Enhanced version of process_start_and_end_images with feature consistency support.
-        
-        This method maintains consistency of features like tattoos, jewelry, clothing patterns
-        across video chunks by blending CLIP vision features with the original reference.
-        """
-        
-        # First, process images normally
-        start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image = self.process_start_and_end_images(
-            start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled,
-            clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
-            image_generation_mode
-        )
-        
-        # Apply feature consistency if enabled and we have reference features
-        if (feature_consistency_strength > 0 and reference_clip_vision is not None and 
-            clip_vision_start_image is not None and detail_preservation_mode != "disabled"):
-            
-            try:
-                # Determine consistency strength based on mode and frame interval
-                consistency_factor = feature_consistency_strength
-                
-                # Adjust based on detail preservation mode
-                mode_multipliers = {
-                    "light": 0.6,
-                    "medium": 1.0,
-                    "strong": 1.4
-                }
-                consistency_factor *= mode_multipliers.get(detail_preservation_mode, 1.0)
-                
-                # Apply periodic stronger consistency injections
-                if chunk_index % reference_frame_interval == 0:
-                    consistency_factor *= 1.3  # Boost consistency at intervals
-                    output_to_terminal_successful(f"Applying enhanced feature consistency at frame interval (factor: {consistency_factor:.2f})")
-                
-                # Blend CLIP vision features for consistency
-                # This preserves the original features while allowing for some motion/pose changes
-                original_clip_features = clip_vision_start_image
-                
-                # Create a weighted blend: more original features = better consistency
-                blended_features = self.blend_clip_vision_features(
-                    original_clip_features, reference_clip_vision, consistency_factor
-                )
-                
-                clip_vision_start_image = blended_features
-                
-                # Apply same logic to end image if it exists and is enabled
-                if clip_vision_end_image is not None and end_image_clip_vision_enabled:
-                    blended_end_features = self.blend_clip_vision_features(
-                        clip_vision_end_image, reference_clip_vision, consistency_factor * 0.8  # Slightly less for end frame
-                    )
-                    clip_vision_end_image = blended_end_features
-                
-                output_to_terminal_successful(f"Applied feature consistency blending (strength: {consistency_factor:.2f}, mode: {detail_preservation_mode})")
-                
-            except Exception as e:
-                output_to_terminal_error(f"Feature consistency blending failed: {e}")
-                # Continue with original features if blending fails
-                pass
-        
-        return start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image
-
-    def blend_clip_vision_features(self, current_features, reference_features, blend_strength):
-        """
-        Blend CLIP vision features to maintain consistency while allowing motion.
-        
-        Args:
-            current_features: Current frame's CLIP vision features
-            reference_features: Original reference image's CLIP vision features  
-            blend_strength: How much to blend (0.0 = all current, 1.0 = all reference)
-            
-        Returns:
-            Blended CLIP vision features
-        """
-        try:
-            # Ensure blend_strength is in valid range
-            blend_strength = max(0.0, min(1.0, blend_strength))
-            
-            # Simple linear interpolation between features
-            # This maintains feature consistency while allowing for pose/motion changes
-            blended = current_features * (1.0 - blend_strength) + reference_features * blend_strength
-            
-            return blended
-            
-        except Exception as e:
-            output_to_terminal_error(f"CLIP vision feature blending failed: {e}")
-            return current_features  # Return original if blending fails
-
     def process_start_and_end_images(self, start_image, start_image_clip_vision_enabled, 
                                    end_image, end_image_clip_vision_enabled, clip_vision, 
                                    resizer, wan_max_resolution, CLIPVisionEncoder, 
-                                   large_image_side, wan_model_size, image_generation_mode):
+                                   large_image_side, wan_model_size):
         """
         Original method for processing start and end images.
         This is kept as a separate method for backward compatibility and cleaner code.
@@ -1088,88 +737,6 @@ class WanImageToVideoAdvancedSampler:
             )
         
         return start_image, image_width, image_height, clip_vision_start_image, end_image, clip_vision_end_image
-
-    def enhance_prompt_for_consistency(self, positive_prompt, detail_preservation_mode, chunk_index):
-        """
-        Enhance the positive prompt to encourage feature consistency.
-        
-        Args:
-            positive_prompt: Original positive prompt
-            detail_preservation_mode: Level of detail preservation 
-            chunk_index: Current chunk being generated
-            
-        Returns:
-            Enhanced prompt with consistency keywords
-        """
-        if detail_preservation_mode == "disabled":
-            return positive_prompt
-        
-        # Base consistency keywords
-        consistency_keywords = []
-        
-        if detail_preservation_mode == "light":
-            consistency_keywords = ["consistent appearance", "same person", "identical face", "same body shape"]
-        elif detail_preservation_mode == "medium":
-            consistency_keywords = ["consistent appearance", "same person", "identical features", "maintaining details", 
-                                  "same face", "identical body shape", "consistent hands", "same feet", "preserved body parts"]
-        elif detail_preservation_mode == "strong":
-            consistency_keywords = ["consistent appearance", "same person", "identical features", "maintaining details", 
-                                  "same face", "identical facial features", "consistent body shape", "same body proportions",
-                                  "preserved hands", "consistent feet", "identical body parts", "same genitals", 
-                                  "preserved tattoos", "consistent jewelry", "same clothing patterns", "unchanged accessories",
-                                  "anatomical consistency", "body part preservation", "facial consistency"]
-        
-        # Add temporal consistency for multi-chunk generation
-        if chunk_index > 0:
-            consistency_keywords.extend(["temporal consistency", "smooth continuation", "anatomical continuity"])
-        
-        # Combine with original prompt
-        if consistency_keywords:
-            enhanced_prompt = f"{positive_prompt}, {', '.join(consistency_keywords)}"
-            return enhanced_prompt
-        
-        return positive_prompt
-
-    def enhance_negative_prompt_for_consistency(self, negative_prompt, detail_preservation_mode):
-        """
-        Enhance the negative prompt to avoid inconsistencies.
-        
-        Args:
-            negative_prompt: Original negative prompt
-            detail_preservation_mode: Level of detail preservation
-            
-        Returns:
-            Enhanced negative prompt that discourages inconsistencies
-        """
-        if detail_preservation_mode == "disabled":
-            return negative_prompt
-        
-        # Inconsistency keywords to avoid
-        inconsistency_keywords = []
-        
-        if detail_preservation_mode == "light":
-            inconsistency_keywords = ["changing appearance", "different person", "morphing face", "changing body shape"]
-        elif detail_preservation_mode == "medium":
-            inconsistency_keywords = ["changing appearance", "different person", "inconsistent features", "morphing details",
-                                    "face morphing", "changing facial features", "body shape changes", "hand morphing", "feet changes"]
-        elif detail_preservation_mode == "strong":
-            inconsistency_keywords = ["changing appearance", "different person", "inconsistent features", "morphing details",
-                                    "face morphing", "changing facial features", "facial inconsistency", "different face",
-                                    "body shape changes", "changing body proportions", "morphing body parts",
-                                    "hand morphing", "changing hands", "different hands", "feet changes", "morphing feet",
-                                    "genital changes", "morphing genitals", "body part inconsistency",
-                                    "disappearing tattoos", "changing jewelry", "different clothing patterns", "missing accessories",
-                                    "feature inconsistency", "detail morphing", "identity changes", "anatomical inconsistency"]
-        
-        # Combine with original negative prompt
-        if inconsistency_keywords:
-            if negative_prompt:
-                enhanced_negative = f"{negative_prompt}, {', '.join(inconsistency_keywords)}"
-            else:
-                enhanced_negative = ', '.join(inconsistency_keywords)
-            return enhanced_negative
-        
-        return negative_prompt if negative_prompt else ""
 
     def process_image(self, image, image_clip_vision_enabled, clip_vision, resizer, 
                      wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size,
@@ -1521,3 +1088,85 @@ class WanImageToVideoAdvancedSampler:
             output_image, = colorMatch.colormatch(start_image, output_image, "hm-mvgd-hm", strength=1.0)
             
         return output_image
+
+    def EnableAggressiveMemoryOptimization(self, enable_aggressive_memory_optimization, cuda_memory_fraction):
+        """
+        Enable aggressive memory optimization settings for VRAM management.
+        
+        Args:
+            enable_aggressive_memory_optimization (bool): Whether to enable aggressive memory optimization
+            cuda_memory_fraction (float): Percentage of available GPU VRAM to reserve for CUDA operations
+        """
+        if enable_aggressive_memory_optimization:
+            output_to_terminal_successful("Enabling aggressive memory optimization...")
+            
+            # Force aggressive garbage collection
+            gc.collect()
+            torch.cuda.empty_cache()
+            #mm.soft_empty_cache()
+            
+            # Set memory fraction if available (handle both old and new PyTorch APIs)
+            memory_fraction = cuda_memory_fraction / 100.0  # Convert percentage to fraction
+            if hasattr(torch.cuda, 'set_per_process_memory_fraction'):
+                try:
+                    torch.cuda.set_per_process_memory_fraction(memory_fraction)
+                    output_to_terminal_successful(f"Set CUDA per-process memory fraction to {cuda_memory_fraction}%")
+                except Exception as e:
+                    output_to_terminal_error(f"Failed to set per-process memory fraction: {e}")
+            elif hasattr(torch.cuda, 'set_memory_fraction'):
+                try:
+                    torch.cuda.set_memory_fraction(memory_fraction)
+                    output_to_terminal_successful(f"Set CUDA memory fraction to {cuda_memory_fraction}%")
+                except Exception as e:
+                    output_to_terminal_error(f"Failed to set memory fraction: {e}")
+            else:
+                output_to_terminal_error("Neither set_per_process_memory_fraction nor set_memory_fraction available in this PyTorch version")
+            
+            # Enable memory efficient attention if available
+            if hasattr(torch.backends.cuda, 'enable_math_sdp'):
+                torch.backends.cuda.enable_math_sdp(True)
+                torch.backends.cuda.enable_flash_sdp(True)
+                torch.backends.cuda.enable_mem_efficient_sdp(True)
+                output_to_terminal_successful("Enabled efficient attention backends")
+
+    def EnableAggressiveMemoryOptimizationPostprocess(self, enable_aggressive_memory_optimization, chunk_index):
+        """
+        Enable aggressive memory optimization for post-processing between video chunks.
+        
+        This function handles GPU memory cleanup between video chunk generations to prevent
+        out-of-memory errors and optimize VRAM usage during sequential chunk processing.
+        
+        Args:
+            enable_aggressive_memory_optimization (bool): Whether to enable aggressive memory cleanup
+            chunk_index (int): Current chunk index being processed
+            
+        Features:
+            - Explicit variable deletion for GPU memory cleanup
+            - Multiple rounds of garbage collection and CUDA cache clearing
+            - VRAM usage monitoring and reporting
+            - GPU memory management for multi-chunk video generation
+        """
+        if enable_aggressive_memory_optimization:
+            # Clean up previous chunk data
+            if chunk_index > 0:
+                # Explicitly delete variables that might hold GPU memory
+                vars_to_delete = ['output_image', 'out_latent', 'in_latent', 'temp_positive_clip', 'temp_negative_clip', 
+                                'generation_model', 'generation_clip', 'model_high_cfg', 'model_low_cfg']
+                for var_name in vars_to_delete:
+                    if var_name in locals():
+                        try:
+                            del locals()[var_name]
+                        except:
+                            pass
+                
+                # Force multiple rounds of cleanup for stubborn references
+                for _ in range(3):
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    #mm.soft_empty_cache()
+                
+                # Report memory status
+                if torch.cuda.is_available():
+                    current_memory = torch.cuda.memory_allocated() / 1024**3
+                    max_memory = torch.cuda.max_memory_allocated() / 1024**3
+                    output_to_terminal_successful(f"VRAM: Current {current_memory:.2f}GB, Peak {max_memory:.2f}GB")
