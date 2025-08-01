@@ -185,7 +185,12 @@ class WanImageToVideoAdvancedSampler:
         torch.cuda.empty_cache()
         #mm.soft_empty_cache()
 
-        model = self.load_model(GGUF, Diffusor, Use_Model_Type, Diffusor_weight_dtype)
+        model = self._cache_manager.get_from_cache(f"{GGUF}_{Diffusor}_{Use_Model_Type}_{Diffusor_weight_dtype}", 'cpu')
+        if (model is not None):
+            output_to_terminal_successful("Loaded model from cache...")
+        else:
+            model = self.load_model(GGUF, Diffusor, Use_Model_Type, Diffusor_weight_dtype)
+            self._cache_manager.store_in_cache(f"{GGUF}_{Diffusor}_{Use_Model_Type}_{Diffusor_weight_dtype}", model, 'cpu')
         mm.throw_exception_if_processing_interrupted()
 
         output_to_terminal_successful("Loading VAE...")

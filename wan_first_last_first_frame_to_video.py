@@ -65,11 +65,11 @@ class WanFirstLastFirstFrameToVideo:
 
         output_to_terminal_successful(f"Generating {length} frames with a padding of {total_shift}. Total Frames: {total_length}")
 
-        if start_image is not None:
-            start_image = comfy.utils.common_upscale(start_image[:total_length].movedim(-1, 1), width, height, "lanczos", "center").movedim(1, -1)
-
-        if end_image is not None:
-            end_image = comfy.utils.common_upscale(end_image[-total_length:].movedim(-1, 1), width, height, "lanczos", "center").movedim(1, -1)
+#        if start_image is not None:
+#            start_image = comfy.utils.common_upscale(start_image[:total_length].movedim(-1, 1), width, height, "lanczos", "center").movedim(1, -1)
+#
+#        if end_image is not None:
+#            end_image = comfy.utils.common_upscale(end_image[-total_length:].movedim(-1, 1), width, height, "lanczos", "center").movedim(1, -1)
 
         if start_image is not None or end_image is not None:
             start_shift = (total_shift // 2) + 1 if first_end_frame_shift != 0 else 0
