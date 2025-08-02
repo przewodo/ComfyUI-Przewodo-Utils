@@ -388,32 +388,12 @@ class WanImageToVideoAdvancedSampler:
             mm.throw_exception_if_processing_interrupted()
 
             if (last_latent is not None):
-                # Use last 16 frames from previous chunk to guide first 16 frames of current chunk
-                output_to_terminal_successful("Blending last 16 frames from previous chunk for motion continuity...")
+                # Guide current chunk generation using previous chunk's motion
+                in_latent = self.guide_next_chunk_generation(last_latent, in_latent, 0.7)
                 
-                # Get the last 16 frames from the previous latent
-                last_frames_count = min(16, last_latent['samples'].shape[0])
-                last_frames = last_latent['samples'][-last_frames_count:]
-                
-                # Get the first frames from current latent that we want to replace/blend
-                first_frames_count = min(16, in_latent['samples'].shape[0])
-                
-                # Create a blending weight that transitions from previous frames to new frames
-                # This creates smooth motion continuity
-                blend_strength = 0.7  # How much to influence from previous frames (0.0 = no influence, 1.0 = full replacement)
-                
-                # Apply blending to the overlapping frames
-                overlap_frames = min(last_frames_count, first_frames_count)
-                for i in range(overlap_frames):
-                    # Create a fade from previous to current (stronger influence at start, weaker at end)
-                    frame_blend_weight = blend_strength * (1.0 - (i / overlap_frames))
-                    
-                    # Blend the latents: current_frame = (1-weight) * current + weight * previous
-                    in_latent['samples'][i] = (1.0 - frame_blend_weight) * in_latent['samples'][i] + frame_blend_weight * last_frames[-(overlap_frames-i)]
-                
+                # Clean up previous latent to free memory
                 del last_latent
                 last_latent = None
-                output_to_terminal_successful(f"Blended {overlap_frames} frames for motion continuity with strength {blend_strength}")
                 
             self.enhanced_memory_cleanup(locals(), chunk_index)
             mm.throw_exception_if_processing_interrupted()
@@ -434,10 +414,11 @@ class WanImageToVideoAdvancedSampler:
             output_image, = wan_video_vae_decode.decode(out_latent, vae, 0, image_generation_mode)
             mm.throw_exception_if_processing_interrupted()
 
-            output_image = self.apply_quality_monitoring(output_image, reference_frames, chunk_index)
-
             # Subsequent chunks: use original_image as reference for consistency
             output_image = self.apply_color_match_to_image(original_image, output_image, apply_color_match, colorMatch)
+            mm.throw_exception_if_processing_interrupted()
+
+            output_image = self.apply_quality_monitoring(output_image, reference_frames, chunk_index)
             mm.throw_exception_if_processing_interrupted()
 
             reference_frames.append(output_image[0:1].clone())
@@ -744,14 +725,16 @@ class WanImageToVideoAdvancedSampler:
         
         if (image is not None):
             output_to_terminal_successful(f"Resizing {image_type}...")
+
             image, image_width, image_height, _ = resizer.resize(image, large_image_side, large_image_side, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
+            
             tmp_width, tmp_height, = wan_max_resolution.run(wan_model_size, image)
-            tmpTotalPixels = tmp_width * tmp_height
-            imageTotalPixels = image_width * image_height
-            if (tmpTotalPixels < imageTotalPixels):
-                image_width = tmp_width
-                image_height = tmp_height
-                image, image_width, image_height, _ = resizer.resize(image, large_image_side, large_image_side, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
+
+            wan_large_side = max(tmp_width, tmp_height)
+            img_large_side = max(image_width, image_height)
+
+            if (wan_large_side < img_large_side):
+                image, image_width, image_height, _ = resizer.resize(image, tmp_width, tmp_height, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
 
             output_to_terminal_successful(f"{image_type} final size: {image_width}x{image_height}")
 
@@ -1266,6 +1249,44 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_successful(f"GPU memory after cleanup: {current_mem:.2f} GB")
         
         return alive_refs
+
+    def guide_next_chunk_generation(self, last_latent, in_latent, blend_strength=0.7):
+        """
+        Use last 16 frames from previous chunk to guide first 16 frames of current chunk for motion continuity.
+        
+        Args:
+            last_latent: The latent output from the previous chunk containing motion information
+            in_latent: The input latent for the current chunk to be guided
+            blend_strength (float): How much to influence from previous frames (0.0 = no influence, 1.0 = full replacement)
+            
+        Returns:
+            in_latent: The modified input latent with motion guidance applied
+        """
+        if last_latent is None:
+            return in_latent
+            
+        # Use last 16 frames from previous chunk to guide first 16 frames of current chunk
+        output_to_terminal_successful("Blending last 16 frames from previous chunk for motion continuity...")
+        
+        # Get the last 16 frames from the previous latent
+        last_frames_count = min(16, last_latent['samples'].shape[0])
+        last_frames = last_latent['samples'][-last_frames_count:]
+        
+        # Get the first frames from current latent that we want to replace/blend
+        first_frames_count = min(16, in_latent['samples'].shape[0])
+        
+        # Apply blending to the overlapping frames
+        overlap_frames = min(last_frames_count, first_frames_count)
+        for i in range(overlap_frames):
+            # Create a fade from previous to current (stronger influence at start, weaker at end)
+            frame_blend_weight = blend_strength * (1.0 - (i / overlap_frames))
+            
+            # Blend the latents: current_frame = (1-weight) * current + weight * previous
+            in_latent['samples'][i] = (1.0 - frame_blend_weight) * in_latent['samples'][i] + frame_blend_weight * last_frames[-(overlap_frames-i)]
+        
+        output_to_terminal_successful(f"Blended {overlap_frames} frames for motion continuity with strength {blend_strength}")
+        
+        return in_latent
     
     def apply_progressive_denoise_ramp(self, high_denoise, low_denoise, chunk_index, total_chunks):
         """
