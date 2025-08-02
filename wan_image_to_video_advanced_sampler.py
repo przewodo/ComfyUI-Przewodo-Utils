@@ -73,8 +73,10 @@ class WanImageToVideoAdvancedSampler:
                 # ═════════════════════════════════════════════════════════════════
                 # 🔧 MODEL CONFIGURATION
                 # ═════════════════════════════════════════════════════════════════
-                ("GGUF", (gguf_model_names, {"default": NONE, "advanced": True, "tooltip": "Select a GGUF model file for optimized inference."})),
-                ("Diffusor", (diffusion_models_names, {"default": NONE, "advanced": True, "tooltip": "Select a Diffusion model for standard inference."})),
+                ("GGUF_High", (gguf_model_names, {"default": NONE, "advanced": True, "tooltip": "GGUF model for high CFG/noise sampling phase. Used for initial generation with strong prompt adherence and detail capture."})),
+                ("GGUF_Low", (gguf_model_names, {"default": NONE, "advanced": True, "tooltip": "GGUF model for low CFG/noise sampling phase. Used for refinement and smoothing with reduced prompt influence."})),
+                ("Diffusor_High", (diffusion_models_names, {"default": NONE, "advanced": True, "tooltip": "Diffusion model for high CFG/noise sampling phase. Used for initial generation with strong prompt adherence and detail capture."})),
+                ("Diffusor_Low", (diffusion_models_names, {"default": NONE, "advanced": True, "tooltip": "Diffusion model for low CFG/noise sampling phase. Used for refinement and smoothing with reduced prompt influence."})),
                 ("Diffusor_weight_dtype", (["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"], {"default": "default", "advanced": True, "tooltip": "Weight data type for the diffusion model. FP8 options provide memory optimization with potential speed improvements."})),
                 ("Use_Model_Type", (MODEL_TYPE_LIST, {"default": MODEL_GGUF, "advanced": True, "tooltip": "Choose between GGUF or Diffusion model types. GGUF models are optimized for efficiency."})),
                 
@@ -164,6 +166,8 @@ class WanImageToVideoAdvancedSampler:
                 ("frames_multiplier", ("INT", {"default": 2, "min": 2, "max": 100, "step":1, "advanced": True, "tooltip": "Multiplier for the number of frames generated during interpolation."})),
                 ("frames_clear_cache_after_n_frames", ("INT", {"default": 100, "min": 1, "max": 1000, "tooltip": "Clear the cache after processing this many frames. Helps manage memory usage during long video generation."})),
                 ("frames_use_cuda_graph", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Use CUDA Graphs for frame interpolation. Improves performance by reducing overhead during inference."})),
+                ("frames_overlap_chunks", ("INT", {"default": 8, "min": 1, "max": 81, "step":1, "advanced": True, "tooltip": "Number of overlapping frames between video chunks to ensure seamless motion continuity. Higher values (8-16) create smoother transitions, while lower values may cause visible seams between chunks."})),
+                ("frames_overlap_chunks_blend", ("FLOAT", {"default": 0.7, "min": 0.0, "max": 1, "step":0.01, "advanced": True, "tooltip": "How much to influence from previous frames (0.0 = no influence, 1.0 = full replacement)"})),
             ]),
             "optional": OrderedDict([
                 ("lora_stack", (any_type, {"default": None, "advanced": True, "tooltip": "Stack of LoRAs to apply to the diffusion model. Each LoRA modifies the model's behavior."})),
@@ -180,15 +184,22 @@ class WanImageToVideoAdvancedSampler:
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def run(self, GGUF, Diffusor, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True):
+    def run(self, GGUF_High, GGUF_Low, Diffusor_High, Diffusor_Low, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True, frames_overlap_chunks=8, frames_overlap_chunks_blend=0.7):
         self.default_fps = 16.0
 
         gc.collect()
         torch.cuda.empty_cache()
         #mm.soft_empty_cache()
 
-        model = self.load_model(GGUF, Diffusor, Use_Model_Type, Diffusor_weight_dtype)
+        model_high = self.load_model(GGUF_High, Diffusor_High, Use_Model_Type, Diffusor_weight_dtype)
         mm.throw_exception_if_processing_interrupted()
+
+        model_low = None
+        if (GGUF_Low != NONE or Diffusor_Low != NONE):
+            model_low = self.load_model(GGUF_Low, Diffusor_Low, Use_Model_Type, Diffusor_weight_dtype)
+            mm.throw_exception_if_processing_interrupted()
+        else:
+            model_low = model_high
 
         output_to_terminal_successful("Loading VAE...")
         vae, = nodes.VAELoader().load_vae(vae)
@@ -235,9 +246,14 @@ class WanImageToVideoAdvancedSampler:
         model_shift = self.initialize_model_shift(use_shift, shift)
         mm.throw_exception_if_processing_interrupted()
 
-        return self.postprocess(model, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph)
+        output_image, fps, = self.postprocess(model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend)
 
-    def postprocess(self, model, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph):
+        self.cleanup_local_refs(locals())
+        self.enhanced_memory_cleanup(locals())
+
+        return (output_image, fps,)
+
+    def postprocess(self, model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend):
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -260,9 +276,13 @@ class WanImageToVideoAdvancedSampler:
         colorMatch = ColorMatch()
         clip_vision_start_image = None
         clip_vision_end_image = None
-        positive_clip = None
-        negative_clip = None
+        positive_clip_high = None
+        positive_clip_low = None
+        negative_clip_high = None
+        negative_clip_low = None
         clip_vision = None
+        model_high_cfg = None
+        model_low_cfg = None
 
 #        if (image_generation_mode == TEXT_TO_VIDEO):
 #            start_image = None
@@ -287,39 +307,49 @@ class WanImageToVideoAdvancedSampler:
         output_to_terminal_successful("Generation started...")
 
         for chunk_index in range(total_video_chunks):
-            working_model = model.clone()
-            working_clip = clip_model.clone()
-            
+            working_model_high = model_high.clone()
+            working_model_low = model_low.clone()
+            working_clip_high = clip_model.clone()
+            working_clip_low = clip_model.clone()
+
             # Apply Model Patch Torch Settings
-            working_model = self.apply_model_patch_torch_settings(working_model)
+            working_model_high = self.apply_model_patch_torch_settings(working_model_high)
+            working_model_low = self.apply_model_patch_torch_settings(working_model_low)
             mm.throw_exception_if_processing_interrupted()
 
             # Apply Sage Attention
-            working_model = self.apply_sage_attention(sage_attention, working_model, sage_attention_mode)
+            working_model_high = self.apply_sage_attention(sage_attention, working_model_high, sage_attention_mode)
+            working_model_low = self.apply_sage_attention(sage_attention, working_model_low, sage_attention_mode)
             mm.throw_exception_if_processing_interrupted()
 
             # Apply TeaCache and SLG
-            working_model = self.apply_tea_cache_and_slg(tea_cache, use_tea_cache, working_model, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent)
+            working_model_high = self.apply_tea_cache_and_slg(tea_cache, use_tea_cache, working_model_high, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent)
+            working_model_low = self.apply_tea_cache_and_slg(tea_cache, use_tea_cache, working_model_low, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, slg_wanvideo_blocks_string, slg_wanvideo_start_percent, slg_wanvideo_end_percent)
             mm.throw_exception_if_processing_interrupted()
 
             # Apply Model Shift
-            working_model = self.apply_model_shift(model_shift, use_shift, working_model, shift)
+            working_model_high = self.apply_model_shift(model_shift, use_shift, working_model_high, shift)
+            working_model_low = self.apply_model_shift(model_shift, use_shift, working_model_low, shift)
             mm.throw_exception_if_processing_interrupted()
 
             # Apply Video Enhance
-            working_model = self.apply_video_enhance(video_enhance_enabled, working_model, wanVideoEnhanceAVideo, total_frames)
+            working_model_high = self.apply_video_enhance(video_enhance_enabled, working_model_high, wanVideoEnhanceAVideo, total_frames)
+            working_model_low = self.apply_video_enhance(video_enhance_enabled, working_model_low, wanVideoEnhanceAVideo, total_frames)
             mm.throw_exception_if_processing_interrupted()
 
             # Apply CFG Zero Star
-            working_model = self.apply_cfg_zero_star(use_cfg_zero_star, working_model, cfgZeroStar)
+            working_model_high = self.apply_cfg_zero_star(use_cfg_zero_star, working_model_high, cfgZeroStar)
+            working_model_low = self.apply_cfg_zero_star(use_cfg_zero_star, working_model_low, cfgZeroStar)
             mm.throw_exception_if_processing_interrupted()
 
             # Apply Block Swap
-            working_model = self.apply_block_swap(use_block_swap, working_model, wanBlockSwap, block_swap)
+            working_model_high = self.apply_block_swap(use_block_swap, working_model_high, wanBlockSwap, block_swap)
+            working_model_low = self.apply_block_swap(use_block_swap, working_model_low, wanBlockSwap, block_swap)
             mm.throw_exception_if_processing_interrupted()
 
             # Process LoRA stack
-            working_model, clip_model = self.process_lora_stack(lora_stack, working_model, clip_model)
+            working_model_high, working_clip_high = self.process_lora_stack(lora_stack, working_model_high, working_clip_high)
+            working_model_low, working_clip_low = self.process_lora_stack(lora_stack, working_model_low, working_clip_low)
             mm.throw_exception_if_processing_interrupted()
 
             # Clean up memory after model configuration
@@ -346,7 +376,8 @@ class WanImageToVideoAdvancedSampler:
             
             if (prompt_stack is not None):
                 positive, negative, prompt_loras = self.get_current_prompt(prompt_stack, chunk_index, positive, negative)
-                working_model, working_clip = self.process_lora_stack(prompt_loras, working_model, working_clip)
+                working_model_high, working_clip_high = self.process_lora_stack(prompt_loras, working_model_high, working_clip_high)
+                working_model_low, working_clip_low = self.process_lora_stack(prompt_loras, working_model_low, working_clip_low)
                 mm.throw_exception_if_processing_interrupted()
 
             # Get original start_image dimensions if available
@@ -372,45 +403,46 @@ class WanImageToVideoAdvancedSampler:
             mm.throw_exception_if_processing_interrupted()
 
             # Apply CausVid LoRA processing for current chunk
-            model_high_cfg, model_low_cfg, working_clip = self.apply_causvid_lora_processing(working_model, working_clip, lora_loader, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, use_dual_samplers)
+            model_high_cfg, model_low_cfg, working_clip_high, working_clip_low = self.apply_causvid_lora_processing(working_model_high, working_model_low, working_clip_high, working_clip_low, lora_loader, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, use_dual_samplers)
             mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Encoding Positive CLIP text...")
-            positive_clip, = text_encode.encode(working_clip, positive)
+            positive_clip_high, = text_encode.encode(working_clip_high, positive)
+            positive_clip_low, = text_encode.encode(working_clip_low, positive)
             mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Encoding Negative CLIP text...")
-            negative_clip, = text_encode.encode(working_clip, negative)
+            negative_clip_high, = text_encode.encode(working_clip_high, negative)
+            negative_clip_low, = text_encode.encode(working_clip_low, negative)
             mm.throw_exception_if_processing_interrupted()
 
             output_to_terminal_successful("Wan Image to Video started...")
-            positive_clip, negative_clip, in_latent, = wan_image_to_video.encode(positive_clip, negative_clip, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, fill_noise_latent, image_generation_mode)
+            positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low, in_latent, = wan_image_to_video.encode(positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low, vae, image_width, image_height, total_frames, start_image, end_image, clip_vision_start_image, clip_vision_end_image, 0, 0, clip_vision_strength, fill_noise_latent, image_generation_mode)
             mm.throw_exception_if_processing_interrupted()
 
             if (last_latent is not None):
                 # Guide current chunk generation using previous chunk's motion
-                in_latent = self.guide_next_chunk_generation(last_latent, in_latent, 0.7)
+                in_latent = self.guide_next_chunk_generation(last_latent, in_latent, frames_overlap_chunks, frames_overlap_chunks_blend)
                 
                 # Clean up previous latent to free memory
                 del last_latent
                 last_latent = None
                 
-            self.enhanced_memory_cleanup(locals(), chunk_index)
+            self.enhanced_memory_cleanup(locals())
             mm.throw_exception_if_processing_interrupted()
 
             high_denoise, low_denoise = self.apply_progressive_denoise_ramp(high_denoise, low_denoise, chunk_index, total_video_chunks)
 
             if (use_dual_samplers):
                 # Apply dual sampler processing
-                out_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, working_clip, noise_seed, total_steps, high_cfg, low_cfg, positive_clip, negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
+                out_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, noise_seed, total_steps, high_cfg, low_cfg, positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
             else:
                 # Apply single sampler processing
-                out_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, working_clip, noise_seed, total_steps, high_cfg, positive_clip, negative_clip, in_latent, high_denoise)
+                out_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, noise_seed, total_steps, high_cfg, positive_clip_high, negative_clip_high, in_latent, high_denoise)
             mm.throw_exception_if_processing_interrupted()
 
             last_latent = out_latent
 
-            output_to_terminal_successful("Vae Decode started...")
             output_image, = wan_video_vae_decode.decode(out_latent, vae, 0, image_generation_mode)
             mm.throw_exception_if_processing_interrupted()
 
@@ -443,8 +475,14 @@ class WanImageToVideoAdvancedSampler:
             del in_latent
             if (chunk_index == total_video_chunks - 1):
                 del last_latent
+            
+            # Clean up working models for this chunk
+            del working_model_high, working_model_low, working_clip_high, working_clip_low
+            gc.collect()
+            torch.cuda.empty_cache()
                 
-            self.enhanced_memory_cleanup(locals(), chunk_index)
+            self.enhanced_memory_cleanup(locals())
+            self.cleanup_local_refs(locals())
         
         del reference_frames
 
@@ -459,14 +497,9 @@ class WanImageToVideoAdvancedSampler:
 
         mm.throw_exception_if_processing_interrupted()
 
-        # Clean up GPU memory from working models
-        del working_model, working_clip
-        gc.collect()
-        torch.cuda.empty_cache()
-
         # Use generic cleanup function for local references
         self.cleanup_local_refs(locals())
-        self.enhanced_memory_cleanup(locals(), total_video_chunks)
+        self.enhanced_memory_cleanup(locals())
 
         if (output_image is None):
             return (None, self.default_fps,)
@@ -625,7 +658,7 @@ class WanImageToVideoAdvancedSampler:
             
         return model_shift
 
-    def process_lora_stack(self, lora_stack, working_model, clip):
+    def process_lora_stack(self, lora_stack, model, clip):
         """
         Process and apply LoRA stack to the model and CLIP.
         
@@ -637,7 +670,10 @@ class WanImageToVideoAdvancedSampler:
         Returns:
             tuple: (updated_working_model, updated_clip) with LoRAs applied
         """
-        model_clone = working_model.clone()
+        model_clone = model.clone()
+        clip_clone = clip.clone()
+
+        del model, clip  # Clean up original model references to free memory
 
         if lora_stack is not None and len(lora_stack) > 0:
             output_to_terminal_successful("Loading Lora Stack...")
@@ -654,15 +690,15 @@ class WanImageToVideoAdvancedSampler:
 
                 if lora_name and lora_name != NONE:
                     output_to_terminal_successful(f"Applying LoRA {lora_count}/{len(lora_stack)}: {lora_name} (model: {model_strength}, clip: {clip_strength})")
-                    model_clone, clip = lora_loader.load_lora(model_clone, clip, lora_name, model_strength, clip_strength)
+                    model_clone, clip_clone = lora_loader.load_lora(model_clone, clip_clone, lora_name, model_strength, clip_strength)
                 else:
                     output_to_terminal_error(f"Skipping LoRA {lora_count}/{len(lora_stack)}: No valid LoRA name")
             
             output_to_terminal_successful(f"Successfully applied {len(lora_stack)} LoRAs to the model")
         else:
             output_to_terminal_successful("No LoRA stack provided, skipping LoRA application")
-            
-        return model_clone, clip
+        
+        return model_clone, clip_clone
 
     def apply_model_patch_torch_settings(self, working_model):
         """
@@ -885,70 +921,37 @@ class WanImageToVideoAdvancedSampler:
             
         return working_model
 
-    def apply_dual_sampler_processing(self, model_high_cfg, model_low_cfg, k_sampler, clip, noise_seed, total_steps, high_cfg, low_cfg, temp_positive_clip, temp_negative_clip, in_latent, total_steps_high_cfg, high_denoise, low_denoise):
-        """
-        Apply dual sampler processing with pre-configured high and low CFG models.
-        
-        Args:
-            model_high_cfg: The prepared model for high CFG sampling (with LoRAs already applied)
-            model_low_cfg: The prepared model for low CFG sampling (with LoRAs already applied)
-            k_sampler: The KSampler instance
-            clip: The CLIP model
-            noise_seed (int): The noise seed for sampling
-            total_steps (int): Total sampling steps
-            high_cfg (float): High CFG value
-            low_cfg (float): Low CFG value
-            temp_positive_clip: Positive CLIP encoding
-            temp_negative_clip: Negative CLIP encoding
-            in_latent: Input latent
-            total_steps_high_cfg (int): Steps for high CFG phase
-            high_denoise (float): Denoising strength for high CFG
-            low_denoise (float): Denoising strength for low CFG
-            
-        Returns:
-            The output latent from dual sampler processing
-        """
+    def apply_dual_sampler_processing(self, model_high_cfg, model_low_cfg, k_sampler, noise_seed, total_steps, high_cfg, low_cfg, positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low, in_latent, total_steps_high_cfg, high_denoise, low_denoise):
         stop_steps = int(total_steps_high_cfg / 100 * total_steps)
 
         gc.collect()
         torch.cuda.empty_cache()
         #mm.soft_empty_cache()
         output_to_terminal_successful("High CFG KSampler started...")
-        out_latent, = k_sampler.sample(model_high_cfg, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, stop_steps, "enabled", high_denoise)
+        out_latent, = k_sampler.sample(model_high_cfg, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", positive_clip_high, negative_clip_high, in_latent, 0, stop_steps, "enabled", high_denoise)
+        mm.throw_exception_if_processing_interrupted()
+        self.cleanup_local_refs(locals())
+        self.enhanced_memory_cleanup(locals())
 
         gc.collect()
         torch.cuda.empty_cache()
         #mm.soft_empty_cache()
         output_to_terminal_successful("Low CFG KSampler started...")
-        out_latent, = k_sampler.sample(model_low_cfg, "disable", noise_seed, total_steps, low_cfg, "lcm", "simple", temp_positive_clip, temp_negative_clip, out_latent, stop_steps, 1000, "disable", low_denoise)
-        
+        out_latent, = k_sampler.sample(model_low_cfg, "disable", noise_seed, total_steps, low_cfg, "lcm", "simple", positive_clip_low, negative_clip_low, out_latent, stop_steps, 1000, "disable", low_denoise)
+        mm.throw_exception_if_processing_interrupted()
+        self.cleanup_local_refs(locals())
+        self.enhanced_memory_cleanup(locals())
+
         return out_latent
 
-    def apply_single_sampler_processing(self, working_model, k_sampler, clip, noise_seed, total_steps, high_cfg, temp_positive_clip, temp_negative_clip, in_latent, high_denoise):
-        """
-        Apply single sampler processing with pre-configured model.
-        
-        Args:
-            working_model: The prepared model for sampling (with LoRAs already applied)
-            k_sampler: The KSampler instance
-            clip: The CLIP model
-            noise_seed (int): The noise seed for sampling
-            total_steps (int): Total sampling steps
-            high_cfg (float): CFG value
-            temp_positive_clip: Positive CLIP encoding
-            temp_negative_clip: Negative CLIP encoding
-            in_latent: Input latent
-            high_denoise (float): Denoising strength
-            
-        Returns:
-            The output latent from single sampler processing
-        """
+    def apply_single_sampler_processing(self, working_model, k_sampler, noise_seed, total_steps, high_cfg, positive_clip_high, negative_clip_high, in_latent, high_denoise):
+
         output_to_terminal_successful("KSampler started...")
-        out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", temp_positive_clip, temp_negative_clip, in_latent, 0, 1000, "disable", high_denoise)
-        
+        out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", positive_clip_high, negative_clip_high, in_latent, 0, 1000, "disable", high_denoise)
+
         return out_latent
-    
-    def apply_causvid_lora_processing(self, working_model, clip, lora_loader, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, use_dual_samplers):
+
+    def apply_causvid_lora_processing(self, model_high, model_low, clip_high, clip_low, lora_loader, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, use_dual_samplers):
         """
         Apply CausVid LoRA processing and return prepared models for sampling.
         
@@ -964,28 +967,31 @@ class WanImageToVideoAdvancedSampler:
         Returns:
             tuple: (model_high_cfg, model_low_cfg, updated_clip) - Prepared models with LoRAs applied
         """
-        model_high_cfg = working_model.clone()
-        model_low_cfg = working_model.clone()
-        updated_clip = clip
+        model_high_cfg = model_high.clone()
+        model_low_cfg = model_low.clone()
+        updated_clip_high = clip_high.clone()
+        updated_clip_low = clip_low.clone()
+
+        del model_high, model_low, clip_high, clip_low  # Clean up original model references to free memory
 
         if use_dual_samplers:
             # Apply CausVid LoRA for High CFG model
             if (causvid_lora != NONE and high_cfg_causvid_strength > 0.0):
                 output_to_terminal_successful(f"Applying CausVid LoRA for High CFG with strength: {high_cfg_causvid_strength}")
-                model_high_cfg, updated_clip, = lora_loader.load_lora(model_high_cfg, updated_clip, causvid_lora, high_cfg_causvid_strength, 1.0)
-            
-            # Apply CausVid LoRA for Low CFG model  
+                model_high_cfg, updated_clip_high, = lora_loader.load_lora(model_high_cfg, updated_clip_high, causvid_lora, high_cfg_causvid_strength, 1.0)
+
+            # Apply CausVid LoRA for Low CFG model
             if (causvid_lora != NONE and low_cfg_causvid_strength > 0.0):
                 output_to_terminal_successful(f"Applying CausVid LoRA for Low CFG with strength: {low_cfg_causvid_strength}")
-                model_low_cfg, updated_clip, = lora_loader.load_lora(model_low_cfg, updated_clip, causvid_lora, low_cfg_causvid_strength, 1.0)
+                model_low_cfg, updated_clip_low, = lora_loader.load_lora(model_low_cfg, updated_clip_low, causvid_lora, low_cfg_causvid_strength, 1.0)
         else:
             # Single sampler - only apply to high CFG model
             if (causvid_lora != NONE and high_cfg_causvid_strength > 0.0):
                 output_to_terminal_successful(f"Applying CausVid LoRA with strength: {high_cfg_causvid_strength}")
-                model_high_cfg, updated_clip, = lora_loader.load_lora(model_high_cfg, updated_clip, causvid_lora, high_cfg_causvid_strength, 1.0)
-        
-        return model_high_cfg, model_low_cfg, updated_clip
-    
+                model_high_cfg, updated_clip_high, = lora_loader.load_lora(model_high_cfg, updated_clip_high, causvid_lora, high_cfg_causvid_strength, 1.0)
+
+        return model_high_cfg, model_low_cfg, updated_clip_high, updated_clip_low
+
     def apply_color_match_to_image(self, original_image, image, apply_color_match, colorMatch):
         """
         Apply color matching between original_image and images if enabled.
@@ -1005,72 +1011,7 @@ class WanImageToVideoAdvancedSampler:
 
         return image
     
-    @classmethod
-    def clear_cache(cls, cache_key=None):
-        """
-        Clear cache entries using the generic cache manager.
-        
-        Args:
-            cache_key (str, optional): Specific key to clear. If None, clears all cache.
-        """
-        cls._cache_manager.clear_cache(cache_key)
-        if cache_key:
-            output_to_terminal_successful(f"Cache entry '{cache_key}' cleared")
-        else:
-            output_to_terminal_successful("All cache entries cleared")
-    
-    @classmethod
-    def get_cache_info(cls):
-        """Get information about cached objects."""
-        cache_keys = cls._cache_manager.get_cache_info()
-        cache_count = cls._cache_manager.cache_size()
-        
-        if cache_count > 0:
-            output_to_terminal_successful(f"Cache contains {cache_count} entries: {cache_keys}")
-            return cache_keys
-        else:
-            output_to_terminal_successful("Cache is empty")
-            return []
-    
-    @classmethod 
-    def cache_model(cls, cache_key, model, storage_device='cpu'):
-        """
-        Generic method to cache any model with user-provided key.
-        
-        Args:
-            cache_key (str): The cache key to store under
-            model: The model to cache
-            storage_device (str): Device to store on ('cpu' to save VRAM, 'cuda' to keep on GPU)
-            
-        Returns:
-            str: The cache key used for storage
-        """
-        cls._cache_manager.store_in_cache(cache_key, model, storage_device=storage_device)
-        output_to_terminal_successful(f"Model cached with key: {cache_key}")
-        return cache_key
-    
-    @classmethod
-    def load_cached_model(cls, cache_key, target_device="cuda"):
-        """
-        Generic method to load any cached model with user-provided key.
-        
-        Args:
-            cache_key (str): The cache key to look up
-            target_device (str): Device to move the model to
-            
-        Returns:
-            The cached model moved to target device, or None if not found
-        """
-        model = cls._cache_manager.get_from_cache(cache_key, target_device)
-        
-        if model is not None:
-            output_to_terminal_successful(f"Model loaded from cache: {cache_key}")
-        else:
-            output_to_terminal_successful(f"No cached model found for key: {cache_key}")
-            
-        return model
-    
-    def enhanced_memory_cleanup(self, local_scope, chunk_index):
+    def enhanced_memory_cleanup(self, local_scope):
         """
         Enhanced memory cleanup using weakref and sys for comprehensive memory management.
         
@@ -1163,9 +1104,9 @@ class WanImageToVideoAdvancedSampler:
             
             # Report cleanup results
             if alive_objects:
-                output_to_terminal_successful(f"Chunk {chunk_index}: {len(alive_objects)} objects still referenced after cleanup: {alive_objects[:5]}")
+                output_to_terminal_successful(f"{len(alive_objects)} objects still referenced after cleanup: {alive_objects[:5]}")
             
-            output_to_terminal_successful(f"Chunk {chunk_index}: Cleaned {deleted_count} objects, collected {total_collected} garbage objects")
+            output_to_terminal_successful(f"Cleaned {deleted_count} objects, collected {total_collected} garbage objects")
             
             # Final CUDA memory management
             if hasattr(torch.cuda, 'empty_cache'):
@@ -1177,8 +1118,8 @@ class WanImageToVideoAdvancedSampler:
             if hasattr(torch.cuda, 'memory_allocated') and torch.cuda.is_available():
                 allocated_gb = torch.cuda.memory_allocated() / (1024**3)
                 reserved_gb = torch.cuda.memory_reserved() / (1024**3)
-                output_to_terminal_successful(f"Chunk {chunk_index}: GPU memory - Allocated: {allocated_gb:.2f}GB, Reserved: {reserved_gb:.2f}GB")
-                
+                output_to_terminal_successful(f"GPU memory - Allocated: {allocated_gb:.2f}GB, Reserved: {reserved_gb:.2f}GB")
+
         except Exception as e:
             output_to_terminal_error(f"Error in enhanced memory cleanup: {str(e)}")
             # Fallback to basic cleanup
@@ -1250,7 +1191,7 @@ class WanImageToVideoAdvancedSampler:
         
         return alive_refs
 
-    def guide_next_chunk_generation(self, last_latent, in_latent, blend_strength=0.7):
+    def guide_next_chunk_generation(self, last_latent, in_latent, frames_overlap_chunks, blend_strength=0.7):
         """
         Use last 16 frames from previous chunk to guide first 16 frames of current chunk for motion continuity.
         
@@ -1265,15 +1206,15 @@ class WanImageToVideoAdvancedSampler:
         if last_latent is None:
             return in_latent
             
-        # Use last 16 frames from previous chunk to guide first 16 frames of current chunk
-        output_to_terminal_successful("Blending last 16 frames from previous chunk for motion continuity...")
-        
-        # Get the last 16 frames from the previous latent
-        last_frames_count = min(16, last_latent['samples'].shape[0])
+        # Use last frames_overlap_chunks frames from previous chunk to guide first 16 frames of current chunk
+        output_to_terminal_successful(f"Blending last {frames_overlap_chunks} frames from previous chunk for motion continuity...")
+
+        # Get the last frames_overlap_chunks frames from the previous latent
+        last_frames_count = min(frames_overlap_chunks, last_latent['samples'].shape[0])
         last_frames = last_latent['samples'][-last_frames_count:]
         
         # Get the first frames from current latent that we want to replace/blend
-        first_frames_count = min(16, in_latent['samples'].shape[0])
+        first_frames_count = min(frames_overlap_chunks, in_latent['samples'].shape[0])
         
         # Apply blending to the overlapping frames
         overlap_frames = min(last_frames_count, first_frames_count)

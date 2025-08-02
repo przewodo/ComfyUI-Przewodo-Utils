@@ -47,17 +47,17 @@ class WanFirstLastFirstFrameToVideo:
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def encode(self, positive, negative, vae, width, height, length, start_image=None, end_image=None, clip_vision_start_image=None, clip_vision_end_image=None, first_end_frame_shift=3, first_end_frame_denoise=0, clip_vision_strength=1.0, fill_denoise=0.5, generation_mode=START_IMAGE):
-        
+    def encode(self, positive_high, negative_high, positive_low, negative_low, vae, width, height, length, start_image=None, end_image=None, clip_vision_start_image=None, clip_vision_end_image=None, first_end_frame_shift=3, first_end_frame_denoise=0, clip_vision_strength=1.0, fill_denoise=0.5, generation_mode=START_IMAGE):
+
         batch_size = 1
         total_shift = (first_end_frame_shift * 4)
         total_length = length + total_shift
         
-        if (generation_mode == TEXT_TO_VIDEO):
-            latent = torch.zeros([batch_size, 16, ((total_length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
-            out_latent = {}
-            out_latent["samples"] = latent
-            return (positive, negative, out_latent)
+#        if (generation_mode == TEXT_TO_VIDEO):
+#            latent = torch.zeros([batch_size, 16, ((total_length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
+#            out_latent = {}
+#            out_latent["samples"] = latent
+#            return (positive, negative, out_latent)
         
         latent = torch.zeros([batch_size, 16, ((total_length - 1) // 4) + 1, height // 8, width // 8], device=comfy.model_management.intermediate_device())
         image = torch.ones((total_length, height, width, 3)) * fill_denoise
@@ -144,8 +144,13 @@ class WanFirstLastFirstFrameToVideo:
 
         concat_latent_image = vae.encode_tiled(image[:,:,:,:3], 512, 512, 64, 64, 8)
         mask = mask.view(1, mask.shape[2] // 4, 4, mask.shape[3], mask.shape[4]).transpose(1, 2)
-        positive = node_helpers.conditioning_set_values(positive, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
-        negative = node_helpers.conditioning_set_values(negative, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
+
+        positive_high = node_helpers.conditioning_set_values(positive_high, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
+        negative_high = node_helpers.conditioning_set_values(negative_high, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
+
+        positive_low = node_helpers.conditioning_set_values(positive_low, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
+        negative_low = node_helpers.conditioning_set_values(negative_low, {"concat_latent_image": concat_latent_image, "concat_mask": mask})
+
         clip_vision_output = None
 
         if (clip_vision_start_image is not None or clip_vision_end_image is not None):
@@ -213,9 +218,11 @@ class WanFirstLastFirstFrameToVideo:
                 clip_vision_output.penultimate_hidden_states = start_hidden
 
             if clip_vision_output is not None:
-                positive = node_helpers.conditioning_set_values(positive, {"clip_vision_output": clip_vision_output})
-                negative = node_helpers.conditioning_set_values(negative, {"clip_vision_output": clip_vision_output})
+                positive_high = node_helpers.conditioning_set_values(positive_high, {"clip_vision_output": clip_vision_output})
+                negative_high = node_helpers.conditioning_set_values(negative_high, {"clip_vision_output": clip_vision_output})
+                positive_low = node_helpers.conditioning_set_values(positive_low, {"clip_vision_output": clip_vision_output})
+                negative_low = node_helpers.conditioning_set_values(negative_low, {"clip_vision_output": clip_vision_output})
 
         out_latent = {}
         out_latent["samples"] = latent
-        return (positive, negative, out_latent)
+        return (positive_high, negative_high, positive_low, negative_low, out_latent)
