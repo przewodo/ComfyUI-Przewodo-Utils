@@ -95,7 +95,7 @@ class WanImageToVideoAdvancedSampler:
                 # ═════════════════════════════════════════════════════════════════
                 ("use_tea_cache", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable TeaCache for faster inference by caching diffusion model outputs."})),
                 ("tea_cache_model_type", (["flux", "ltxv", "lumina_2", "hunyuan_video", "hidream_i1_dev", "hidream_i1_full", "wan2.1_t2v_1.3B", "wan2.1_t2v_14B", "wan2.1_i2v_480p_14B", "wan2.1_i2v_720p_14B", "wan2.1_t2v_1.3B_ret_mode", "wan2.1_t2v_14B_ret_mode", "wan2.1_i2v_480p_14B_ret_mode", "wan2.1_i2v_720p_14B_ret_mode"], {"default": "wan2.1_i2v_720p_14B", "tooltip": "Supported diffusion model."})),
-                ("tea_cache_rel_l1_thresh", ("FLOAT", {"default": 0.22, "min": 0.0, "max": 10.0, "step": 0.01, "tooltip": "How strongly to cache the output of diffusion model. This value must be non-negative."})),
+                ("tea_cache_rel_l1_thresh", ("FLOAT", {"default": 0.05, "min": 0.0, "max": 10.0, "step": 0.01, "tooltip": "How strongly to cache the output of diffusion model. This value must be non-negative."})),
                 ("tea_cache_start_percent", ("FLOAT", {"default": 0.2, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "The start percentage of the steps that will apply TeaCache."})),
                 ("tea_cache_end_percent", ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "The end percentage of the steps that will apply TeaCache."})),
                 ("tea_cache_cache_device", (["cuda", "cpu"], {"default": "cuda", "tooltip": "Device where the cache will reside"})),
@@ -116,7 +116,7 @@ class WanImageToVideoAdvancedSampler:
                 ("use_shift", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable Model Shift for improved sampling stability and quality."})),
                 ("shift", ("FLOAT", {"default": 2.0, "min": 0.0, "max": 100.0, "step":0.01, "tooltip": "Shift value for ModelSamplingSD3. Higher values can improve sampling stability."})),
                 ("use_block_swap", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable Block Swap optimization for memory efficiency during video generation."})),
-                ("block_swap", ("INT", {"default": 35, "min": 1, "max": 40, "step":1, "tooltip": "Block swap threshold value. Controls when to swap model blocks for memory optimization."})),
+                ("block_swap", ("INT", {"default": 20, "min": 1, "max": 40, "step":1, "tooltip": "Block swap threshold value. Controls when to swap model blocks for memory optimization."})),
                 
                 # ═════════════════════════════════════════════════════════════════
                 # 🎬 VIDEO GENERATION SETTINGS
@@ -167,7 +167,7 @@ class WanImageToVideoAdvancedSampler:
                 ("frames_clear_cache_after_n_frames", ("INT", {"default": 100, "min": 1, "max": 1000, "tooltip": "Clear the cache after processing this many frames. Helps manage memory usage during long video generation."})),
                 ("frames_use_cuda_graph", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Use CUDA Graphs for frame interpolation. Improves performance by reducing overhead during inference."})),
                 ("frames_overlap_chunks", ("INT", {"default": 8, "min": 1, "max": 81, "step":1, "advanced": True, "tooltip": "Number of overlapping frames between video chunks to ensure seamless motion continuity. Higher values (8-16) create smoother transitions, while lower values may cause visible seams between chunks."})),
-                ("frames_overlap_chunks_blend", ("FLOAT", {"default": 0.7, "min": 0.0, "max": 1, "step":0.01, "advanced": True, "tooltip": "How much to influence from previous frames (0.0 = no influence, 1.0 = full replacement)"})),
+                ("frames_overlap_chunks_blend", ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1, "step":0.01, "advanced": True, "tooltip": "How much to influence from previous frames (0.0 = no influence, 1.0 = full replacement)"})),
             ]),
             "optional": OrderedDict([
                 ("lora_stack", (any_type, {"default": None, "advanced": True, "tooltip": "Stack of LoRAs to apply to the diffusion model. Each LoRA modifies the model's behavior."})),
@@ -184,7 +184,7 @@ class WanImageToVideoAdvancedSampler:
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def run(self, GGUF_High, GGUF_Low, Diffusor_High, Diffusor_Low, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.22, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=2.0, use_block_swap=True, block_swap=35, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True, frames_overlap_chunks=8, frames_overlap_chunks_blend=0.7):
+    def run(self, GGUF_High, GGUF_Low, Diffusor_High, Diffusor_Low, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.05, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=8.0, use_block_swap=True, block_swap=20, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True, frames_overlap_chunks=8, frames_overlap_chunks_blend=0.3):
         self.default_fps = 16.0
 
         gc.collect()
@@ -248,8 +248,18 @@ class WanImageToVideoAdvancedSampler:
 
         output_image, fps, = self.postprocess(model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend)
 
+        # Aggressive cleanup of main models to prevent WanTEModel memory leaks
+        # NOTE: Only do this AFTER processing is completely done
+        # Don't cleanup models that might still be needed
+        
+        # Break any circular references
+        self.break_circular_references(locals())
+        
+        # Standard cleanup
         self.cleanup_local_refs(locals())
         self.enhanced_memory_cleanup(locals())
+        mm.unload_all_models()
+        mm.soft_empty_cache()
 
         return (output_image, fps,)
 
@@ -300,7 +310,8 @@ class WanImageToVideoAdvancedSampler:
        # Generate video chunks sequentially
         images_chunk = []
         last_latent = None
-        original_image = start_image
+        original_image_start = start_image
+        original_image_end = end_image
         output_image = None
         reference_frames = []
         
@@ -311,6 +322,9 @@ class WanImageToVideoAdvancedSampler:
             working_model_low = model_low.clone()
             working_clip_high = clip_model.clone()
             working_clip_low = clip_model.clone()
+
+            # Immediately clear CUDA cache after cloning to prevent accumulation
+            torch.cuda.empty_cache()
 
             # Apply Model Patch Torch Settings
             working_model_high = self.apply_model_patch_torch_settings(working_model_high)
@@ -357,21 +371,18 @@ class WanImageToVideoAdvancedSampler:
             torch.cuda.empty_cache()
             mm.throw_exception_if_processing_interrupted()
 
-            # Aggressive memory cleanup before each chunk
+            # Light memory cleanup before each chunk - don't interfere with active models
             gc.collect()
             torch.cuda.empty_cache()
             if hasattr(torch.cuda, 'synchronize'):
                 torch.cuda.synchronize()  # Ensure all operations complete before cleanup
-            
-            # Use generic cleanup function for local references
-            self.cleanup_local_refs(locals())
 
 #            if (image_generation_mode == TEXT_TO_VIDEO and chunk_index == 1):
 #                start_image = images_chunk[len(images_chunk) - 1][len(images_chunk[len(images_chunk) - 1]) - 1]  # Use last frame of previous chunk as start image
 #                original_image = images_chunk[len(images_chunk) - 1][0] # Use first frame of previous chunk as original image
 #                image_generation_mode = START_IMAGE  # Switch to START_IMAGE mode after first chunk
 
-            output_to_terminal_successful(f"Generating video chunk {chunk_index + 1}/{total_video_chunks}...")
+            output_to_terminal(f"Generating video chunk {chunk_index + 1}/{total_video_chunks}...")
             mm.throw_exception_if_processing_interrupted()
             
             if (prompt_stack is not None):
@@ -386,9 +397,10 @@ class WanImageToVideoAdvancedSampler:
                 output_to_terminal_successful(f"Original start_image dimensions: {start_image.shape[2]}x{start_image.shape[1]}")
 
                 # Process Start Image
-                start_image, image_width, image_height, clip_vision_start_image = self.process_image(
+                start_image, image_width, image_height, clip_vision_start_image = self.process_image(original_image_start,
                     start_image, start_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, 
-                    CLIPVisionEncoder, large_image_side, wan_model_size, start_image.shape[2], start_image.shape[1], "Start Image"
+                    CLIPVisionEncoder, large_image_side, wan_model_size, start_image.shape[2], start_image.shape[1], "Start Image",
+                    chunk_index
                 )
 
             # Get original end_image dimensions if available
@@ -396,9 +408,10 @@ class WanImageToVideoAdvancedSampler:
                 # ComfyUI images are tensors with shape [batch, height, width, channels]
                 output_to_terminal_successful(f"Original end_image dimensions: {end_image.shape[2]}x{end_image.shape[1]}")
 
-                end_image, image_width, image_height, clip_vision_end_image = self.process_image(
+                end_image, image_width, image_height, clip_vision_end_image = self.process_image(original_image_end,
                     end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution,
-                    CLIPVisionEncoder, large_image_side, wan_model_size, end_image.shape[2], end_image.shape[1], "End Image"
+                    CLIPVisionEncoder, large_image_side, wan_model_size, end_image.shape[2], end_image.shape[1], "End Image",
+                    chunk_index
                 )
             mm.throw_exception_if_processing_interrupted()
 
@@ -428,10 +441,12 @@ class WanImageToVideoAdvancedSampler:
                 del last_latent
                 last_latent = None
                 
-            self.enhanced_memory_cleanup(locals())
+            # Light cleanup without interfering with active models
+            gc.collect()
+            torch.cuda.empty_cache()
             mm.throw_exception_if_processing_interrupted()
 
-            high_denoise, low_denoise = self.apply_progressive_denoise_ramp(high_denoise, low_denoise, chunk_index, total_video_chunks)
+            # high_denoise, low_denoise = self.apply_progressive_denoise_ramp(high_denoise, low_denoise, chunk_index, total_video_chunks)
 
             if (use_dual_samplers):
                 # Apply dual sampler processing
@@ -447,10 +462,7 @@ class WanImageToVideoAdvancedSampler:
             mm.throw_exception_if_processing_interrupted()
 
             # Subsequent chunks: use original_image as reference for consistency
-            output_image = self.apply_color_match_to_image(original_image, output_image, apply_color_match, colorMatch)
-            mm.throw_exception_if_processing_interrupted()
-
-            output_image = self.apply_quality_monitoring(output_image, reference_frames, chunk_index)
+            output_image = self.apply_color_match_to_image(original_image_start, output_image, apply_color_match, colorMatch)
             mm.throw_exception_if_processing_interrupted()
 
             reference_frames.append(output_image[0:1].clone())
@@ -476,17 +488,21 @@ class WanImageToVideoAdvancedSampler:
             if (chunk_index == total_video_chunks - 1):
                 del last_latent
             
-            # Clean up working models for this chunk
+            # Clean up working models for this chunk - Use safe cleanup
+            # Don't use aggressive cleanup during processing
             del working_model_high, working_model_low, working_clip_high, working_clip_low
+            
+            # Light cleanup only
             gc.collect()
             torch.cuda.empty_cache()
-                
-            self.enhanced_memory_cleanup(locals())
-            self.cleanup_local_refs(locals())
         
         del reference_frames
 
         output_to_terminal_successful("All video chunks generated successfully")
+
+        # Force cleanup of main models before final processing - be less aggressive
+        # Only break circular references, don't force cleanup active models
+        self.break_circular_references(locals())
 
         # Merge all video chunks in sequence with overlap handling
         if len(images_chunk) > 1:
@@ -497,9 +513,9 @@ class WanImageToVideoAdvancedSampler:
 
         mm.throw_exception_if_processing_interrupted()
 
-        # Use generic cleanup function for local references
-        self.cleanup_local_refs(locals())
-        self.enhanced_memory_cleanup(locals())
+        # Light cleanup only
+        gc.collect()
+        torch.cuda.empty_cache()
 
         if (output_image is None):
             return (None, self.default_fps,)
@@ -664,16 +680,17 @@ class WanImageToVideoAdvancedSampler:
         
         Args:
             lora_stack: List of LoRA entries to apply
-            working_model: The model to apply LoRAs to
+            model: The model to apply LoRAs to
             clip: The CLIP model to apply LoRAs to
             
         Returns:
-            tuple: (updated_working_model, updated_clip) with LoRAs applied
+            tuple: (updated_model, updated_clip) with LoRAs applied
         """
         model_clone = model.clone()
         clip_clone = clip.clone()
 
-        del model, clip  # Clean up original model references to free memory
+        # Don't force cleanup the original models - just let them be garbage collected naturally
+        # The original models may still be needed by ComfyUI's internal systems
 
         if lora_stack is not None and len(lora_stack) > 0:
             output_to_terminal_successful("Loading Lora Stack...")
@@ -737,7 +754,7 @@ class WanImageToVideoAdvancedSampler:
             output_to_terminal_error("No clip vision model selected, skipping...")
             return None
 
-    def process_image(self, image, image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size, image_width, image_height, image_type):
+    def process_image(self, reference_image, image, image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size, image_width, image_height, image_type, chunck_index):
         """
         Process and resize an image, and encode CLIP vision if enabled.
         
@@ -760,23 +777,48 @@ class WanImageToVideoAdvancedSampler:
         clip_vision_image = None
         
         if (image is not None):
-            output_to_terminal_successful(f"Resizing {image_type}...")
+            original_width = image.shape[2]
+            original_height = image.shape[1]
 
-            image, image_width, image_height, _ = resizer.resize(image, large_image_side, large_image_side, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
-            
-            tmp_width, tmp_height, = wan_max_resolution.run(wan_model_size, image)
+            if (chunck_index == 0):
+                # Calculate new dimensions while maintaining aspect ratio
+                new_width = large_image_side
+                new_height = large_image_side
+                
+                # Calculate aspect ratio
+                aspect_ratio = original_width / original_height
+                
+                # Determine new dimensions based on which side is larger
+                if original_width >= original_height:
+                    # Width is larger or equal - scale based on width
+                    new_width = large_image_side
+                    new_height = int(large_image_side / aspect_ratio)
+                else:
+                    # Height is larger - scale based on height
+                    new_height = large_image_side
+                    new_width = int(large_image_side * aspect_ratio)
+                
+                
+                tmp_width, tmp_height, = wan_max_resolution.run(wan_model_size, image)
 
-            wan_large_side = max(tmp_width, tmp_height)
-            img_large_side = max(image_width, image_height)
+                wan_large_side = max(tmp_width, tmp_height)
+                img_large_side = max(new_width, new_height)
 
-            if (wan_large_side < img_large_side):
-                image, image_width, image_height, _ = resizer.resize(image, tmp_width, tmp_height, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
+                if (wan_large_side < img_large_side):
+                    image, image_width, image_height, _ = resizer.resize(image, tmp_width, tmp_height, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
+                else:
+                    image, image_width, image_height, _ = resizer.resize(image, new_width, new_height, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
 
-            output_to_terminal_successful(f"{image_type} final size: {image_width}x{image_height}")
+                output_to_terminal_successful(f"{image_type} final size: {image_width}x{image_height}")
+            else:
+                # For subsequent chunks, maintain previous dimensions
+                image_width = original_width
+                image_height = original_height
+                output_to_terminal_successful(f"{image_type} final size: {original_width}x{original_height}")
 
             if (image_clip_vision_enabled) and (clip_vision is not None):
                 output_to_terminal_successful(f"Encoding CLIP Vision for {image_type}...")
-                clip_vision_image, = CLIPVisionEncoder.encode(clip_vision, image, "center")
+                clip_vision_image, = CLIPVisionEncoder.encode(clip_vision, reference_image, "center")
         else:
             output_to_terminal_error(f"{image_type} is not provided, skipping...")
             
@@ -930,24 +972,25 @@ class WanImageToVideoAdvancedSampler:
         output_to_terminal_successful("High CFG KSampler started...")
         out_latent, = k_sampler.sample(model_high_cfg, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", positive_clip_high, negative_clip_high, in_latent, 0, stop_steps, "enabled", high_denoise)
         mm.throw_exception_if_processing_interrupted()
-        self.cleanup_local_refs(locals())
-        self.enhanced_memory_cleanup(locals())
-
+        
+        # Light cleanup between samplers
         gc.collect()
         torch.cuda.empty_cache()
-        #mm.soft_empty_cache()
+
         output_to_terminal_successful("Low CFG KSampler started...")
-        out_latent, = k_sampler.sample(model_low_cfg, "disable", noise_seed, total_steps, low_cfg, "lcm", "simple", positive_clip_low, negative_clip_low, out_latent, stop_steps, 1000, "disable", low_denoise)
+        out_latent, = k_sampler.sample(model_low_cfg, "disable", noise_seed, total_steps, low_cfg, "lcm", "simple", positive_clip_low, negative_clip_low, out_latent, stop_steps, 1000, "enabled", low_denoise)
         mm.throw_exception_if_processing_interrupted()
-        self.cleanup_local_refs(locals())
-        self.enhanced_memory_cleanup(locals())
+        
+        # Light cleanup after sampling
+        gc.collect()
+        torch.cuda.empty_cache()
 
         return out_latent
 
     def apply_single_sampler_processing(self, working_model, k_sampler, noise_seed, total_steps, high_cfg, positive_clip_high, negative_clip_high, in_latent, high_denoise):
 
         output_to_terminal_successful("KSampler started...")
-        out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", positive_clip_high, negative_clip_high, in_latent, 0, 1000, "disable", high_denoise)
+        out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", positive_clip_high, negative_clip_high, in_latent, 0, 1000, "enabled", high_denoise)
 
         return out_latent
 
@@ -972,7 +1015,8 @@ class WanImageToVideoAdvancedSampler:
         updated_clip_high = clip_high.clone()
         updated_clip_low = clip_low.clone()
 
-        del model_high, model_low, clip_high, clip_low  # Clean up original model references to free memory
+        # Don't force cleanup original models - they may still be needed
+        # Just let Python's garbage collector handle them naturally
 
         if use_dual_samplers:
             # Apply CausVid LoRA for High CFG model
@@ -1008,6 +1052,19 @@ class WanImageToVideoAdvancedSampler:
         if (image is not None and apply_color_match):
             output_to_terminal_successful("Applying color match to images...")
             image, = colorMatch.colormatch(original_image, image, "hm-mvgd-hm", strength=1.0)
+#            current_mean = torch.mean(image)
+#            current_std = torch.std(image)
+#            
+#            if original_image is not None:
+#                ref_mean = torch.mean(original_image)
+#                ref_std = torch.std(original_image)
+#                
+#                # Detect quality degradation
+#                brightness_drift = abs(current_mean - ref_mean)
+#                contrast_loss = abs(current_std - ref_std)
+#                
+#                if brightness_drift > 0.1 or contrast_loss > 0.05:
+#                    output_to_terminal_error(f"Quality degradation detected: brightness_drift={brightness_drift:.3f}, contrast_loss={contrast_loss:.3f}")
 
         return image
     
@@ -1051,20 +1108,15 @@ class WanImageToVideoAdvancedSampler:
                             # Some objects can't have weak references
                             pass
             
-            # Force deletion of memory-intensive objects
+            # Force deletion of memory-intensive objects - but be more conservative
             deleted_count = 0
             for obj_name in memory_intensive_objects:
                 if obj_name in local_scope:
                     try:
-                        # Move to CPU if it's a GPU tensor
-                        obj = local_scope[obj_name]
-                        if hasattr(obj, 'cpu') and hasattr(obj, 'device'):
-                            if hasattr(obj.device, 'type') and obj.device.type == 'cuda':
-                                local_scope[obj_name] = obj.cpu()
-                        
-                        # Delete the object
-                        del local_scope[obj_name]
-                        deleted_count += 1
+                        # Only delete objects that are clearly temporary/cached
+                        if any(temp_word in obj_name.lower() for temp_word in ['temp', 'cache', '_cache', 'working_', 'updated_']):
+                            del local_scope[obj_name]
+                            deleted_count += 1
                     except Exception as e:
                         # Continue cleanup even if some deletions fail
                         pass
@@ -1081,7 +1133,7 @@ class WanImageToVideoAdvancedSampler:
                             high_ref_objects.append((name, ref_count))
                 
                 if high_ref_objects:
-                    output_to_terminal_successful(f"High reference count objects detected: {high_ref_objects}")
+                    output_to_terminal_successful(f"High reference count objects detected: {len(high_ref_objects)} objects")
             
             # Multiple garbage collection passes to break circular references
             # This is crucial for complex object graphs in ML models
@@ -1104,7 +1156,7 @@ class WanImageToVideoAdvancedSampler:
             
             # Report cleanup results
             if alive_objects:
-                output_to_terminal_successful(f"{len(alive_objects)} objects still referenced after cleanup: {alive_objects[:5]}")
+                output_to_terminal_successful(f"{len(alive_objects)} objects still referenced after cleanup")
             
             output_to_terminal_successful(f"Cleaned {deleted_count} objects, collected {total_collected} garbage objects")
             
@@ -1191,6 +1243,83 @@ class WanImageToVideoAdvancedSampler:
         
         return alive_refs
 
+    def force_model_cleanup(self, *models):
+        """
+        Safe cleanup of model references to prevent memory leaks without corrupting models.
+        
+        This method safely cleans up model objects without deleting critical
+        attributes that are needed for model inference.
+        
+        Args:
+            *models: Variable number of model objects to clean up
+        """
+        for model in models:
+            if model is not None:
+                try:
+                    # DON'T delete critical model attributes - just move to CPU if possible
+                    if hasattr(model, 'cpu') and hasattr(model, 'device'):
+                        try:
+                            if hasattr(model.device, 'type') and model.device.type == 'cuda':
+                                # Move model to CPU to free GPU memory
+                                model.cpu()
+                        except:
+                            pass
+                    
+                    # Only clean up non-essential cached data
+                    if hasattr(model, '__dict__'):
+                        # Only remove safe-to-remove attributes
+                        safe_to_remove = ['cache', 'temp_cache', '_cache', 'temp_data']
+                        for attr_name in list(model.__dict__.keys()):
+                            if any(safe_attr in attr_name.lower() for safe_attr in safe_to_remove):
+                                try:
+                                    delattr(model, attr_name)
+                                except:
+                                    pass
+                    
+                    # Clean up model patcher patches but keep the patcher structure
+                    if hasattr(model, 'patcher'):
+                        patcher = model.patcher
+                        if hasattr(patcher, 'patches'):
+                            # Clear patches but don't delete the patches dict
+                            patcher.patches.clear()
+                        if hasattr(patcher, 'backup') and hasattr(patcher.backup, 'clear'):
+                            # Clear backup but don't delete the backup dict
+                            patcher.backup.clear()
+                    
+                except Exception as e:
+                    # Continue cleanup even if individual model cleanup fails
+                    output_to_terminal_successful(f"Warning: Failed to clean up model: {str(e)}")
+                    continue
+        
+        # Standard garbage collection
+        gc.collect()
+        
+        # Clear CUDA cache
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+    def break_circular_references(self, local_scope):
+        """
+        Safely break circular references without corrupting active models.
+        
+        Args:
+            local_scope (dict): Local variables scope to analyze for circular references
+        """
+        # Identify potential circular reference chains - but be more conservative
+        circular_ref_patterns = [
+            'working_model_high', 'working_model_low', 
+            'working_clip_high', 'working_clip_low',
+        ]
+        
+        # Only set completed/temporary models to None, don't cleanup active models
+        for var_name in circular_ref_patterns:
+            if var_name in local_scope and local_scope[var_name] is not None:
+                # Just set to None to break reference - don't force cleanup
+                local_scope[var_name] = None
+        
+        # Light garbage collection
+        gc.collect()
+
     def guide_next_chunk_generation(self, last_latent, in_latent, frames_overlap_chunks, blend_strength=0.7):
         """
         Use last 16 frames from previous chunk to guide first 16 frames of current chunk for motion continuity.
@@ -1258,54 +1387,3 @@ class WanImageToVideoAdvancedSampler:
         output_to_terminal_successful(f"Progressive denoise ramp: high={adjusted_high_denoise:.3f}, low={adjusted_low_denoise:.3f} (reduction: {total_reduction:.3f})")
         
         return adjusted_high_denoise, adjusted_low_denoise
-    
-    def apply_quality_monitoring(self, output_image, reference_frames, chunk_index):
-        """
-        Monitor generation quality and apply corrections when degradation is detected.
-        
-        Args:
-            output_image: Generated image output
-            reference_frames: List of high-quality reference frames
-            chunk_index: Current chunk index
-            periodic_detail_boost: Whether to apply periodic detail enhancement
-            
-        Returns:
-            Quality-corrected image output
-        """
-        if chunk_index == 0 or not reference_frames:
-            return output_image
-        
-        try:
-            # Simple quality monitoring based on brightness and contrast
-            current_mean = torch.mean(output_image)
-            current_std = torch.std(output_image)
-            
-            if len(reference_frames) > 0:
-                ref_mean = torch.mean(reference_frames[-1])
-                ref_std = torch.std(reference_frames[-1])
-                
-                # Detect quality degradation
-                brightness_drift = abs(current_mean - ref_mean)
-                contrast_loss = abs(current_std - ref_std)
-                
-                if brightness_drift > 0.1 or contrast_loss > 0.05:
-                    output_to_terminal_error(f"Quality degradation detected: brightness_drift={brightness_drift:.3f}, contrast_loss={contrast_loss:.3f}")
-                    
-                    # Apply simple correction
-                    correction_factor = ref_mean / (current_mean + 1e-8)
-                    output_image = output_image * correction_factor.clamp(0.8, 1.2)
-                    
-                    output_to_terminal_successful("Applied quality correction")
-            
-            # Simple detail enhancement using sharpening
-            if TORCHVISION_AVAILABLE:
-                # Apply slight Gaussian blur and subtract to sharpen
-                blurred = gaussian_blur(output_image.permute(0, 3, 1, 2), kernel_size=3, sigma=0.5)
-                sharpened = output_image.permute(0, 3, 1, 2) + 0.1 * (output_image.permute(0, 3, 1, 2) - blurred)
-                output_image = sharpened.permute(0, 2, 3, 1).clamp(0, 1)
-                output_to_terminal_successful("Applied periodic detail boost")
-        
-        except Exception as e:
-            output_to_terminal_error(f"Error in quality monitoring: {str(e)}")
-        
-        return output_image
