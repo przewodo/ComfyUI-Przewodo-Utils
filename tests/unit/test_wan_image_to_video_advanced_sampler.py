@@ -22,6 +22,11 @@ except ImportError:
     WanImageToVideoAdvancedSampler = None
 
 try:
+    from cache_manager import CacheManager
+except ImportError:
+    CacheManager = None
+
+try:
     from nodes import LoadImage
 except ImportError:
     LoadImage = None
@@ -184,6 +189,13 @@ class TestWanImageToVideoAdvancedSampler:
         """Create a mock end image tensor."""
         # ComfyUI format: [batch, height, width, channels] 
         return torch.randn(1, 512, 512, 3)
+    
+    @pytest.fixture
+    def mock_cache_manager(self):
+        """Create a real CacheManager instance for the sampler."""
+        if CacheManager is None:
+            pytest.skip("CacheManager not available")
+        return CacheManager()
     
     @pytest.fixture
     def realistic_prompt_lora_stack(self):
