@@ -179,8 +179,8 @@ class WanImageToVideoAdvancedSampler:
                 ("frames_multiplier", ("INT", {"default": 2, "min": 2, "max": 100, "step":1, "advanced": True, "tooltip": "Multiplier for the number of frames generated during interpolation."})),
                 ("frames_clear_cache_after_n_frames", ("INT", {"default": 100, "min": 1, "max": 1000, "tooltip": "Clear the cache after processing this many frames. Helps manage memory usage during long video generation."})),
                 ("frames_use_cuda_graph", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Use CUDA Graphs for frame interpolation. Improves performance by reducing overhead during inference."})),
-                ("frames_overlap_chunks", ("INT", {"default": 8, "min": 1, "max": 81, "step":1, "advanced": True, "tooltip": "Number of overlapping frames between video chunks to ensure seamless motion continuity. Higher values (8-16) create smoother transitions, while lower values may cause visible seams between chunks."})),
-                ("frames_overlap_chunks_blend", ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1, "step":0.01, "advanced": True, "tooltip": "How much to influence from previous frames (0.0 = no influence, 1.0 = full replacement)"})),
+                ("frames_overlap_chunks", ("INT", {"default": 16, "min": 8, "max": 32, "step": 4, "advanced": True, "tooltip": "Number of overlapping frames between video chunks to ensure seamless motion continuity. Higher values (8-16) create smoother transitions, while lower values may cause visible seams between chunks."})),
+                ("frames_overlap_chunks_blend", ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Blend strength for continuous motion between chunks. Higher values (0.7-0.9) maintain stronger motion continuity."})),
             ]),
             "optional": OrderedDict([
                 ("lora_stack", (any_type, {"default": None, "advanced": True, "tooltip": "Stack of LoRAs to apply to the diffusion model. Each LoRA modifies the model's behavior."})),
@@ -316,6 +316,7 @@ class WanImageToVideoAdvancedSampler:
         input_latent = None
         input_mask = None
         input_concat_latent_image = None
+        last_latent = None
         
         # Memory management for full tensors
         self._memory_checkpoint = None
@@ -533,12 +534,17 @@ class WanImageToVideoAdvancedSampler:
             # Set memory checkpoint before sampling
             self._set_memory_checkpoint(f"pre_sampling_chunk_{chunk_index}")
 
+            if (chunk_index > 0):
+                in_latent, concat_latent_window = self.guide_next_chunk_generation(last_latent, in_latent, concat_latent_window, frames_overlap_chunks, frames_overlap_chunks_blend)
+
             if (use_dual_samplers):
                 in_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, noise_seed, total_steps, high_cfg, low_cfg, positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
             else:
                 in_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, noise_seed, total_steps, high_cfg, positive_clip_high, negative_clip_high, in_latent, high_denoise)
             mm.throw_exception_if_processing_interrupted()
             
+            last_latent = in_latent
+
             # Check memory usage after sampling
             self._check_memory_checkpoint(f"post_sampling_chunk_{chunk_index}")
 
@@ -552,7 +558,7 @@ class WanImageToVideoAdvancedSampler:
                     # Multiple chunks - update the corresponding window in the full input_latent
                     input_latent["samples"][:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = in_latent["samples"]
                     output_to_terminal_successful(f"Chunk {chunk_index + 1}: Merged sampled results back to full latent")
-
+            
             # Clean up after reference frame operations
             gc.collect()
             torch.cuda.empty_cache()
@@ -564,7 +570,6 @@ class WanImageToVideoAdvancedSampler:
                 chunk_index=chunk_index,
                 total_chunks=total_video_chunks,
                 variables_to_clean={
-                    'in_latent': in_latent,
                     'mask_window': mask_window,
                     'concat_latent_window': concat_latent_window,
                     'working_model_high': working_model_high,
@@ -590,6 +595,8 @@ class WanImageToVideoAdvancedSampler:
             positive_clip_low = None
             negative_clip_high = None
             negative_clip_low = None
+
+        last_latent = None
             
         output_image, = wan_video_vae_decode.decode(input_latent, vae, 0, image_generation_mode)
         mm.throw_exception_if_processing_interrupted()
@@ -1770,3 +1777,64 @@ class WanImageToVideoAdvancedSampler:
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+
+    def guide_next_chunk_generation(self, last_latent, in_latent, concat_latent_window, frames_overlap_chunks, blend_strength=0.8):
+        if last_latent is None:
+            return in_latent, concat_latent_window
+                    
+        output_to_terminal_successful(f"Applying motion-predicted continuous blending...")
+
+        # Log tensor shapes for debugging
+        output_to_terminal_successful(f"last_latent shape: {last_latent['samples'].shape}")
+        output_to_terminal_successful(f"in_latent shape: {in_latent['samples'].shape}")
+
+        # CORRECTED: Convert frame space to latent space (divide by 4)
+        frames_in_latent_space = frames_overlap_chunks // 4  # 8 frames -> 2 latent frames
+        
+        last_frames_count = min(frames_in_latent_space, last_latent['samples'].shape[2])  # Frame dimension
+        last_frames = last_latent['samples'][:, :, -last_frames_count:, :, :]  # Extract last frames
+        
+        first_frames_count = min(frames_in_latent_space, in_latent['samples'].shape[2])  # Frame dimension
+        overlap_frames = min(last_frames_count, first_frames_count)
+        
+        output_to_terminal_successful(f"overlap_frames: {overlap_frames} (from {frames_overlap_chunks} frame-space frames), last_frames shape: {last_frames.shape}")
+        
+        # Calculate motion vector from last chunk - CORRECTED for latent space
+        if last_frames_count >= 2:
+            motion_vector = last_frames[:, :, -1, :, :] - last_frames[:, :, -2, :, :]  # Last 2 frames
+            output_to_terminal_successful(f"motion_vector shape: {motion_vector.shape}")
+        else:
+            motion_vector = 0
+        
+        for i in range(overlap_frames):
+            # MOTION PREDICTION: Predict where the motion should continue
+            frame_index = (last_frames_count - 1) - i  # Index from end of last_frames
+            predicted_frame = last_frames[:, :, frame_index, :, :] + (motion_vector * (i + 1) * 0.1)
+            
+            output_to_terminal_successful(f"Frame {i}: using last_frames frame {frame_index}, predicted_frame shape: {predicted_frame.shape}")
+            
+            # Strong blending with motion prediction
+            motion_weight = 0.3  # Weight for motion prediction
+            frame_blend_weight = blend_strength - motion_weight
+            
+            # CORRECTED: Access individual frames using frame dimension (index 2)
+            current_frame = in_latent['samples'][:, :, i, :, :]  # Frame i from current latent
+            reference_frame = last_frames[:, :, frame_index, :, :]  # Frame from last latent
+            
+            output_to_terminal_successful(f"Frame {i} shapes - current: {current_frame.shape}, reference: {reference_frame.shape}, predicted: {predicted_frame.shape}")
+            
+            # Triple blend: current + previous + motion prediction
+            blended_frame = (
+                (1.0 - frame_blend_weight - motion_weight) * current_frame + 
+                frame_blend_weight * reference_frame +
+                motion_weight * predicted_frame
+            )
+            
+            # Update both latents with the same blended frame
+            in_latent['samples'][:, :, i, :, :] = blended_frame
+            concat_latent_window[:, :, i, :, :] = blended_frame  # Keep concat_latent consistent
+        
+        output_to_terminal_successful(f"Applied motion-predicted blending to {overlap_frames} latent frames (equivalent to {frames_overlap_chunks} frame-space frames)")
+        output_to_terminal_successful(f"Final in_latent shape: {in_latent['samples'].shape}")
+        
+        return in_latent, concat_latent_window
