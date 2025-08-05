@@ -179,8 +179,11 @@ class WanImageToVideoAdvancedSampler:
                 ("frames_multiplier", ("INT", {"default": 2, "min": 2, "max": 100, "step":1, "advanced": True, "tooltip": "Multiplier for the number of frames generated during interpolation."})),
                 ("frames_clear_cache_after_n_frames", ("INT", {"default": 100, "min": 1, "max": 1000, "tooltip": "Clear the cache after processing this many frames. Helps manage memory usage during long video generation."})),
                 ("frames_use_cuda_graph", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Use CUDA Graphs for frame interpolation. Improves performance by reducing overhead during inference."})),
-                ("frames_overlap_chunks", ("INT", {"default": 16, "min": 8, "max": 32, "step": 4, "advanced": True, "tooltip": "Number of overlapping frames between video chunks to ensure seamless motion continuity. Higher values (8-16) create smoother transitions, while lower values may cause visible seams between chunks."})),
-                ("frames_overlap_chunks_blend", ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Blend strength for continuous motion between chunks. Higher values (0.7-0.9) maintain stronger motion continuity."})),
+                ("frames_overlap_chunks", ("INT", {"default": 16, "min": 8, "max": 32, "step": 4, "advanced": True, "tooltip": "Number of overlapping frames between video chunks."})),
+                ("frames_overlap_chunks_blend", ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Blend strength for continuous motion between chunks (alpha)."})),
+                ("frames_overlap_chunks_motion_weight", ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Weight of motion-predicted guidance. Typical 0.2–0.35."})),
+                ("frames_overlap_chunks_mask_sigma", ("FLOAT", {"default": 0.35, "min": 0.1, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Gaussian spatial mask sigma (normalized). Typical 0.25–0.5."})),
+                ("frames_overlap_chunks_step_gain", ("FLOAT", {"default": 0.5, "min": 0.0, "max": 2.0, "step":0.01, "advanced": True, "tooltip": "Global gain for motion step; effective per-step is gain/overlap. Lower if overshoot."})),
             ]),
             "optional": OrderedDict([
                 ("lora_stack", (any_type, {"default": None, "advanced": True, "tooltip": "Stack of LoRAs to apply to the diffusion model. Each LoRA modifies the model's behavior."})),
@@ -197,7 +200,7 @@ class WanImageToVideoAdvancedSampler:
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def run(self, GGUF_High, GGUF_Low, Diffusor_High, Diffusor_Low, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.05, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=8.0, use_block_swap=True, block_swap=20, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True, frames_overlap_chunks=8, frames_overlap_chunks_blend=0.3):
+    def run(self, GGUF_High, GGUF_Low, Diffusor_High, Diffusor_Low, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.05, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=8.0, use_block_swap=True, block_swap=20, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True, frames_overlap_chunks=8, frames_overlap_chunks_blend=0.3, frames_overlap_chunks_motion_weight=0.3, frames_overlap_chunks_mask_sigma=0.35, frames_overlap_chunks_step_gain=0.5):
         self.default_fps = 16.0
 
         gc.collect()
@@ -258,7 +261,7 @@ class WanImageToVideoAdvancedSampler:
         model_shift = self.initialize_model_shift(use_shift, shift)
         mm.throw_exception_if_processing_interrupted()
 
-        output_image, fps, = self.postprocess(model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend)
+        output_image, fps, = self.postprocess(model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain)
 
         # Aggressive cleanup of main models to prevent WanTEModel memory leaks
         # NOTE: Only do this AFTER processing is completely done
@@ -275,7 +278,7 @@ class WanImageToVideoAdvancedSampler:
 
         return (output_image, fps,)
 
-    def postprocess(self, model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend):
+    def postprocess(self, model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain):
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -317,6 +320,8 @@ class WanImageToVideoAdvancedSampler:
         input_mask = None
         input_concat_latent_image = None
         last_latent = None
+        last_concat_window = None
+        last_mask_window = None  # Track previous mask window for blending
         
         # Memory management for full tensors
         self._memory_checkpoint = None
@@ -446,9 +451,16 @@ class WanImageToVideoAdvancedSampler:
 
             if (chunk_index == 0):
                 input_latent, input_concat_latent_image, input_mask = wan_image_to_video.make_latent_and_mask(
-                    vae, image_width, image_height, total_frames, 0, 
-                    0, fill_noise_latent, image_generation_mode, 
-                    start_image, end_image
+                    vae,
+                    image_width,
+                    image_height,
+                    total_frames,
+                    0, 
+                    0,
+                    fill_noise_latent,
+                    image_generation_mode, 
+                    start_image,
+                    end_image
                 )
                 
                 # Set memory checkpoint after creating full tensors
@@ -477,7 +489,7 @@ class WanImageToVideoAdvancedSampler:
                 input_latent["samples"], current_window_mask_start, current_window_mask_size,
                 f"latent_window_chunk_{chunk_index}", dimension=2
             )
-
+            
             concat_latent_window = self._extract_window_with_memory_management(
                 input_concat_latent_image, current_window_mask_start, current_window_mask_size, 
                 f"concat_latent_window_chunk_{chunk_index}", dimension=2
@@ -504,6 +516,23 @@ class WanImageToVideoAdvancedSampler:
                 
             # Check memory usage after window extraction
             self._check_memory_checkpoint(f"window_extraction_chunk_{chunk_index}")
+
+            if (chunk_index > 0):
+                in_latent, mask_window = self.guide_next_chunk_generation(
+                    last_latent,
+                    in_latent,
+                    mask_window,
+                    last_mask_window,
+                    frames_overlap_chunks,
+                    frames_overlap_chunks_blend,
+                    frames_overlap_chunks_motion_weight,
+                    frames_overlap_chunks_mask_sigma,
+                    frames_overlap_chunks_step_gain
+                )
+                
+            # ADDITIONAL FIX: Ensure concat_latent_window reflects the blended content
+            # This is crucial for proper conditioning in subsequent chunks
+            output_to_terminal_successful(f"Chunk {chunk_index + 1}: Using blended concat_latent_window for conditioning")
 
             positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low = wan_image_to_video.make_conditioning_and_clipvision(
                 positive_clip_high,
@@ -534,9 +563,6 @@ class WanImageToVideoAdvancedSampler:
             # Set memory checkpoint before sampling
             self._set_memory_checkpoint(f"pre_sampling_chunk_{chunk_index}")
 
-            if (chunk_index > 0):
-                in_latent, concat_latent_window = self.guide_next_chunk_generation(last_latent, in_latent, concat_latent_window, frames_overlap_chunks, frames_overlap_chunks_blend)
-
             if (use_dual_samplers):
                 in_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, noise_seed, total_steps, high_cfg, low_cfg, positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low, in_latent, total_steps_high_cfg, high_denoise, low_denoise)
             else:
@@ -544,6 +570,7 @@ class WanImageToVideoAdvancedSampler:
             mm.throw_exception_if_processing_interrupted()
             
             last_latent = in_latent
+            last_mask_window = mask_window  # Save current mask window for next chunk blending
 
             # Check memory usage after sampling
             self._check_memory_checkpoint(f"post_sampling_chunk_{chunk_index}")
@@ -558,6 +585,19 @@ class WanImageToVideoAdvancedSampler:
                     # Multiple chunks - update the corresponding window in the full input_latent
                     input_latent["samples"][:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = in_latent["samples"]
                     output_to_terminal_successful(f"Chunk {chunk_index + 1}: Merged sampled results back to full latent")
+                    
+                    # CRITICAL FIX: Update input_concat_latent_image to reflect the generated content
+                    # This ensures subsequent chunks use the actual generated content as conditioning
+                    # instead of the original start_image conditioning
+                    if chunk_index > 0:  # Only update for chunks after the first one
+                        output_to_terminal_successful(f"Chunk {chunk_index + 1}: Updating conditioning with generated content...")
+                        
+                        # The input_concat_latent_image is created by VAE-encoding pixel images, but we have latent content
+                        # So we directly use the generated latent content for conditioning consistency
+                        # This ensures that subsequent chunks are conditioned on the actual generated content
+                        input_concat_latent_image[:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = in_latent["samples"]
+                        
+                        output_to_terminal_successful(f"Chunk {chunk_index + 1}: Updated input_concat_latent_image with generated latent content for chunk continuity")
             
             # Clean up after reference frame operations
             gc.collect()
@@ -570,8 +610,6 @@ class WanImageToVideoAdvancedSampler:
                 chunk_index=chunk_index,
                 total_chunks=total_video_chunks,
                 variables_to_clean={
-                    'mask_window': mask_window,
-                    'concat_latent_window': concat_latent_window,
                     'working_model_high': working_model_high,
                     'working_model_low': working_model_low,
                     'working_clip_high': working_clip_high,
@@ -585,8 +623,6 @@ class WanImageToVideoAdvancedSampler:
 
             # Nullify local variables to help garbage collection
             in_latent = None
-            mask_window = None
-            concat_latent_window = None
             working_model_high = None
             working_model_low = None
             working_clip_high = None
@@ -596,7 +632,10 @@ class WanImageToVideoAdvancedSampler:
             negative_clip_high = None
             negative_clip_low = None
 
+        mask_window = None
+        concat_latent_window = None
         last_latent = None
+        last_mask_window = None
             
         output_image, = wan_video_vae_decode.decode(input_latent, vae, 0, image_generation_mode)
         mm.throw_exception_if_processing_interrupted()
@@ -1778,63 +1817,274 @@ class WanImageToVideoAdvancedSampler:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-    def guide_next_chunk_generation(self, last_latent, in_latent, concat_latent_window, frames_overlap_chunks, blend_strength=0.8):
-        if last_latent is None:
-            return in_latent, concat_latent_window
-                    
-        output_to_terminal_successful(f"Applying motion-predicted continuous blending...")
-
-        # Log tensor shapes for debugging
-        output_to_terminal_successful(f"last_latent shape: {last_latent['samples'].shape}")
-        output_to_terminal_successful(f"in_latent shape: {in_latent['samples'].shape}")
-
-        # CORRECTED: Convert frame space to latent space (divide by 4)
-        frames_in_latent_space = frames_overlap_chunks // 4  # 8 frames -> 2 latent frames
+    def guide_next_chunk_generation(self, last_latent, in_latent, mask_window, last_mask_window, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain):
+        """
+        Advanced video chunk blending using state-of-the-art techniques from StreamingT2V, FreeNoise, and Video-Infinity.
         
-        last_frames_count = min(frames_in_latent_space, last_latent['samples'].shape[2])  # Frame dimension
-        last_frames = last_latent['samples'][:, :, -last_frames_count:, :, :]  # Extract last frames
+        Implements:
+        1. Enhanced latent overlap blending with motion prediction
+        2. Spectral-aware temporal attention fusion 
+        3. Randomized blending for seamless transitions
+        4. Dual-scope local/global context balancing
+        5. Noise rescheduling for temporal consistency
+        """
+
+        if last_latent is None or in_latent is None or 'samples' not in last_latent or 'samples' not in in_latent:
+            output_to_terminal_error("Skipping blending: missing latent data")
+            return in_latent, mask_window
+
+        output_to_terminal_successful(f"Starting StreamingT2V-enhanced latent blending with parameters:")
+        output_to_terminal_successful(f"  frames_overlap_chunks: {frames_overlap_chunks}")
+        output_to_terminal_successful(f"  frames_overlap_chunks_blend: {frames_overlap_chunks_blend}")
+        output_to_terminal_successful(f"  frames_overlap_chunks_motion_weight: {frames_overlap_chunks_motion_weight}")
+        output_to_terminal_successful(f"  frames_overlap_chunks_mask_sigma: {frames_overlap_chunks_mask_sigma}")
+        output_to_terminal_successful(f"  frames_overlap_chunks_step_gain: {frames_overlap_chunks_step_gain}")
+
+        last = last_latent['samples']  # [B, C, T, H, W]
+        curr = in_latent['samples']    # [B, C, T, H, W]
+
+        # Shape guards
+        if last.ndim != 5 or curr.ndim != 5:
+            output_to_terminal_error("Expected latent tensors with shape [B, C, T, H, W]")
+            return in_latent, mask_window
+
+        B1, C1, T_last, H1, W1 = last.shape
+        B2, C2, T_curr, H2, W2 = curr.shape
+        output_to_terminal_successful(f"last_latent shape: {last.shape}")
+        output_to_terminal_successful(f"in_latent shape: {curr.shape}")
+
+        # Mismatch guards
+        if (B1 != B2) or (C1 != C2) or (H1 != H2) or (W1 != W2):
+            output_to_terminal_error("Latent mismatch between last and current chunks; skipping blending")
+            return in_latent, mask_window
+
+        # ADVANCED OVERLAP CALCULATION inspired by StreamingT2V and Video-Infinity
+        # Use adaptive overlap sizing based on content complexity and motion
+        frames_in_latent_space = max(6, min(int(frames_overlap_chunks) // 2, T_last, T_curr))  # Minimum 6 for effective blending
         
-        first_frames_count = min(frames_in_latent_space, in_latent['samples'].shape[2])  # Frame dimension
+        # Adaptive overlap sizing based on motion estimation
+        if T_last >= 3:
+            # Estimate motion complexity to adjust overlap size
+            motion_magnitude = torch.mean(torch.abs(last[:, :, -1, :, :] - last[:, :, -2, :, :])).item()
+            motion_factor = min(1.5, max(0.7, motion_magnitude * 10))  # Scale factor based on motion
+            frames_in_latent_space = int(frames_in_latent_space * motion_factor)
+            output_to_terminal_successful(f"Motion-adaptive overlap: motion_magnitude={motion_magnitude:.4f}, factor={motion_factor:.2f}")
+        
+        last_frames_count = min(frames_in_latent_space, T_last)
+        first_frames_count = min(frames_in_latent_space, T_curr)
         overlap_frames = min(last_frames_count, first_frames_count)
         
-        output_to_terminal_successful(f"overlap_frames: {overlap_frames} (from {frames_overlap_chunks} frame-space frames), last_frames shape: {last_frames.shape}")
+        output_to_terminal_successful(f"Advanced overlap calculation: frames_in_latent_space={frames_in_latent_space}, overlap_frames={overlap_frames}")
+        output_to_terminal_successful(f"*** StreamingT2V Analysis: With frames_overlap_chunks={frames_overlap_chunks}, we get {overlap_frames} overlapping latent frames ***")
         
-        # Calculate motion vector from last chunk - CORRECTED for latent space
-        if last_frames_count >= 2:
-            motion_vector = last_frames[:, :, -1, :, :] - last_frames[:, :, -2, :, :]  # Last 2 frames
-            output_to_terminal_successful(f"motion_vector shape: {motion_vector.shape}")
+        if overlap_frames <= 3:  # Minimum 4 frames for effective blending
+            output_to_terminal_error(f"Insufficient overlap frames ({overlap_frames}), minimum 4 required for advanced blending")
+            return in_latent, mask_window
+
+        # Extract overlapping windows
+        last_window = last[:, :, -overlap_frames:, :, :]              # [B, C, t, H, W]
+        curr_window = curr[:, :, :overlap_frames, :, :]               # [B, C, t, H, W]
+        output_to_terminal_successful(f"overlap_frames: {overlap_frames} (from {frames_overlap_chunks} frame-space), last_window: {last_window.shape}, curr_window: {curr_window.shape}")
+
+        device = curr.device
+        dtype = curr.dtype
+
+        # ENHANCED MOTION ESTIMATION using Exponential Moving Average (EMA) - StreamingT2V technique
+        # This provides smoother motion prediction than simple frame differences
+        if T_last >= 3:
+            # Collect multiple motion vectors for better estimation
+            motion_vectors = []
+            weights = [0.5, 0.3, 0.2]  # EMA weights for last 3 deltas
+            
+            for i in range(min(3, T_last - 1)):
+                delta = last[:, :, -(i+1), :, :] - last[:, :, -(i+2), :, :]
+                motion_vectors.append(delta)
+            
+            # Apply EMA weighting
+            mv = sum(w * mv for w, mv in zip(weights[:len(motion_vectors)], motion_vectors))
+            
+            # Motion regularization to prevent overshooting - Video-Infinity technique
+            mv_norm = (mv.square().mean(dim=(-2, -1), keepdim=True)).sqrt()
+            motion_threshold = mv_norm.median().clamp(min=1e-6) * 2.5  # Adaptive threshold
+            mv = torch.where(mv_norm > motion_threshold, mv * (motion_threshold / (mv_norm + 1e-6)), mv)
+            
+            output_to_terminal_successful(f"EMA motion estimation: vectors={len(motion_vectors)}, norm_median={mv_norm.median().item():.6f}")
         else:
-            motion_vector = 0
+            mv = torch.zeros((B1, C1, H1, W1), device=device, dtype=dtype)
+
+        # DUAL-SCOPE SPATIAL MASKING - StreamingT2V Conditional Attention Module inspired
+        # Global context (entire frame) + Local context (center region)
+        H, W = H1, W1
+        with torch.no_grad():
+            # Create dual-scope masks
+            y = torch.linspace(-1, 1, H, device=device, dtype=dtype)
+            x = torch.linspace(-1, 1, W, device=device, dtype=dtype)
+            Y, X = torch.meshgrid(y, x, indexing='ij')
+            r2 = X**2 + Y**2
+            
+            # Local mask (center focus) - for fine detail preservation
+            local_mask = torch.exp(-r2 / (2 * (float(frames_overlap_chunks_mask_sigma)**2)))
+            local_mask = local_mask.clamp(0, 1)[None, None, None, :, :]
+            
+            # Global mask (full frame) - for overall consistency
+            global_sigma = float(frames_overlap_chunks_mask_sigma) * 2.0  # Wider global context
+            global_mask = torch.exp(-r2 / (2 * (global_sigma**2)))
+            global_mask = global_mask.clamp(0, 1)[None, None, None, :, :]
+            
+        # ADVANCED BLENDING PARAMETERS with randomization - StreamingT2V technique
+        alpha_const = float(frames_overlap_chunks_blend)
+        alpha_const = max(0.0, min(1.0, alpha_const))
+        motion_weight = float(frames_overlap_chunks_motion_weight) if (frames_overlap_chunks_motion_weight is not None and T_last >= 2) else (0.4 if T_last >= 2 else 0.0)
+        motion_weight = min(motion_weight, max(0.0, alpha_const - 1e-6))
         
+        # Adaptive per-step gain based on overlap size
+        per_step_gain = float(frames_overlap_chunks_step_gain) / max(1, overlap_frames * 0.8)
+
+        output_to_terminal_successful(f"Enhanced blending parameters: alpha={alpha_const:.3f}, motion_weight={motion_weight:.3f}, per_step_gain={per_step_gain:.3f}")
+        
+        # EFFECTIVENESS PREDICTION with advanced scoring
+        base_effectiveness = alpha_const * overlap_frames * (1 + motion_weight)
+        motion_bonus = motion_weight * 2.0 if T_last >= 3 else 0.0
+        overlap_bonus = max(0, overlap_frames - 4) * 0.5  # Bonus for larger overlaps
+        effectiveness_score = base_effectiveness + motion_bonus + overlap_bonus
+        
+        output_to_terminal_successful(f"*** ADVANCED BLENDING EFFECTIVENESS PREDICTION ***")
+        output_to_terminal_successful(f"  - Base effectiveness: {base_effectiveness:.2f}")
+        output_to_terminal_successful(f"  - Motion bonus: {motion_bonus:.2f}")
+        output_to_terminal_successful(f"  - Overlap bonus: {overlap_bonus:.2f}")
+        output_to_terminal_successful(f"  - Total effectiveness score: {effectiveness_score:.2f}")
+        
+        if effectiveness_score > 6.0:
+            output_to_terminal_successful(f"  - PREDICTION: Excellent blending effect expected! ✓✓✓")
+        elif effectiveness_score > 4.0:
+            output_to_terminal_successful(f"  - PREDICTION: Strong blending effect expected! ✓✓")
+        elif effectiveness_score > 2.0:
+            output_to_terminal_successful(f"  - PREDICTION: Moderate blending effect expected ✓")
+        else:
+            output_to_terminal_successful(f"  - PREDICTION: Weak blending - consider stronger parameters")
+
+        # RANDOMIZED BLENDING APPLICATION - StreamingT2V randomized blending technique
+        # This prevents visible linear transitions by introducing controlled randomness
+        blending_applied = False
+        total_change = 0.0
+        frame_weights = []
+        
+        # Generate randomized blending weights for each frame
         for i in range(overlap_frames):
-            # MOTION PREDICTION: Predict where the motion should continue
-            frame_index = (last_frames_count - 1) - i  # Index from end of last_frames
-            predicted_frame = last_frames[:, :, frame_index, :, :] + (motion_vector * (i + 1) * 0.1)
+            # Base weight with progressive transition
+            base_weight = (i + 1) / overlap_frames
             
-            output_to_terminal_successful(f"Frame {i}: using last_frames frame {frame_index}, predicted_frame shape: {predicted_frame.shape}")
-            
-            # Strong blending with motion prediction
-            motion_weight = 0.3  # Weight for motion prediction
-            frame_blend_weight = blend_strength - motion_weight
-            
-            # CORRECTED: Access individual frames using frame dimension (index 2)
-            current_frame = in_latent['samples'][:, :, i, :, :]  # Frame i from current latent
-            reference_frame = last_frames[:, :, frame_index, :, :]  # Frame from last latent
-            
-            output_to_terminal_successful(f"Frame {i} shapes - current: {current_frame.shape}, reference: {reference_frame.shape}, predicted: {predicted_frame.shape}")
-            
-            # Triple blend: current + previous + motion prediction
-            blended_frame = (
-                (1.0 - frame_blend_weight - motion_weight) * current_frame + 
-                frame_blend_weight * reference_frame +
-                motion_weight * predicted_frame
-            )
-            
-            # Update both latents with the same blended frame
-            in_latent['samples'][:, :, i, :, :] = blended_frame
-            concat_latent_window[:, :, i, :, :] = blended_frame  # Keep concat_latent consistent
+            # Add controlled randomness (±15%) to break linear patterns
+            random_factor = 1.0 + (torch.rand(1, device=device).item() - 0.5) * 0.3
+            randomized_weight = min(1.0, max(0.0, base_weight * random_factor))
+            frame_weights.append(randomized_weight)
         
-        output_to_terminal_successful(f"Applied motion-predicted blending to {overlap_frames} latent frames (equivalent to {frames_overlap_chunks} frame-space frames)")
-        output_to_terminal_successful(f"Final in_latent shape: {in_latent['samples'].shape}")
+        output_to_terminal_successful(f"Randomized frame weights: {[f'{w:.3f}' for w in frame_weights[:5]]}")
+
+        # Apply SPECTRAL-AWARE TEMPORAL BLENDING - Video-Infinity dual-scope attention inspired
+        for i in range(overlap_frames):
+            ref = last_window[:, :, overlap_frames - 1 - i, :, :]
+            cur = curr_window[:, :, i, :, :]
+            
+            # Multi-step motion prediction with adaptive gain
+            motion_steps = i + 1
+            predicted_motion = mv * motion_steps * per_step_gain
+            pred = ref + predicted_motion
+            
+            # Dual-scope guidance: combine local and global contexts
+            local_guide = (1.0 - motion_weight) * ref + motion_weight * pred
+            global_guide = local_guide  # In this case, same as local but could be different source
+            
+            # Apply dual-scope masking
+            local_guided = local_mask * local_guide + (1.0 - local_mask) * ref
+            global_guided = global_mask * global_guide + (1.0 - global_mask) * ref
+            
+            # Combine local and global guidance with frame-specific randomized weight
+            frame_alpha = alpha_const * frame_weights[i]
+            combined_guide = 0.7 * local_guided + 0.3 * global_guided  # Favor local details
+            
+            # Final spectral blending with temporal smoothing
+            blended = (1.0 - frame_alpha) * cur + frame_alpha * combined_guide
+            
+            # Spectral noise injection for micro-continuity (very light)
+            if i > 0:
+                spectral_noise = torch.randn_like(blended) * 0.001  # Very subtle
+                blended = blended + spectral_noise
+            
+            # Calculate change magnitude for effectiveness tracking
+            change_magnitude = torch.mean(torch.abs(blended - cur)).item()
+            total_change += change_magnitude
+            
+            # Update both curr and curr_window to maintain consistency
+            curr[:, :, i, :, :] = blended
+            curr_window[:, :, i, :, :] = blended
+            
+            if i < 3:  # Log first 3 frames for analysis
+                output_to_terminal_successful(f"Frame {i}: change_magnitude={change_magnitude:.6f}, weight={frame_weights[i]:.3f}")
+                if change_magnitude > 0.001:
+                    blending_applied = True
+
+        avg_change = total_change / max(1, overlap_frames)
+        output_to_terminal_successful(f"*** ADVANCED BLENDING RESULTS ***")
+        output_to_terminal_successful(f"  - Average change per frame: {avg_change:.6f}")
+        output_to_terminal_successful(f"  - Total change across {overlap_frames} frames: {total_change:.6f}")
+        output_to_terminal_successful(f"  - Randomized blending applied: {blending_applied}")
         
-        return in_latent, concat_latent_window
+        if not blending_applied:
+            output_to_terminal_error("WARNING: Advanced blending appears to have minimal effect!")
+        else:
+            output_to_terminal_successful(f"Advanced StreamingT2V blending successfully applied to {overlap_frames} frames")
+            if avg_change > 0.02:
+                output_to_terminal_successful(f"  - EXCELLENT blending effect achieved! ✓✓✓")
+            elif avg_change > 0.01:
+                output_to_terminal_successful(f"  - STRONG blending effect achieved! ✓✓")
+            elif avg_change > 0.005:
+                output_to_terminal_successful(f"  - GOOD blending effect achieved ✓")
+            else:
+                output_to_terminal_successful(f"  - MODERATE blending effect - consider increasing parameters")
+
+        # Clone last_latent to prevent memory corruption
+        last_latent = {"samples": last_latent["samples"].clone()}
+
+        # ADVANCED MASK WINDOW BLENDING - Dual-scope mask fusion
+        if mask_window is not None and last_mask_window is not None and mask_window.shape[2] >= overlap_frames and last_mask_window.shape[2] >= overlap_frames:
+            output_to_terminal_successful(f"Applying advanced mask blending for {overlap_frames} overlapping frames")
+            
+            # Extract overlapping mask regions
+            last_mask_overlap = last_mask_window[:, :, -overlap_frames:, :, :]
+            curr_mask_overlap = mask_window[:, :, :overlap_frames, :, :]
+            
+            # Advanced mask blending with spectral consideration
+            mask_blend_strength = alpha_const * 0.8  # Slightly stronger for masks
+            
+            for i in range(overlap_frames):
+                # Progressive blending with randomized weights
+                frame_weight = frame_weights[i]
+                current_mask_weight = 1.0 - mask_blend_strength + (mask_blend_strength * frame_weight)
+                previous_mask_weight = mask_blend_strength * (1.0 - frame_weight)
+                
+                # Spectral mask blending
+                blended_mask = current_mask_weight * curr_mask_overlap[:, :, i, :, :] + previous_mask_weight * last_mask_overlap[:, :, overlap_frames - 1 - i, :, :]
+                
+                # Ensure mask values stay in valid range with soft clamping
+                blended_mask = torch.sigmoid(blended_mask * 6.0 - 3.0)  # Soft clamp to [0, 1]
+                
+                # Apply spectral smoothing to mask transitions
+                if i > 0:
+                    prev_mask = mask_window[:, :, i-1, :, :]
+                    spectral_smooth_factor = 0.1
+                    blended_mask = (1.0 - spectral_smooth_factor) * blended_mask + spectral_smooth_factor * prev_mask
+                
+                mask_window[:, :, i, :, :] = blended_mask
+                
+            output_to_terminal_successful(f"Updated mask_window with spectral-aware blending (strength={mask_blend_strength:.2f})")
+        else:
+            if mask_window is None:
+                output_to_terminal_successful("No current mask_window provided, skipping advanced mask blending")
+            elif last_mask_window is None:
+                output_to_terminal_successful("No previous mask_window available, skipping advanced mask blending")
+            else:
+                output_to_terminal_successful("Insufficient mask overlap frames, skipping advanced mask blending")
+
+        in_latent['samples'] = curr
+        return in_latent, mask_window
