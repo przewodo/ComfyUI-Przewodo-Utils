@@ -17,6 +17,13 @@ try:
 except ImportError:
     __version__ = "1.0.0"  # Fallback version
 
+try:
+    from .core import output_to_terminal
+except ImportError:
+    __version__ = "1.0.0"  # Fallback version
+
+output_to_terminal(f"Version {__version__}")
+
 __all__ = [
     "NODE_CLASS_MAPPINGS",
     "NODE_DISPLAY_NAME_MAPPINGS",

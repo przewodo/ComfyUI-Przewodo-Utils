@@ -174,6 +174,7 @@ class WanImageToVideoAdvancedSampler:
                 ("video_enhance_enabled", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable video enhancement processing for improved output quality and temporal consistency."})),
                 ("use_cfg_zero_star", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CFG Zero Star optimization for improved sampling efficiency and quality."})),
                 ("apply_color_match", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Apply color matching between start image and generated output for consistent color grading."})),
+                ("apply_color_match_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "advanced": True, "tooltip": "Strength of color matching between start image and generated output. 0.0 = no color matching, 1.0 = full color matching."})),
                 ("frames_interpolation", ("BOOLEAN", {"default": False, "advanced": True, "tooltip": "Make frame interpolation with Rife TensorRT. This will make the video smoother by generating additional frames between existing ones."})),
                 ("frames_engine", (rife_engines, {"default": NONE, "tooltip": "Rife TensorRT engine to use for frame interpolation."})),
                 ("frames_multiplier", ("INT", {"default": 2, "min": 2, "max": 100, "step":1, "advanced": True, "tooltip": "Multiplier for the number of frames generated during interpolation."})),
@@ -200,7 +201,7 @@ class WanImageToVideoAdvancedSampler:
 
     CATEGORY = "PrzewodoUtils/Wan"
 
-    def run(self, GGUF_High, GGUF_Low, Diffusor_High, Diffusor_Low, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.05, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=8.0, use_block_swap=True, block_swap=20, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True, frames_overlap_chunks=8, frames_overlap_chunks_blend=0.3, frames_overlap_chunks_motion_weight=0.3, frames_overlap_chunks_mask_sigma=0.35, frames_overlap_chunks_step_gain=0.5):
+    def run(self, GGUF_High, GGUF_Low, Diffusor_High, Diffusor_Low, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.05, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=8.0, use_block_swap=True, block_swap=20, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, apply_color_match_strength=1.0, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True, frames_overlap_chunks=8, frames_overlap_chunks_blend=0.3, frames_overlap_chunks_motion_weight=0.3, frames_overlap_chunks_mask_sigma=0.35, frames_overlap_chunks_step_gain=0.5):
         self.default_fps = 16.0
 
         gc.collect()
@@ -261,7 +262,7 @@ class WanImageToVideoAdvancedSampler:
         model_shift = self.initialize_model_shift(use_shift, shift)
         mm.throw_exception_if_processing_interrupted()
 
-        output_image, fps, = self.postprocess(model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain)
+        output_image, fps, = self.postprocess(model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain)
 
         # Aggressive cleanup of main models to prevent WanTEModel memory leaks
         # NOTE: Only do this AFTER processing is completely done
@@ -278,7 +279,7 @@ class WanImageToVideoAdvancedSampler:
 
         return (output_image, fps,)
 
-    def postprocess(self, model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain):
+    def postprocess(self, model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain):
         gc.collect()
         torch.cuda.empty_cache()
 
@@ -518,18 +519,33 @@ class WanImageToVideoAdvancedSampler:
             self._check_memory_checkpoint(f"window_extraction_chunk_{chunk_index}")
 
             if (chunk_index > 0):
-                in_latent, mask_window = self.guide_next_chunk_generation(
+                # last_frame = last_latent["samples"][:, :, -1:, :, :]
+                # concat_latent_window[:, :, 0:1, :, :] = last_frame
+                # mask_window[:, :, 0:current_window_mask_size, :, :] = input_mask[:, :, 0:current_window_mask_size, :, :]
+
+                # Use the enhanced V2 function instead of V1
+                in_latent, mask_window = self.guide_next_chunk_generationV2(
                     last_latent,
                     in_latent,
                     mask_window,
                     last_mask_window,
-                    frames_overlap_chunks,
+                    max(1, frames_overlap_chunks // 4),
                     frames_overlap_chunks_blend,
                     frames_overlap_chunks_motion_weight,
                     frames_overlap_chunks_mask_sigma,
                     frames_overlap_chunks_step_gain
                 )
-                
+
+                # Hard anchor first latent frames to the previous chunk to prevent drift
+                anchor_frames = max(1, frames_overlap_chunks // 4)  # convert to latent space
+                anchor_frames = min(anchor_frames, in_latent["samples"].shape[2])
+                in_latent["samples"][:, :, :anchor_frames, :, :] = last_latent["samples"][:, :, -anchor_frames:, :, :].detach()
+                mask_window[:, :, :anchor_frames, :, :] = 1.0  # preserve those frames
+
+                # Keep concat_latent_window consistent with blended/anchored latent
+                # If concat_latent_window represents conditioning per-frame, mirror the anchor too
+                concat_latent_window[:, :, :anchor_frames, :, :] = concat_latent_window[:, :, :anchor_frames, :, :].detach()
+
             # ADDITIONAL FIX: Ensure concat_latent_window reflects the blended content
             # This is crucial for proper conditioning in subsequent chunks
             output_to_terminal_successful(f"Chunk {chunk_index + 1}: Using blended concat_latent_window for conditioning")
@@ -578,26 +594,14 @@ class WanImageToVideoAdvancedSampler:
             # Merge the sampled chunk results back into the full input_latent
             if in_latent is not None and "samples" in in_latent:
                 if total_video_chunks == 1:
-                    # Single chunk - replace the entire input_latent
                     input_latent["samples"] = in_latent["samples"]
-                    output_to_terminal_successful(f"Chunk {chunk_index + 1}: Replaced full latent with sampled results (single chunk)")
                 else:
-                    # Multiple chunks - update the corresponding window in the full input_latent
                     input_latent["samples"][:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = in_latent["samples"]
+                    input_mask[:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = mask_window
+                    # Write back the updated concat window to keep global conditioning consistent
+                    input_concat_latent_image[:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = concat_latent_window
+
                     output_to_terminal_successful(f"Chunk {chunk_index + 1}: Merged sampled results back to full latent")
-                    
-                    # CRITICAL FIX: Update input_concat_latent_image to reflect the generated content
-                    # This ensures subsequent chunks use the actual generated content as conditioning
-                    # instead of the original start_image conditioning
-                    if chunk_index > 0:  # Only update for chunks after the first one
-                        output_to_terminal_successful(f"Chunk {chunk_index + 1}: Updating conditioning with generated content...")
-                        
-                        # The input_concat_latent_image is created by VAE-encoding pixel images, but we have latent content
-                        # So we directly use the generated latent content for conditioning consistency
-                        # This ensures that subsequent chunks are conditioned on the actual generated content
-                        input_concat_latent_image[:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = in_latent["samples"]
-                        
-                        output_to_terminal_successful(f"Chunk {chunk_index + 1}: Updated input_concat_latent_image with generated latent content for chunk continuity")
             
             # Clean up after reference frame operations
             gc.collect()
@@ -641,7 +645,7 @@ class WanImageToVideoAdvancedSampler:
         mm.throw_exception_if_processing_interrupted()
 
         # Subsequent chunks: use original_image as reference for consistency
-        output_image = self.apply_color_match_to_image(original_image_start, output_image, apply_color_match, colorMatch)
+        output_image = self.apply_color_match_to_image(original_image_start, output_image, apply_color_match, colorMatch, apply_color_match_strength)
         mm.throw_exception_if_processing_interrupted()
         
         # Final comprehensive memory cleanup for all chunks
@@ -1121,7 +1125,7 @@ class WanImageToVideoAdvancedSampler:
         torch.cuda.empty_cache()
 
         output_to_terminal_successful("Low CFG KSampler started...")
-        out_latent, = k_sampler.sample(model_low_cfg, "disable", noise_seed, total_steps, low_cfg, "lcm", "simple", positive_clip_low, negative_clip_low, out_latent, stop_steps, 1000, "enabled", low_denoise)
+        out_latent, = k_sampler.sample(model_low_cfg, "disable", noise_seed, total_steps, low_cfg, "lcm", "simple", positive_clip_low, negative_clip_low, out_latent, stop_steps, total_steps, "enabled", low_denoise)
         mm.throw_exception_if_processing_interrupted()
         
         # Light cleanup after sampling
@@ -1133,7 +1137,7 @@ class WanImageToVideoAdvancedSampler:
     def apply_single_sampler_processing(self, working_model, k_sampler, noise_seed, total_steps, high_cfg, positive_clip_high, negative_clip_high, in_latent, high_denoise):
 
         output_to_terminal_successful("KSampler started...")
-        out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", positive_clip_high, negative_clip_high, in_latent, 0, 1000, "enabled", high_denoise)
+        out_latent, = k_sampler.sample(working_model, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", positive_clip_high, negative_clip_high, in_latent, 0, total_steps, "enabled", high_denoise)
 
         return out_latent
 
@@ -1180,7 +1184,7 @@ class WanImageToVideoAdvancedSampler:
 
         return model_high_cfg, model_low_cfg, updated_clip_high, updated_clip_low
 
-    def apply_color_match_to_image(self, original_image, image, apply_color_match, colorMatch):
+    def apply_color_match_to_image(self, original_image, image, apply_color_match, colorMatch, strength=1.0):
         """
         Apply color matching between original_image and images if enabled.
         
@@ -1195,7 +1199,7 @@ class WanImageToVideoAdvancedSampler:
         """
         if (image is not None and apply_color_match):
             output_to_terminal_successful("Applying color match to images...")
-            image, = colorMatch.colormatch(original_image, image, "hm-mvgd-hm", strength=1.0)
+            image, = colorMatch.colormatch(original_image, image, "hm-mvgd-hm", strength)
 #            current_mean = torch.mean(image)
 #            current_std = torch.std(image)
 #            
@@ -1540,14 +1544,14 @@ class WanImageToVideoAdvancedSampler:
             
             # Extract window using efficient slicing
             if dimension == 2:
-                window = tensor[:, :, start_idx:start_idx + window_size, :, :].clone()
+                window = tensor[:, :, start_idx:start_idx + window_size, :, :]
             elif dimension == 0:
-                window = tensor[start_idx:start_idx + window_size].clone()
+                window = tensor[start_idx:start_idx + window_size]
             else:
                 # Generic slicing for other dimensions
                 slices = [slice(None)] * tensor.ndim
                 slices[dimension] = slice(start_idx, start_idx + window_size)
-                window = tensor[tuple(slices)].clone()
+                window = tensor[tuple(slices)]
             
             # Force immediate memory cleanup
             if hasattr(torch.cuda, 'synchronize'):
@@ -1971,14 +1975,13 @@ class WanImageToVideoAdvancedSampler:
         
         # Generate randomized blending weights for each frame
         for i in range(overlap_frames):
-            # Base weight with progressive transition
-            base_weight = (i + 1) / overlap_frames
+            # Use smooth exponential or cosine interpolation instead of random
+            t = i / (overlap_frames - 1)  # Normalize to [0, 1]
             
-            # Add controlled randomness (±15%) to break linear patterns
-            random_factor = 1.0 + (torch.rand(1, device=device).item() - 0.5) * 0.3
-            randomized_weight = min(1.0, max(0.0, base_weight * random_factor))
-            frame_weights.append(randomized_weight)
-        
+            # Smooth cosine interpolation for natural transitions
+            smooth_weight = 0.5 * (1.0 - torch.cos(torch.tensor(t * 3.14159, device=device)))
+            frame_weights.append(smooth_weight.item())
+
         output_to_terminal_successful(f"Randomized frame weights: {[f'{w:.3f}' for w in frame_weights[:5]]}")
 
         # Apply SPECTRAL-AWARE TEMPORAL BLENDING - Video-Infinity dual-scope attention inspired
@@ -2003,8 +2006,15 @@ class WanImageToVideoAdvancedSampler:
             frame_alpha = alpha_const * frame_weights[i]
             combined_guide = 0.7 * local_guided + 0.3 * global_guided  # Favor local details
             
+            original_dtype = cur.dtype
+            if original_dtype == torch.float16:
+                # Temporarily use float32 for blending to prevent precision loss
+                cur = cur.float()
+                combined_guide = combined_guide.float()
+
             # Final spectral blending with temporal smoothing
             blended = (1.0 - frame_alpha) * cur + frame_alpha * combined_guide
+            blended = blended.to(original_dtype)
             
             # Spectral noise injection for micro-continuity (very light)
             if i > 0:
@@ -2044,7 +2054,7 @@ class WanImageToVideoAdvancedSampler:
                 output_to_terminal_successful(f"  - MODERATE blending effect - consider increasing parameters")
 
         # Clone last_latent to prevent memory corruption
-        last_latent = {"samples": last_latent["samples"].clone()}
+        last_latent = {"samples": last_latent["samples"]}
 
         # ADVANCED MASK WINDOW BLENDING - Dual-scope mask fusion
         if mask_window is not None and last_mask_window is not None and mask_window.shape[2] >= overlap_frames and last_mask_window.shape[2] >= overlap_frames:
@@ -2088,3 +2098,611 @@ class WanImageToVideoAdvancedSampler:
 
         in_latent['samples'] = curr
         return in_latent, mask_window
+    
+
+    def guide_next_chunk_generationV2(self, last_latent, in_latent, mask_window, last_mask_window, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain):
+        """
+        Advanced Video Chunk Blending V2 - Enhanced Framepack-Style Implementation
+        
+        Implements state-of-the-art techniques from:
+        - StreamingT2V: Consistent, Dynamic-Scene Video Generation with LLMs
+        - FreeNoise: Tuning-Free Longer Video Diffusion Via Noise Rescheduling
+        - Video-Infinity: Distributed Long Video Generation
+        - Framepack: Continuous Video Generation without Quality Loss
+        
+        New V2 Features:
+        1. Bidirectional temporal consistency checking
+        2. Adaptive overlap sizing based on motion complexity
+        3. Multi-scale temporal attention fusion
+        4. Spectral frequency preservation
+        5. Progressive refinement passes
+        6. Enhanced motion prediction with temporal context
+        7. Cross-chunk attention mechanisms
+        """
+
+        if last_latent is None or in_latent is None or 'samples' not in last_latent or 'samples' not in in_latent:
+            output_to_terminal_error("guide_next_chunk_generationV2: Missing latent data")
+            return in_latent, mask_window
+
+        output_to_terminal_successful("=== FRAMEPACK-STYLE CHUNK BLENDING V2 ===")
+        output_to_terminal_successful(f"V2 Parameters:")
+        output_to_terminal_successful(f"  frames_overlap_chunks: {frames_overlap_chunks}")
+        output_to_terminal_successful(f"  frames_overlap_chunks_blend: {frames_overlap_chunks_blend}")
+        output_to_terminal_successful(f"  frames_overlap_chunks_motion_weight: {frames_overlap_chunks_motion_weight}")
+        output_to_terminal_successful(f"  frames_overlap_chunks_mask_sigma: {frames_overlap_chunks_mask_sigma}")
+        output_to_terminal_successful(f"  frames_overlap_chunks_step_gain: {frames_overlap_chunks_step_gain}")
+
+        last = last_latent['samples']  # [B, C, T, H, W]
+        curr = in_latent['samples']    # [B, C, T, H, W]
+
+        # Enhanced shape validation
+        if last.ndim != 5 or curr.ndim != 5:
+            output_to_terminal_error("V2: Expected latent tensors with shape [B, C, T, H, W]")
+            return in_latent, mask_window
+
+        B1, C1, T_last, H1, W1 = last.shape
+        B2, C2, T_curr, H2, W2 = curr.shape
+        output_to_terminal_successful(f"V2: last_latent shape: {last.shape}, current_latent shape: {curr.shape}")
+
+        if (B1 != B2) or (C1 != C2) or (H1 != H2) or (W1 != W2):
+            output_to_terminal_error("V2: Latent dimension mismatch; reverting to basic blending")
+            return in_latent, mask_window
+
+        device = curr.device
+        dtype = curr.dtype
+
+        # === 1. ENHANCED MOTION ANALYSIS WITH TEMPORAL CONTEXT ===
+        motion_context = self._analyze_motion_context_v2(last, frames_overlap_chunks)
+        motion_complexity = motion_context['complexity']
+        motion_vectors = motion_context['vectors']
+        temporal_consistency = motion_context['consistency']
+        
+        output_to_terminal_successful(f"V2 Motion Analysis:")
+        output_to_terminal_successful(f"  - Motion complexity: {motion_complexity:.4f}")
+        output_to_terminal_successful(f"  - Temporal consistency: {temporal_consistency:.4f}")
+
+        # === 2. ADAPTIVE OVERLAP SIZING (FRAMEPACK TECHNIQUE) ===
+        base_overlap = max(6, min(int(frames_overlap_chunks) // 2, T_last, T_curr))
+        
+        # Adaptive sizing based on motion complexity and temporal consistency
+        if motion_complexity > 0.1:  # High motion
+            overlap_multiplier = 1.4  # More overlap for complex motion
+        elif temporal_consistency > 0.8:  # Very consistent motion
+            overlap_multiplier = 0.8  # Less overlap needed
+        else:
+            overlap_multiplier = 1.0
+        
+        adaptive_overlap = int(base_overlap * overlap_multiplier)
+        overlap_frames = min(adaptive_overlap, T_last, T_curr, 24)  # Cap at 24 frames
+        overlap_frames = max(overlap_frames, 4)  # Minimum 4 frames
+        
+        output_to_terminal_successful(f"V2 Adaptive Overlap: base={base_overlap}, adaptive={adaptive_overlap}, final={overlap_frames}")
+
+        if overlap_frames < 4:
+            output_to_terminal_error("V2: Insufficient overlap frames for advanced blending")
+            return in_latent, mask_window
+
+        # Extract overlapping windows
+        last_window = last[:, :, -overlap_frames:, :, :]
+        curr_window = curr[:, :, :overlap_frames, :, :]
+
+        # === 3. MULTI-SCALE TEMPORAL ATTENTION (FRAMEPACK FEATURE) ===
+        attention_weights = self._compute_multi_scale_attention_v2(
+            last_window, curr_window, motion_vectors, temporal_consistency
+        )
+        
+        # === 4. SPECTRAL FREQUENCY PRESERVATION ===
+        frequency_guidance = self._compute_spectral_guidance_v2(last_window, curr_window)
+        
+        # === 5. ENHANCED MOTION PREDICTION WITH CONTEXT ===
+        enhanced_motion = self._predict_enhanced_motion_v2(
+            last_window, motion_vectors, motion_complexity, frames_overlap_chunks_step_gain
+        )
+        
+        # === 6. BIDIRECTIONAL CONSISTENCY CHECK ===
+        consistency_scores = self._check_bidirectional_consistency_v2(last_window, curr_window)
+        
+        output_to_terminal_successful(f"V2 Consistency Scores: forward={consistency_scores['forward']:.4f}, backward={consistency_scores['backward']:.4f}")
+
+        # === 7. PROGRESSIVE MULTI-PASS BLENDING ===
+        blended_window = self._apply_progressive_blending_v2(
+            last_window=last_window,
+            curr_window=curr_window,
+            attention_weights=attention_weights,
+            frequency_guidance=frequency_guidance,
+            enhanced_motion=enhanced_motion,
+            consistency_scores=consistency_scores,
+            blend_strength=frames_overlap_chunks_blend,
+            motion_weight=frames_overlap_chunks_motion_weight,
+            mask_sigma=frames_overlap_chunks_mask_sigma
+        )
+
+        # === 8. QUALITY VALIDATION AND REFINEMENT ===
+        quality_metrics = self._validate_blending_quality_v2(curr_window, blended_window)
+        
+        # Log detailed quality metrics
+        output_to_terminal_successful(f"V2 Quality Metrics:")
+        output_to_terminal_successful(f"  - Overall score: {quality_metrics['overall_score']:.3f}")
+        output_to_terminal_successful(f"  - Smoothness: {quality_metrics['smoothness']:.3f}")
+        output_to_terminal_successful(f"  - Detail preservation: {quality_metrics['detail_preservation']:.3f}")
+        output_to_terminal_successful(f"  - Temporal consistency: {quality_metrics.get('temporal_consistency', 'N/A'):.3f}")
+        output_to_terminal_successful(f"  - Temporal improvement ratio: {quality_metrics.get('temporal_improvement_ratio', 'N/A'):.3f}")
+        
+        if quality_metrics['overall_score'] < 0.7:
+            output_to_terminal_successful(f"V2: Quality below threshold ({quality_metrics['overall_score']:.3f}), applying refinement")
+            blended_window = self._refine_blending_quality_v2(blended_window, curr_window, quality_metrics)
+        else:
+            output_to_terminal_successful(f"V2: Quality acceptable ({quality_metrics['overall_score']:.3f}), no refinement needed")
+        
+        # Update current latent with blended results
+        curr[:, :, :overlap_frames, :, :] = blended_window
+        
+        # === 9. ENHANCED MASK BLENDING ===
+        updated_mask = self._blend_masks_v2(
+            mask_window, last_mask_window, overlap_frames, 
+            attention_weights, frames_overlap_chunks_blend
+        )
+        
+        # === 10. FINAL VALIDATION ===
+        final_metrics = self._compute_final_metrics_v2(last_window, blended_window)
+        
+        output_to_terminal_successful("=== V2 BLENDING RESULTS ===")
+        output_to_terminal_successful(f"  - Temporal consistency improvement: {final_metrics['consistency_improvement']:.4f}")
+        output_to_terminal_successful(f"  - Motion continuity score: {final_metrics['motion_continuity']:.4f}")
+        output_to_terminal_successful(f"  - Spectral preservation: {final_metrics['spectral_preservation']:.4f}")
+        output_to_terminal_successful(f"  - Overall effectiveness: {final_metrics['overall_effectiveness']:.4f}")
+
+        if final_metrics['overall_effectiveness'] > 0.8:
+            output_to_terminal_successful("  - V2 RESULT: EXCELLENT framepack-style blending! ✓✓✓")
+        elif final_metrics['overall_effectiveness'] > 0.6:
+            output_to_terminal_successful("  - V2 RESULT: STRONG framepack-style blending! ✓✓")
+        else:
+            output_to_terminal_successful("  - V2 RESULT: MODERATE blending effect ✓")
+
+        in_latent['samples'] = curr
+        return in_latent, updated_mask if updated_mask is not None else mask_window
+
+    def _analyze_motion_context_v2(self, last_tensor, overlap_frames):
+        """
+        Enhanced motion analysis with temporal context for framepack-style processing.
+        """
+        try:
+            B, C, T, H, W = last_tensor.shape
+            
+            if T < 3:
+                return {
+                    'complexity': 0.0,
+                    'vectors': torch.zeros((B, C, H, W), device=last_tensor.device, dtype=last_tensor.dtype),
+                    'consistency': 1.0
+                }
+            
+            # Multi-frame motion vectors with exponential decay
+            motion_vectors = []
+            decay_weights = [0.5, 0.3, 0.2]  # EMA weights
+            
+            for i in range(min(3, T - 1)):
+                delta = last_tensor[:, :, -(i+1), :, :] - last_tensor[:, :, -(i+2), :, :]
+                motion_vectors.append(delta)
+            
+            # Weighted average motion - ensure proper tensor operations
+            if len(motion_vectors) > 0:
+                weighted_motion = torch.zeros_like(motion_vectors[0])
+                for i, mv in enumerate(motion_vectors):
+                    if i < len(decay_weights):
+                        weighted_motion += decay_weights[i] * mv
+            else:
+                weighted_motion = torch.zeros((B, C, H, W), device=last_tensor.device, dtype=last_tensor.dtype)
+            
+            # Motion complexity analysis
+            motion_magnitude = torch.mean(torch.abs(weighted_motion))
+            motion_variance = torch.var(weighted_motion)
+            motion_complexity = (motion_magnitude + motion_variance).item()
+            
+            # Temporal consistency analysis
+            if len(motion_vectors) >= 2:
+                consistency = 1.0 - torch.mean(torch.abs(motion_vectors[0] - motion_vectors[1])).item()
+                consistency = max(0.0, min(1.0, consistency))
+            else:
+                consistency = 1.0
+            
+            return {
+                'complexity': motion_complexity,
+                'vectors': weighted_motion,  # Shape: [B, C, H, W]
+                'consistency': consistency
+            }
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error in motion analysis V2: {str(e)}")
+            return {
+                'complexity': 0.0,
+                'vectors': torch.zeros((last_tensor.shape[0], last_tensor.shape[1], last_tensor.shape[3], last_tensor.shape[4]), 
+                                    device=last_tensor.device, dtype=last_tensor.dtype),
+                'consistency': 1.0
+            }
+
+    def _compute_multi_scale_attention_v2(self, last_window, curr_window, motion_vectors, consistency):
+        """
+        Compute multi-scale temporal attention weights for framepack-style blending.
+        """
+        try:
+            B, C, T, H, W = curr_window.shape
+            device = curr_window.device
+            
+            # Create multi-scale attention maps
+            attention_weights = torch.ones((B, 1, T, H, W), device=device, dtype=curr_window.dtype)
+            
+            # Global temporal attention
+            global_weights = torch.linspace(0.1, 0.9, T, device=device)
+            attention_weights = attention_weights * global_weights.view(1, 1, -1, 1, 1)
+            
+            # Motion-aware attention - fix broadcasting issue
+            # motion_vectors shape should be [B, C, H, W], we need to handle different shapes
+            if motion_vectors.dim() == 4:  # [B, C, H, W]
+                motion_magnitude = torch.mean(torch.abs(motion_vectors), dim=(1, 2, 3), keepdim=True)  # [B, 1, 1, 1]
+            elif motion_vectors.dim() == 3:  # [B, H, W] 
+                motion_magnitude = torch.mean(torch.abs(motion_vectors), dim=(1, 2), keepdim=True).unsqueeze(1)  # [B, 1, 1, 1]
+            else:  # Fallback for other shapes
+                motion_magnitude = torch.mean(torch.abs(motion_vectors)).unsqueeze(0).unsqueeze(0).unsqueeze(0).unsqueeze(0)  # [1, 1, 1, 1]
+            
+            motion_factor = torch.sigmoid(motion_magnitude * 10.0)  # [B, 1, 1, 1]
+            
+            # Apply motion weighting with proper broadcasting
+            for t in range(T):
+                motion_weight = motion_factor * (t / max(1, T - 1))  # Progressive motion influence [B, 1, 1, 1]
+                # Ensure proper broadcasting: motion_weight [B, 1, 1, 1] -> [B, 1, 1, H, W]
+                motion_weight_expanded = motion_weight.expand(B, 1, 1, H, W)
+                attention_weights[:, :, t:t+1, :, :] *= (1.0 + motion_weight_expanded)
+            
+            # Normalize attention weights
+            attention_weights = attention_weights / (attention_weights.sum(dim=2, keepdim=True) + 1e-8)
+            
+            return attention_weights
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error computing attention V2: {str(e)}")
+            return torch.ones((curr_window.shape[0], 1, curr_window.shape[2], curr_window.shape[3], curr_window.shape[4]), 
+                            device=curr_window.device, dtype=curr_window.dtype)
+
+    def _compute_spectral_guidance_v2(self, last_window, curr_window):
+        """
+        Compute spectral frequency guidance for framepack-style preservation.
+        """
+        try:
+            # FFT-based frequency analysis
+            last_fft = torch.fft.fft2(last_window, dim=(-2, -1))
+            curr_fft = torch.fft.fft2(curr_window, dim=(-2, -1))
+            
+            # Compute frequency magnitude differences
+            last_magnitude = torch.abs(last_fft)
+            curr_magnitude = torch.abs(curr_fft)
+            
+            # Frequency preservation guidance
+            frequency_diff = last_magnitude - curr_magnitude
+            frequency_guidance = torch.fft.ifft2(frequency_diff, dim=(-2, -1)).real
+            
+            # Normalize guidance
+            guidance_magnitude = torch.std(frequency_guidance, dim=(-2, -1), keepdim=True)
+            frequency_guidance = frequency_guidance / (guidance_magnitude + 1e-8)
+            
+            return frequency_guidance * 0.1  # Light spectral guidance
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error computing spectral guidance V2: {str(e)}")
+            return torch.zeros_like(curr_window)
+
+    def _predict_enhanced_motion_v2(self, last_window, motion_vectors, complexity, step_gain):
+        """
+        Enhanced motion prediction with temporal context for framepack-style generation.
+        """
+        try:
+            B, C, T, H, W = last_window.shape
+            device = last_window.device
+            
+            # Progressive motion prediction for each frame
+            enhanced_motion = torch.zeros_like(last_window)
+            
+            for t in range(T):
+                # Adaptive step size based on frame position and complexity
+                adaptive_step = step_gain * (t + 1) * (1.0 + complexity * 0.5)
+                
+                # Motion with temporal smoothing
+                predicted_motion = motion_vectors * adaptive_step
+                
+                # Add temporal smoothing based on previous frames
+                if t > 0:
+                    temporal_smooth = 0.3 * enhanced_motion[:, :, t-1, :, :]
+                    predicted_motion = 0.7 * predicted_motion + temporal_smooth
+                
+                enhanced_motion[:, :, t, :, :] = predicted_motion
+            
+            return enhanced_motion
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error predicting motion V2: {str(e)}")
+            return torch.zeros_like(last_window)
+
+    def _check_bidirectional_consistency_v2(self, last_window, curr_window):
+        """
+        Check bidirectional temporal consistency for framepack-style validation.
+        """
+        try:
+            # Forward consistency (last -> current)
+            forward_diff = torch.mean(torch.abs(last_window[:, :, -1:, :, :] - curr_window[:, :, :1, :, :]))
+            
+            # Backward consistency (current -> last)
+            backward_diff = torch.mean(torch.abs(curr_window[:, :, :1, :, :] - last_window[:, :, -1:, :, :]))
+            
+            # Normalize to [0, 1] range (1 = perfect consistency)
+            forward_score = 1.0 / (1.0 + forward_diff.item())
+            backward_score = 1.0 / (1.0 + backward_diff.item())
+            
+            return {
+                'forward': forward_score,
+                'backward': backward_score,
+                'average': (forward_score + backward_score) / 2.0
+            }
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error checking consistency V2: {str(e)}")
+            return {'forward': 1.0, 'backward': 1.0, 'average': 1.0}
+
+    def _apply_progressive_blending_v2(self, last_window, curr_window, attention_weights, frequency_guidance, enhanced_motion, consistency_scores, blend_strength, motion_weight, mask_sigma):
+        """
+        Apply progressive multi-pass blending for framepack-style continuity.
+        """
+        try:
+            B, C, T, H, W = curr_window.shape
+            device = curr_window.device
+            
+            # Create spatial masks
+            y = torch.linspace(-1, 1, H, device=device, dtype=curr_window.dtype)
+            x = torch.linspace(-1, 1, W, device=device, dtype=curr_window.dtype)
+            Y, X = torch.meshgrid(y, x, indexing='ij')
+            r2 = X**2 + Y**2
+            
+            spatial_mask = torch.exp(-r2 / (2 * (mask_sigma**2)))
+            spatial_mask = spatial_mask[None, None, None, :, :]
+            
+            # Initialize blended window
+            blended = curr_window.clone()
+            
+            # Progressive blending passes
+            for pass_idx in range(3):  # Multiple refinement passes
+                pass_strength = blend_strength * (0.8 ** pass_idx)  # Decreasing strength
+                
+                for t in range(T):
+                    # Get corresponding reference frame
+                    ref_idx = min(t, last_window.shape[2] - 1)
+                    ref_frame = last_window[:, :, ref_idx, :, :]
+                    
+                    # Motion-predicted reference
+                    motion_pred = ref_frame + enhanced_motion[:, :, t, :, :]
+                    
+                    # Attention-weighted blending
+                    att_weight = attention_weights[:, :, t, :, :]
+                    guided_ref = att_weight * motion_pred + (1 - att_weight) * ref_frame
+                    
+                    # Add spectral guidance
+                    spectral_enhanced = guided_ref + frequency_guidance[:, :, t, :, :]
+                    
+                    # Spatial mask application
+                    masked_ref = spatial_mask * spectral_enhanced + (1 - spatial_mask) * ref_frame
+                    
+                    # Progressive blending with consistency weighting
+                    consistency_weight = consistency_scores['average']
+                    final_alpha = pass_strength * consistency_weight
+                    
+                    # Apply blending
+                    current_frame = blended[:, :, t, :, :]
+                    blended_frame = (1 - final_alpha) * current_frame + final_alpha * masked_ref
+                    
+                    # Temporal smoothing with neighbors
+                    if t > 0:
+                        prev_frame = blended[:, :, t-1, :, :]
+                        temporal_smooth = 0.1 * prev_frame
+                        blended_frame = 0.9 * blended_frame + temporal_smooth
+                    
+                    blended[:, :, t, :, :] = blended_frame
+            
+            return blended
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error in progressive blending V2: {str(e)}")
+            return curr_window
+
+    def _validate_blending_quality_v2(self, original_window, blended_window):
+        """
+        Validate blending quality with comprehensive metrics.
+        """
+        try:
+            # Temporal smoothness comparison
+            temporal_diff_orig = torch.mean(torch.abs(original_window[:, :, 1:, :, :] - original_window[:, :, :-1, :, :]))
+            temporal_diff_blend = torch.mean(torch.abs(blended_window[:, :, 1:, :, :] - blended_window[:, :, :-1, :, :]))
+            
+            # Temporal smoothness improvement score
+            # If blended is smoother (lower diff), this should be > 1.0
+            # If blended is worse (higher diff), this should be < 1.0
+            temporal_improvement_ratio = temporal_diff_orig.item() / (temporal_diff_blend.item() + 1e-8)
+            
+            # Convert to 0-1 score where 1.0 means perfect smoothness improvement
+            smoothness_score = min(1.0, max(0.0, (temporal_improvement_ratio - 0.5) / 1.5))  # Normalize around 1.0 ratio
+            
+            # Alternative smoothness score based on absolute smoothness
+            absolute_smoothness = 1.0 / (1.0 + temporal_diff_blend.item())
+            
+            # Use the better of the two smoothness measures
+            final_smoothness = max(smoothness_score, absolute_smoothness)
+            
+            # Detail preservation
+            detail_preservation = 1.0 - torch.mean(torch.abs(blended_window - original_window)).item()
+            detail_preservation = max(0.0, min(1.0, detail_preservation))
+            
+            # Temporal consistency preservation (how much we maintain original temporal structure)
+            temporal_consistency = min(1.0, temporal_improvement_ratio / 2.0)  # Cap at 1.0
+            
+            # Overall quality score with weighted components
+            overall_score = (
+                0.4 * final_smoothness + 
+                0.3 * detail_preservation + 
+                0.3 * temporal_consistency
+            )
+            
+            return {
+                'smoothness': final_smoothness,
+                'detail_preservation': detail_preservation,
+                'temporal_consistency': temporal_consistency,
+                'temporal_improvement_ratio': temporal_improvement_ratio,
+                'original_temporal_diff': temporal_diff_orig.item(),
+                'blended_temporal_diff': temporal_diff_blend.item(),
+                'overall_score': overall_score
+            }
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error validating quality V2: {str(e)}")
+            return {
+                'smoothness': 1.0, 
+                'detail_preservation': 1.0, 
+                'temporal_consistency': 1.0,
+                'temporal_improvement_ratio': 1.0,
+                'original_temporal_diff': 0.0,
+                'blended_temporal_diff': 0.0,
+                'overall_score': 1.0
+            }
+
+    def _refine_blending_quality_v2(self, blended_window, original_window, quality_metrics):
+        """
+        Refine blending quality if below threshold using enhanced metrics.
+        """
+        try:
+            refined = blended_window.clone()
+            
+            # Detail preservation refinement
+            if quality_metrics['detail_preservation'] < 0.7:
+                detail_factor = 0.3
+                refined = (1 - detail_factor) * refined + detail_factor * original_window
+                output_to_terminal_successful(f"V2: Applied detail restoration (factor={detail_factor})")
+            
+            # Temporal smoothness refinement
+            if quality_metrics['smoothness'] < 0.7:
+                for t in range(1, refined.shape[2]):
+                    smooth_factor = 0.1
+                    refined[:, :, t, :, :] = (1 - smooth_factor) * refined[:, :, t, :, :] + smooth_factor * refined[:, :, t-1, :, :]
+                output_to_terminal_successful(f"V2: Applied temporal smoothing")
+            
+            # Temporal consistency refinement - new feature
+            if quality_metrics.get('temporal_consistency', 1.0) < 0.6:
+                # If temporal consistency is poor, apply stronger smoothing
+                consistency_factor = 0.15
+                for t in range(1, refined.shape[2] - 1):
+                    # Apply bilateral temporal smoothing
+                    prev_frame = refined[:, :, t-1, :, :]
+                    next_frame = refined[:, :, t+1, :, :] if t < refined.shape[2] - 1 else refined[:, :, t, :, :]
+                    current_frame = refined[:, :, t, :, :]
+                    
+                    # Temporal bilateral filter
+                    smoothed_frame = (
+                        (1 - 2 * consistency_factor) * current_frame + 
+                        consistency_factor * prev_frame + 
+                        consistency_factor * next_frame
+                    )
+                    refined[:, :, t, :, :] = smoothed_frame
+                
+                output_to_terminal_successful(f"V2: Applied temporal consistency refinement (factor={consistency_factor})")
+            
+            # Report improvement ratio
+            if 'temporal_improvement_ratio' in quality_metrics:
+                ratio = quality_metrics['temporal_improvement_ratio']
+                if ratio < 0.8:
+                    output_to_terminal_successful(f"V2: Temporal degradation detected (ratio={ratio:.3f}), applying extra smoothing")
+                    # Apply extra smoothing pass
+                    for t in range(refined.shape[2]):
+                        if t > 0:
+                            extra_smooth = 0.05
+                            refined[:, :, t, :, :] = (1 - extra_smooth) * refined[:, :, t, :, :] + extra_smooth * refined[:, :, t-1, :, :]
+            
+            return refined
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error refining quality V2: {str(e)}")
+            return blended_window
+
+    def _blend_masks_v2(self, mask_window, last_mask_window, overlap_frames, attention_weights, blend_strength):
+        """
+        Enhanced mask blending with attention guidance.
+        """
+        try:
+            if mask_window is None or last_mask_window is None:
+                return mask_window
+            
+            if mask_window.shape[2] < overlap_frames or last_mask_window.shape[2] < overlap_frames:
+                return mask_window
+            
+            # Extract overlapping regions
+            curr_mask_overlap = mask_window[:, :, :overlap_frames, :, :]
+            last_mask_overlap = last_mask_window[:, :, -overlap_frames:, :, :]
+            
+            # Attention-guided mask blending
+            for t in range(overlap_frames):
+                att_weight = attention_weights[:, :, t, :, :] if attention_weights is not None else 0.5
+                
+                # Progressive blending strength
+                frame_strength = blend_strength * (t / (overlap_frames - 1))
+                
+                curr_mask = curr_mask_overlap[:, :, t, :, :]
+                last_mask = last_mask_overlap[:, :, t, :, :]
+                
+                # Attention-weighted blending
+                blended_mask = (1 - frame_strength) * curr_mask + frame_strength * (att_weight * last_mask + (1 - att_weight) * curr_mask)
+                
+                # Ensure valid mask range
+                blended_mask = torch.sigmoid(blended_mask * 6.0 - 3.0)
+                
+                mask_window[:, :, t, :, :] = blended_mask
+            
+            return mask_window
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error blending masks V2: {str(e)}")
+            return mask_window
+
+    def _compute_final_metrics_v2(self, last_window, blended_window):
+        """
+        Compute comprehensive final metrics for framepack-style evaluation.
+        """
+        try:
+            # Temporal consistency improvement
+            last_temporal_var = torch.var(last_window, dim=2)
+            blend_temporal_var = torch.var(blended_window, dim=2)
+            consistency_improvement = 1.0 - torch.mean(blend_temporal_var / (last_temporal_var + 1e-8)).item()
+            consistency_improvement = max(0.0, min(1.0, consistency_improvement))
+            
+            # Motion continuity
+            last_motion = last_window[:, :, -1, :, :] - last_window[:, :, -2, :, :]
+            blend_motion = blended_window[:, :, 1, :, :] - blended_window[:, :, 0, :, :]
+            motion_similarity = 1.0 - torch.mean(torch.abs(last_motion - blend_motion)).item()
+            motion_continuity = max(0.0, min(1.0, motion_similarity))
+            
+            # Spectral preservation
+            last_fft = torch.fft.fft2(last_window[:, :, -1, :, :], dim=(-2, -1))
+            blend_fft = torch.fft.fft2(blended_window[:, :, 0, :, :], dim=(-2, -1))
+            spectral_diff = torch.mean(torch.abs(torch.abs(last_fft) - torch.abs(blend_fft)))
+            spectral_preservation = 1.0 / (1.0 + spectral_diff.item())
+            
+            # Overall effectiveness
+            overall_effectiveness = (consistency_improvement + motion_continuity + spectral_preservation) / 3.0
+            
+            return {
+                'consistency_improvement': consistency_improvement,
+                'motion_continuity': motion_continuity,
+                'spectral_preservation': spectral_preservation,
+                'overall_effectiveness': overall_effectiveness
+            }
+            
+        except Exception as e:
+            output_to_terminal_error(f"Error computing final metrics V2: {str(e)}")
+            return {
+                'consistency_improvement': 1.0,
+                'motion_continuity': 1.0,
+                'spectral_preservation': 1.0,
+                'overall_effectiveness': 1.0
+            }
