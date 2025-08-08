@@ -9,7 +9,7 @@ class ImageSizer:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model_type": (["SD","SDXL", WAN_480P, WAN_720P, "Flux Kontext", "Flux 1D"], {"tooltip": "Model type that determines the base resolution and total pixel count. Each model has optimized dimensions: SD (512x512), SDXL (1024x1024), Video 480p (832x480), Video 720p (1280x720), Flux Kontext (1024x1024), Flux 1D (1536x1536)."}),
+                "model_type": ([SD, SDXL, WAN_480P, WAN_720P, FLUX_KONTEXT, FLUX_1D, QWEN_IMAGE], {"tooltip": "Model type that determines the base resolution and total pixel count. Each model has optimized dimensions: SD (512x512), SDXL (1024x1024), Video 480p (832x480), Video 720p (1280x720), Flux Kontext (1024x1024), Flux 1D (1536x1536)."}),
                 "aspect_ratio_width": ("INT",{
                     "default": 1,
                     "step":1,
@@ -35,12 +35,13 @@ class ImageSizer:
     def run(self, model_type, aspect_ratio_width, aspect_ratio_height):
         # Define the total pixel counts for SD and SDXL
         total_pixels = {
-            'SD': 512 * 512,
-            'SDXL': 1024 * 1024,
+            SD: 512 * 512,
+            SDXL: 1024 * 1024,
             WAN_480P: 832 * 480,
             WAN_720P: 1280 * 720,
-            'Flux Kontext': 1024 * 1024,
-            'Flux 1D': 1536 * 1536
+            FLUX_KONTEXT: 1024 * 1024,
+            FLUX_1D: 1536 * 1536,
+            QWEN_IMAGE: 3584 * 3584
         }
         
         # Calculate the number of total pixels based on model type

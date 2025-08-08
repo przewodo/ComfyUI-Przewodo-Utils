@@ -58,6 +58,12 @@ WAN_MODELS_CONFIG = {
     WAN_720P: { 'max_side': 1280, 'max_pixels': 1280 * 720, 'model_name': WAN_720P},
 }
 
+SD = 'SD'
+SDXL = 'SDXL'
+FLUX_KONTEXT = 'Flux Kontext'
+FLUX_1D = 'Flux 1D'
+QWEN_IMAGE = 'Qwen Image'
+
 START_IMAGE = "Start Image"
 TEXT_TO_VIDEO = "Text to Video"
 START_END_IMAGE = "Start to End Image"
