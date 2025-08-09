@@ -2,6 +2,7 @@
 import torch
 import nodes
 import folder_paths
+import node_helpers
 import gc
 import weakref
 import sys
@@ -508,6 +509,11 @@ class WanImageToVideoAdvancedSampler:
 				f"mask_window_chunk_{chunk_index}", dimension=2
 			)
 
+			original_mask_window = self._extract_window_with_memory_management(
+				input_mask, 0, current_window_mask_size, 
+				f"original_mask_window_{chunk_index}", dimension=2
+			)
+
 			latent_window = self._extract_window_with_memory_management(
 				input_latent["samples"], current_window_mask_start, current_window_mask_size,
 				f"latent_window_chunk_{chunk_index}", dimension=2
@@ -516,6 +522,11 @@ class WanImageToVideoAdvancedSampler:
 			clip_latent_window = self._extract_window_with_memory_management(
 				input_clip_latent_image, current_window_mask_start, current_window_mask_size, 
 				f"clip_latent_window_chunk_{chunk_index}", dimension=2
+			)
+
+			original_clip_latent_window = self._extract_window_with_memory_management(
+				input_clip_latent_image, 0, current_window_mask_size, 
+				f"original_clip_latent_window_{chunk_index}", dimension=2
 			)
 			
 			output_to_terminal(f"Chunk {chunk_index + 1}: Frame Count: {chunk_frames}")
@@ -546,7 +557,15 @@ class WanImageToVideoAdvancedSampler:
 			temporal continuity through overlap frames from the previous chunk.
 			'''
 			if (chunk_index > 0 and last_latent is not None):
+				positive_high = node_helpers.conditioning_set_values(positive_high, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
+				negative_high = node_helpers.conditioning_set_values(negative_high, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
+				if positive_low is not None:
+					positive_low = node_helpers.conditioning_set_values(positive_low, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
+				if negative_low is not None:
+					negative_low = node_helpers.conditioning_set_values(negative_low, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
+
 				clip_latent_window[:, :, 0:clip_latent_window.shape[2], :, :] = in_latent["samples"][:, :, 0:clip_latent_window.shape[2], :, :]
+				
 #				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Generating fresh conditioning from original image")
 #				
 #				# STEP 1: Generate fresh conditioning from original_image_start for this chunk
