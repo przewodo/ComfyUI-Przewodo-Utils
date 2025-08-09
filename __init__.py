@@ -5,6 +5,9 @@ This package provides specialized nodes for video generation, model management,
 and various utility functions for ComfyUI workflows.
 """
 
+# WEB_DIRECTORY is the ComfyUI nodes directory that ComfyUI will link and auto-load.
+WEB_DIRECTORY = "./web"
+
 try:
     from .node_mappings import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
 except ImportError:
@@ -27,4 +30,5 @@ output_to_terminal(f"Version {__version__}")
 __all__ = [
     "NODE_CLASS_MAPPINGS",
     "NODE_DISPLAY_NAME_MAPPINGS",
+    "WEB_DIRECTORY",
 ]

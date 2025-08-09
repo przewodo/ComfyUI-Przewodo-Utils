@@ -321,8 +321,6 @@ class WanImageToVideoAdvancedSampler:
 		input_mask = None
 		input_concat_latent_image = None
 		last_latent = None
-		last_concat_window = None
-		last_mask_window = None  # Track previous mask window for blending
 		
 		# Memory management for full tensors
 		self._memory_checkpoint = None
@@ -519,32 +517,123 @@ class WanImageToVideoAdvancedSampler:
 			self._check_memory_checkpoint(f"window_extraction_chunk_{chunk_index}")
 
 			'''
-			On this block is where it must be fix to generate the next chunk
-			with the previous chunk's latent and mask windows blended together.
-			This is crucial for maintaining temporal consistency across video chunks.
+			ENHANCED MOTION-GUIDED CONTINUOUS VIDEO GENERATION
+			This implementation uses sophisticated motion-guided conditioning for temporal consistency
+			across video chunks, specifically optimized for WAN 2.1 Image to Video models.
 			'''
 			if (chunk_index > 0):
+				# Motion-guided continuous video generation implementation
+				motion_frames = min(3, last_latent["samples"].shape[2])  # Use last 3 frames for motion estimation
+				overlap_frames = max(1, frames_overlap_chunks // 4)  # Convert to latent space
+				overlap_frames = min(overlap_frames, in_latent["samples"].shape[2])
+				
+				# STEP 1: Motion Vector Estimation
+				# Calculate motion between last frames of previous chunk
+				if motion_frames >= 2:
+					# Simple motion estimation using frame differences
+					prev_frames = last_latent["samples"][:, :, -motion_frames:, :, :]
+					motion_vectors = []
+					
+					for i in range(1, motion_frames):
+						# Calculate frame difference as proxy for motion
+						frame_diff = prev_frames[:, :, i:i+1, :, :] - prev_frames[:, :, i-1:i, :, :]
+						motion_vectors.append(frame_diff)
+					
+					# Average motion vector for stability
+					if motion_vectors:
+						avg_motion = torch.stack(motion_vectors, dim=0).mean(dim=0)
+						# Apply motion smoothing to prevent artifacts
+						motion_weight = frames_overlap_chunks_motion_weight
+						smoothed_motion = avg_motion * motion_weight
+					else:
+						smoothed_motion = torch.zeros_like(last_latent["samples"][:, :, -1:, :, :])
+				else:
+					smoothed_motion = torch.zeros_like(last_latent["samples"][:, :, -1:, :, :])
+
+				# STEP 2: Motion-Guided Frame Extrapolation
+				# Predict what the next frames should look like based on motion
 				last_frame = last_latent["samples"][:, :, -1:, :, :]
-				concat_latent_window[:, :, 0:1, :, :] = last_frame
+				predicted_next_frame = last_frame + smoothed_motion * frames_overlap_chunks_step_gain
+				
+				# STEP 3: Enhanced concat_latent_window Conditioning
+				# Update conditioning with motion-guided predictions instead of static copying
+				concat_latent_window[:, :, 0:1, :, :] = predicted_next_frame
+				
+				# Create smooth transition conditioning for overlapping region
+				for i in range(min(overlap_frames, concat_latent_window.shape[2])):
+					# Progressive motion-guided conditioning with decreasing influence
+					motion_influence = (1.0 - (i / float(overlap_frames))) * frames_overlap_chunks_blend
+					static_influence = 1.0 - motion_influence
+					
+					if i < last_latent["samples"].shape[2]:
+						base_frame = last_latent["samples"][:, :, -(i+1):-(i) if i > 0 else None, :, :]
+						motion_predicted = base_frame + smoothed_motion * (i + 1) * frames_overlap_chunks_step_gain
+						
+						# Blend motion prediction with base frame
+						blended_conditioning = (motion_predicted * motion_influence + 
+											 base_frame * static_influence)
+						
+						if i < concat_latent_window.shape[2]:
+							concat_latent_window[:, :, i:i+1, :, :] = blended_conditioning
+
+				# STEP 4: Spatial Blending Mask Application
+				# Create Gaussian spatial mask for smooth blending
+				if frames_overlap_chunks_mask_sigma > 0:
+					h, w = concat_latent_window.shape[-2:]
+					y, x = torch.meshgrid(torch.arange(h, device=concat_latent_window.device),
+										torch.arange(w, device=concat_latent_window.device), indexing='ij')
+					
+					# Center coordinates
+					center_y, center_x = h // 2, w // 2
+					
+					# Gaussian mask
+					sigma = frames_overlap_chunks_mask_sigma * min(h, w)
+					gaussian_mask = torch.exp(-((x - center_x) ** 2 + (y - center_y) ** 2) / (2 * sigma ** 2))
+					gaussian_mask = gaussian_mask.unsqueeze(0).unsqueeze(0).unsqueeze(0)  # Add batch, channel, time dims
+					
+					# Apply spatial blending mask to overlapping region
+					for i in range(min(overlap_frames, concat_latent_window.shape[2])):
+						mask_strength = frames_overlap_chunks_blend * (1.0 - i / float(overlap_frames))
+						spatial_mask = gaussian_mask * mask_strength + (1.0 - mask_strength)
+						concat_latent_window[:, :, i:i+1, :, :] *= spatial_mask
+
+				# STEP 5: Latent Space Anchoring with Motion Awareness
+				# Anchor first latent frames with motion-guided blending
+				anchor_frames = min(overlap_frames, in_latent["samples"].shape[2])
+				
+				for i in range(anchor_frames):
+					anchor_strength = (1.0 - i / float(anchor_frames)) * frames_overlap_chunks_blend
+					
+					# Get corresponding frame from previous chunk with motion prediction
+					if i < last_latent["samples"].shape[2]:
+						prev_frame = last_latent["samples"][:, :, -(i+1):-(i) if i > 0 else None, :, :]
+						motion_adjusted_frame = prev_frame + smoothed_motion * i * frames_overlap_chunks_step_gain
+						
+						# Blend with existing latent content
+						current_frame = in_latent["samples"][:, :, i:i+1, :, :]
+						blended_frame = (motion_adjusted_frame * anchor_strength + 
+									   current_frame * (1.0 - anchor_strength))
+						
+						in_latent["samples"][:, :, i:i+1, :, :] = blended_frame
+						mask_window[:, :, i:i+1, :, :] = anchor_strength  # Adjust mask based on blend
+
+				# STEP 6: Mask Window Consistency
+				# Ensure mask window reflects the blending operations
 				mask_window[:, :, 0:current_window_mask_size, :, :] = input_mask[:, :, 0:current_window_mask_size, :, :]
+				
+				# Apply progressive masking for overlapping region
+				for i in range(min(overlap_frames, mask_window.shape[2])):
+					mask_strength = frames_overlap_chunks_blend * (1.0 - i / float(overlap_frames))
+					mask_window[:, :, i:i+1, :, :] = torch.clamp(mask_window[:, :, i:i+1, :, :] + mask_strength, 0.0, 1.0)
 
-				# Hard anchor first latent frames to the previous chunk to prevent drift
-				anchor_frames = max(1, frames_overlap_chunks // 4)  # convert to latent space
-				anchor_frames = min(anchor_frames, in_latent["samples"].shape[2])
-				in_latent["samples"][:, :, :anchor_frames, :, :] = last_latent["samples"][:, :, -anchor_frames:, :, :].detach()
-				mask_window[:, :, :anchor_frames, :, :] = 1.0  # preserve those frames
-
-				# Keep concat_latent_window consistent with blended/anchored latent
-				# If concat_latent_window represents conditioning per-frame, mirror the anchor too
-				concat_latent_window[:, :, :anchor_frames, :, :] = concat_latent_window[:, :, :anchor_frames, :, :].detach()
-
-				# ADDITIONAL FIX: Ensure concat_latent_window reflects the blended content
-				# This is crucial for proper conditioning in subsequent chunks
-				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Using blended concat_latent_window for conditioning")
+				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Applied motion-guided conditioning with {motion_frames} motion frames")
+				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Motion weight: {motion_weight:.3f}, Blend strength: {frames_overlap_chunks_blend:.3f}")
+				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Overlapping frames: {overlap_frames}, Spatial sigma: {frames_overlap_chunks_mask_sigma:.3f}")
+				
 			'''
-			End of the block that must be fixed to generate the next chunk
-			with the previous chunk's latent and mask windows blended together.
-			This is crucial for maintaining temporal consistency across video chunks.
+			END ENHANCED MOTION-GUIDED CONTINUOUS VIDEO GENERATION
+			This implementation ensures temporal consistency by using motion-guided conditioning
+			instead of static frame copying, providing smooth transitions between video chunks.
 			'''
 
 			positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low = wan_image_to_video.make_conditioning_and_clipvision(

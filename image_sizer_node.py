@@ -21,19 +21,39 @@ class ImageSizer:
                     "step":1,
                     "display": "number",
                     "tooltip": "Height component of the desired aspect ratio. Combined with aspect_ratio_width to calculate the final dimensions while maintaining the model's total pixel count."
+                }),
+                "image_scale": ("FLOAT", {
+                    "default": 1.0,
+                    "min": 0.01,
+                    "max": 1.0,
+                    "step": 0.01,
+                    "display": "number",
+                    "tooltip": "Scale factor to apply to the final image dimensions."
                 })
             }
         }
 
-    RETURN_TYPES = ("INT","INT")
+    RETURN_TYPES = ("INT", "INT")
     RETURN_NAMES = ("Width", "Height")
 
     FUNCTION = "run"
 
     CATEGORY = "PrzewodoUtils"
 
-    def run(self, model_type, aspect_ratio_width, aspect_ratio_height):
-        # Define the total pixel counts for SD and SDXL
+    def run(self, model_type, aspect_ratio_width, aspect_ratio_height, image_scale):
+        # Use the shared calculation function
+        width, height = self._calculate_dimensions(model_type, aspect_ratio_width, aspect_ratio_height, image_scale)
+        
+        # Return using ComfyUI's UI result pattern with dimensions for JavaScript extension
+        return {
+            "ui": {"dimensions": [{"width": width, "height": height}]}, 
+            "result": (width, height)
+        }
+    
+    @staticmethod
+    def _calculate_dimensions(model_type, aspect_ratio_width, aspect_ratio_height, image_scale):
+        """Calculate the final image dimensions based on input parameters"""
+        # Define the total pixel counts for each model type
         total_pixels = {
             SD: 512 * 512,
             SDXL: 1024 * 1024,
@@ -46,6 +66,7 @@ class ImageSizer:
         
         # Calculate the number of total pixels based on model type
         pixels = total_pixels.get(model_type, 0)
+        pixels = int(pixels * image_scale)
         
         # Calculate the aspect ratio decimal
         aspect_ratio_decimal = aspect_ratio_width / aspect_ratio_height
@@ -53,23 +74,6 @@ class ImageSizer:
         # Calculate width and height
         width = math.sqrt(pixels * aspect_ratio_decimal)
         height = pixels / width
-        max_side = max(width, height)
-
-        # Step 1: Scale so that the largest side is equal to max_side
-        if width >= height:
-            scale = max_side / width
-        else:
-            scale = max_side / height
-
-        new_width = int(round(width * scale))
-        new_height = int(round(height * scale))
-        total_pixels = new_width * new_height
-
-        # Step 2: If pixel count exceeds limit, scale down further
-        if total_pixels > pixels:
-            reduction_scale = math.sqrt(pixels / total_pixels)
-            new_width = int(round(new_width * reduction_scale))
-            new_height = int(round(new_height * reduction_scale))
         
         # Step 3: If model type is QWEN_IMAGE, ensure dimensions are divisible by 28
         if model_type == QWEN_IMAGE:
@@ -86,8 +90,8 @@ class ImageSizer:
                 final_width = 28
             if final_height == 0:
                 final_height = 28
-            
+                
             return (final_width, final_height)
         
-        # Return the width and height as a tuple of integers
-        return (int(round(width)), int(round(height)),)
+        # Return the width and height as a tuple of integers for other model types
+        return (int(round(width)), int(round(height)))
