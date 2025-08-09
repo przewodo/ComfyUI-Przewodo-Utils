@@ -71,5 +71,23 @@ class ImageSizer:
             new_width = int(round(new_width * reduction_scale))
             new_height = int(round(new_height * reduction_scale))
         
+        # Step 3: If model type is QWEN_IMAGE, ensure dimensions are divisible by 28
+        if model_type == QWEN_IMAGE:
+            # Make sure both width and height are divisible by 28 while maintaining proportions
+            final_width = int(round(width))
+            final_height = int(round(height))
+            
+            # Round to nearest multiple of 28
+            final_width = round(final_width / 28) * 28
+            final_height = round(final_height / 28) * 28
+            
+            # Ensure we don't get zero dimensions
+            if final_width == 0:
+                final_width = 28
+            if final_height == 0:
+                final_height = 28
+            
+            return (final_width, final_height)
+        
         # Return the width and height as a tuple of integers
         return (int(round(width)), int(round(height)),)
