@@ -557,12 +557,12 @@ class WanImageToVideoAdvancedSampler:
 			temporal continuity through overlap frames from the previous chunk.
 			'''
 			if (chunk_index > 0 and last_latent is not None):
-				positive_high = node_helpers.conditioning_set_values(positive_high, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
-				negative_high = node_helpers.conditioning_set_values(negative_high, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
-				if positive_low is not None:
-					positive_low = node_helpers.conditioning_set_values(positive_low, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
-				if negative_low is not None:
-					negative_low = node_helpers.conditioning_set_values(negative_low, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
+				positive_clip_high = node_helpers.conditioning_set_values(positive_clip_high, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
+				negative_clip_high = node_helpers.conditioning_set_values(negative_clip_high, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
+				if positive_clip_low is not None:
+					positive_clip_low = node_helpers.conditioning_set_values(positive_clip_low, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
+				if negative_clip_low is not None:
+					negative_clip_low = node_helpers.conditioning_set_values(negative_clip_low, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
 
 				clip_latent_window[:, :, 0:clip_latent_window.shape[2], :, :] = in_latent["samples"][:, :, 0:clip_latent_window.shape[2], :, :]
 				
