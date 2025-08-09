@@ -283,8 +283,9 @@ class WanImageToVideoAdvancedSampler:
 		gc.collect()
 		torch.cuda.empty_cache()
 
+		remainder_video_seconds = total_video_seconds
+		total_frames = (total_video_seconds * 16) + 1
 		total_video_chunks = 1 if (divide_video_in_chunks == False and total_video_seconds > 5) else int(math.ceil(total_video_seconds / 5.0))
-		total_video_seconds = total_video_seconds if (divide_video_in_chunks == False and total_video_seconds > 5) else 5
 		k_sampler = nodes.KSamplerAdvanced()
 		text_encode = nodes.CLIPTextEncode()
 		wan_image_to_video = WanFirstLastFirstFrameToVideo()
@@ -296,7 +297,6 @@ class WanImageToVideoAdvancedSampler:
 		image_width = large_image_side
 		image_height = large_image_side
 		in_latent = None
-		total_frames = (total_video_seconds * 16 * total_video_chunks) + 1
 		lora_loader = nodes.LoraLoader()
 		wanVideoEnhanceAVideo = WanVideoEnhanceAVideo()
 		cfgZeroStar = CFGZeroStar()
@@ -340,7 +340,10 @@ class WanImageToVideoAdvancedSampler:
 		output_to_terminal_successful(f"PARAM DEBUG: total_video_chunks: {total_video_chunks}")
 
 		for chunk_index in range(total_video_chunks):
-			chunk_frames = (total_video_seconds * 16) + 1 if chunk_index == (total_video_chunks - 1) else (total_video_seconds * 16)
+			chunck_seconds = 5 if (remainder_video_seconds > 5) else remainder_video_seconds
+			chunk_frames = (chunck_seconds * 16) + 1 if chunk_index == (total_video_chunks - 1) else (chunck_seconds * 16)
+			remainder_video_seconds = remainder_video_seconds - 5
+
 			working_model_high = model_high.clone()
 			# Only clone low model if dual samplers are used
 			working_model_low = model_low.clone() if use_dual_samplers else None
@@ -492,9 +495,9 @@ class WanImageToVideoAdvancedSampler:
 				output_to_terminal_successful("First chunk: Created initial conditioning from original image")
 
 			# Memory-efficient window extraction with immediate cleanup
-			current_window_start = (total_video_seconds * 16) * chunk_index
+			current_window_start = (chunck_seconds * 16) * chunk_index
 			# Calculate window size: 80 frames for regular chunks, 81 for the last chunk
-			window_size = (16 * total_video_seconds) + 1 if (chunk_index == total_video_chunks - 1) else (16 * total_video_seconds)
+			window_size = (16 * chunck_seconds) + 1 if (chunk_index == total_video_chunks - 1) else (16 * chunck_seconds)
 						
 			current_window_mask_start = current_window_start // 4
 			current_window_mask_size = (window_size // 4) + 1 if (chunk_index == total_video_chunks - 1) else window_size // 4
@@ -543,105 +546,107 @@ class WanImageToVideoAdvancedSampler:
 			temporal continuity through overlap frames from the previous chunk.
 			'''
 			if (chunk_index > 0 and last_latent is not None):
-				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Generating fresh conditioning from original image")
-				
-				# STEP 1: Generate fresh conditioning from original_image_start for this chunk
-				# This ensures each chunk maintains connection to the original image (I2V paradigm)
-				chunk_input_latent, chunk_input_clip_latent_image, chunk_input_mask = wan_image_to_video.make_latent_and_mask(
-					vae,
-					image_width,
-					image_height,
-					total_frames,
-					0, 
-					0,
-					fill_noise_latent,
-					image_generation_mode, 
-					start_image,  # Always use original_image_start
-					end_image
-				)
-				
-				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Fresh conditioning generated successfully")
-				
-				# STEP 2: Extract the window for this chunk from the fresh conditioning
-				fresh_clip_latent_window = self._extract_window_with_memory_management(
-					chunk_input_clip_latent_image, current_window_mask_start, current_window_mask_size, 
-					f"fresh_clip_latent_window_chunk_{chunk_index}", dimension=2
-				)
-				
-				# STEP 3: Apply temporal overlap blending for seamless transitions
-				overlap_frames = max(1, frames_overlap_chunks // 4)
-				overlap_frames = min(overlap_frames, clip_latent_window.shape[2])
-				overlap_frames = min(overlap_frames, last_latent["samples"].shape[2])
-				
-				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Applying temporal overlap blending with {overlap_frames} frames")
-				
-				# Get the last few frames from the previous chunk for temporal continuity
-				if overlap_frames > 0:
-					# Extract final frames from previous chunk
-					prev_final_frames = last_latent["samples"][:, :, -overlap_frames:, :, :]
-					
-					# Blend the first frames of current chunk with temporal information from previous chunk
-					for i in range(min(overlap_frames, clip_latent_window.shape[2])):
-						# Calculate blend strength - stronger at the beginning, weaker towards the end
-						blend_strength = frames_overlap_chunks_blend * (1.0 - float(i) / overlap_frames)
-						
-						# Get the corresponding frame from fresh conditioning and previous chunk
-						fresh_frame = fresh_clip_latent_window[:, :, i:i+1, :, :]
-						
-						if i < prev_final_frames.shape[2]:
-							# Use VAE to encode the previous frame for conditioning compatibility
-							prev_frame_encoded = prev_final_frames[:, :, i:i+1, :, :]
-							
-							# Temporal blending: fresh original conditioning + temporal continuity
-							blended_frame = (fresh_frame * (1.0 - blend_strength) + 
-										   fresh_frame * blend_strength * 0.7 +  # Keep original image influence strong
-										   prev_frame_encoded * blend_strength * 0.3)  # Add temporal continuity
-							
-							clip_latent_window[:, :, i:i+1, :, :] = blended_frame
-							
-							output_to_terminal_successful(f"Chunk {chunk_index + 1}: Blended frame {i} with strength {blend_strength:.3f}")
-						else:
-							# If no corresponding previous frame, use fresh conditioning
-							clip_latent_window[:, :, i:i+1, :, :] = fresh_frame
-					
-					# For the rest of the frames, use pure fresh conditioning from original image
-					for i in range(overlap_frames, clip_latent_window.shape[2]):
-						clip_latent_window[:, :, i:i+1, :, :] = fresh_clip_latent_window[:, :, i:i+1, :, :]
-				else:
-					# No overlap, use pure fresh conditioning
-					clip_latent_window[:, :, :, :, :] = fresh_clip_latent_window[:, :, :, :, :]
-				
-				# STEP 4: Apply gentle latent space blending for the overlap region
-				if overlap_frames > 0 and frames_overlap_chunks_blend > 0:
-					for i in range(min(overlap_frames, in_latent["samples"].shape[2])):
-						blend_strength = frames_overlap_chunks_blend * (1.0 - float(i) / overlap_frames) * 0.5
-						
-						if i < last_latent["samples"].shape[2]:
-							prev_frame = last_latent["samples"][:, :, -(i+1):-(i) if i > 0 else None, :, :]
-							current_frame = in_latent["samples"][:, :, i:i+1, :, :]
-							
-							# Gentle blending that preserves temporal continuity
-							blended_frame = (current_frame * (1.0 - blend_strength) + 
-										   prev_frame * blend_strength)
-							
-							in_latent["samples"][:, :, i:i+1, :, :] = blended_frame
-							mask_window[:, :, i:i+1, :, :] = torch.clamp(
-								mask_window[:, :, i:i+1, :, :] + blend_strength * 0.3, 0.0, 1.0
-							)
-				
-				# Clean up temporary tensors
-				del chunk_input_latent
-				del chunk_input_clip_latent_image
-				del chunk_input_mask
-				del fresh_clip_latent_window
-				
-				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Applied sliding window approach with original image conditioning")
-				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Temporal overlap: {overlap_frames} frames, Blend strength: {frames_overlap_chunks_blend:.3f}")
-				
-			else:
-				# First chunk - use the conditioning directly from make_latent_and_mask
-				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Using fresh original image conditioning (first chunk)")
-				output_to_terminal_successful(f"Chunk {chunk_index + 1}: clip_latent_window shape: {clip_latent_window.shape}")
+				clip_latent_window[:, :, 0:clip_latent_window.shape[2], :, :] = in_latent["samples"][:, :, 0:1, :, :]
+				mask_window[:, :, 0:mask_window.shape[2], :, :] = fill_noise_latent
+#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Generating fresh conditioning from original image")
+#				
+#				# STEP 1: Generate fresh conditioning from original_image_start for this chunk
+#				# This ensures each chunk maintains connection to the original image (I2V paradigm)
+#				chunk_input_latent, chunk_input_clip_latent_image, chunk_input_mask = wan_image_to_video.make_latent_and_mask(
+#					vae,
+#					image_width,
+#					image_height,
+#					total_frames,
+#					0, 
+#					0,
+#					fill_noise_latent,
+#					image_generation_mode, 
+#					start_image,  # Always use original_image_start
+#					end_image
+#				)
+#				
+#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Fresh conditioning generated successfully")
+#				
+#				# STEP 2: Extract the window for this chunk from the fresh conditioning
+#				fresh_clip_latent_window = self._extract_window_with_memory_management(
+#					chunk_input_clip_latent_image, current_window_mask_start, current_window_mask_size, 
+#					f"fresh_clip_latent_window_chunk_{chunk_index}", dimension=2
+#				)
+#				
+#				# STEP 3: Apply temporal overlap blending for seamless transitions
+#				overlap_frames = max(1, frames_overlap_chunks // 4)
+#				overlap_frames = min(overlap_frames, clip_latent_window.shape[2])
+#				overlap_frames = min(overlap_frames, last_latent["samples"].shape[2])
+#				
+#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Applying temporal overlap blending with {overlap_frames} frames")
+#				
+#				# Get the last few frames from the previous chunk for temporal continuity
+#				if overlap_frames > 0:
+#					# Extract final frames from previous chunk
+#					prev_final_frames = last_latent["samples"][:, :, -overlap_frames:, :, :]
+#					
+#					# Blend the first frames of current chunk with temporal information from previous chunk
+#					for i in range(min(overlap_frames, clip_latent_window.shape[2])):
+#						# Calculate blend strength - stronger at the beginning, weaker towards the end
+#						blend_strength = frames_overlap_chunks_blend * (1.0 - float(i) / overlap_frames)
+#						
+#						# Get the corresponding frame from fresh conditioning and previous chunk
+#						fresh_frame = fresh_clip_latent_window[:, :, i:i+1, :, :]
+#						
+#						if i < prev_final_frames.shape[2]:
+#							# Use VAE to encode the previous frame for conditioning compatibility
+#							prev_frame_encoded = prev_final_frames[:, :, i:i+1, :, :]
+#							
+#							# Temporal blending: fresh original conditioning + temporal continuity
+#							blended_frame = (fresh_frame * (1.0 - blend_strength) + 
+#										   fresh_frame * blend_strength * 0.7 +  # Keep original image influence strong
+#										   prev_frame_encoded * blend_strength * 0.3)  # Add temporal continuity
+#							
+#							clip_latent_window[:, :, i:i+1, :, :] = blended_frame
+#							
+#							output_to_terminal_successful(f"Chunk {chunk_index + 1}: Blended frame {i} with strength {blend_strength:.3f}")
+#						else:
+#							# If no corresponding previous frame, use fresh conditioning
+#							clip_latent_window[:, :, i:i+1, :, :] = fresh_frame
+#					
+#					# For the rest of the frames, use pure fresh conditioning from original image
+#					for i in range(overlap_frames, clip_latent_window.shape[2]):
+#						clip_latent_window[:, :, i:i+1, :, :] = fresh_clip_latent_window[:, :, i:i+1, :, :]
+#				else:
+#					# No overlap, use pure fresh conditioning
+#					clip_latent_window[:, :, :, :, :] = fresh_clip_latent_window[:, :, :, :, :]
+#				
+#				# STEP 4: Apply gentle latent space blending for the overlap region
+#				if overlap_frames > 0 and frames_overlap_chunks_blend > 0:
+#					for i in range(min(overlap_frames, in_latent["samples"].shape[2])):
+#						blend_strength = frames_overlap_chunks_blend * (1.0 - float(i) / overlap_frames) * 0.5
+#						
+#						if i < last_latent["samples"].shape[2]:
+#							prev_frame = last_latent["samples"][:, :, -(i+1):-(i) if i > 0 else None, :, :]
+#							current_frame = in_latent["samples"][:, :, i:i+1, :, :]
+#							
+#							# Gentle blending that preserves temporal continuity
+#							blended_frame = (current_frame * (1.0 - blend_strength) + 
+#										   prev_frame * blend_strength)
+#							
+#							in_latent["samples"][:, :, i:i+1, :, :] = blended_frame
+#							mask_window[:, :, i:i+1, :, :] = torch.clamp(
+#								mask_window[:, :, i:i+1, :, :] + blend_strength * 0.3, 0.0, 1.0
+#							)
+#				
+#				# Clean up temporary tensors
+#				del chunk_input_latent
+#				del chunk_input_clip_latent_image
+#				del chunk_input_mask
+#				del fresh_clip_latent_window
+#				
+#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Applied sliding window approach with original image conditioning")
+#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Temporal overlap: {overlap_frames} frames, Blend strength: {frames_overlap_chunks_blend:.3f}")
+#				
+#			else:
+#				# First chunk - use the conditioning directly from make_latent_and_mask
+#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Using fresh original image conditioning (first chunk)")
+#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: clip_latent_window shape: {clip_latent_window.shape}")
 			
 			'''
 			END SLIDING WINDOW APPROACH
