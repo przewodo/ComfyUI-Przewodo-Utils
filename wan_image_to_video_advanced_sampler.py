@@ -283,8 +283,8 @@ class WanImageToVideoAdvancedSampler:
 		gc.collect()
 		torch.cuda.empty_cache()
 
-		total_video_chunks = 1 if (divide_video_in_chunks == False) else int(math.ceil(total_video_seconds / 5.0))
-		total_video_seconds = total_video_seconds if (divide_video_in_chunks == False) else 5
+		total_video_chunks = 1 if (divide_video_in_chunks == False and total_video_seconds > 5) else int(math.ceil(total_video_seconds / 5.0))
+		total_video_seconds = total_video_seconds if (divide_video_in_chunks == False and total_video_seconds > 5) else 5
 		k_sampler = nodes.KSamplerAdvanced()
 		text_encode = nodes.CLIPTextEncode()
 		wan_image_to_video = WanFirstLastFirstFrameToVideo()
@@ -296,7 +296,7 @@ class WanImageToVideoAdvancedSampler:
 		image_width = large_image_side
 		image_height = large_image_side
 		in_latent = None
-		total_frames = (total_video_seconds * 16) + 1
+		total_frames = (total_video_seconds * 16 * total_video_chunks) + 1
 		lora_loader = nodes.LoraLoader()
 		wanVideoEnhanceAVideo = WanVideoEnhanceAVideo()
 		cfgZeroStar = CFGZeroStar()
