@@ -138,7 +138,7 @@ class WanImageToVideoAdvancedSampler:
 				("image_generation_mode", (WAN_FIRST_END_FIRST_FRAME_TP_VIDEO_MODE, {"default": START_IMAGE, "tooltip": "Mode for video generation."})),
 				("wan_model_size", (WAN_MODELS, {"default": WAN_720P, "tooltip": "The model type to use for the diffusion process."})),
 				("total_video_seconds", ("INT", {"default": 1, "min": 1, "max": 5, "step":1, "advanced": True, "tooltip": "The total duration of the video in seconds."})),
-				("total_video_chunks", ("INT", {"default": 1, "min": 1, "max": 1000, "step":1, "advanced": True, "tooltip": "Number of sequential video chunks to generate. Each chunk extends the total video duration. Higher values create longer videos by generating chunks in sequence."})),
+				("divide_video_in_chunks", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable dividing the video into chunks of 5 seconds for processing."})),
 				
 				# ═════════════════════════════════════════════════════════════════
 				# ️ CLIP VISION SETTINGS
@@ -201,7 +201,7 @@ class WanImageToVideoAdvancedSampler:
 
 	CATEGORY = "PrzewodoUtils/Wan"
 
-	def run(self, GGUF_High, GGUF_Low, Diffusor_High, Diffusor_Low, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.05, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=8.0, use_block_swap=True, block_swap=20, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, total_video_chunks=1, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, apply_color_match_strength=1.0, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True, frames_overlap_chunks=8, frames_overlap_chunks_blend=0.3, frames_overlap_chunks_motion_weight=0.3, frames_overlap_chunks_mask_sigma=0.35, frames_overlap_chunks_step_gain=0.5):
+	def run(self, GGUF_High, GGUF_Low, Diffusor_High, Diffusor_Low, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.05, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=8.0, use_block_swap=True, block_swap=20, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, divide_video_in_chunks=True, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, apply_color_match_strength=1.0, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True, frames_overlap_chunks=8, frames_overlap_chunks_blend=0.3, frames_overlap_chunks_motion_weight=0.3, frames_overlap_chunks_mask_sigma=0.35, frames_overlap_chunks_step_gain=0.5):
 		self.default_fps = 16.0
 
 		gc.collect()
@@ -262,7 +262,7 @@ class WanImageToVideoAdvancedSampler:
 		model_shift = self.initialize_model_shift(use_shift, shift)
 		mm.throw_exception_if_processing_interrupted()
 
-		output_image, fps, = self.postprocess(model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain)
+		output_image, fps, = self.postprocess(model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, divide_video_in_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain)
 
 		# Aggressive cleanup of main models to prevent WanTEModel memory leaks
 		# NOTE: Only do this AFTER processing is completely done
@@ -279,10 +279,12 @@ class WanImageToVideoAdvancedSampler:
 
 		return (output_image, fps,)
 
-	def postprocess(self, model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, total_video_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain):
+	def postprocess(self, model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, divide_video_in_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain):
 		gc.collect()
 		torch.cuda.empty_cache()
 
+		total_video_chunks = 1 if (divide_video_in_chunks == False) else int(math.ceil(total_video_seconds / 5.0))
+		total_video_seconds = total_video_seconds if (divide_video_in_chunks == False) else 5
 		k_sampler = nodes.KSamplerAdvanced()
 		text_encode = nodes.CLIPTextEncode()
 		wan_image_to_video = WanFirstLastFirstFrameToVideo()
@@ -294,7 +296,7 @@ class WanImageToVideoAdvancedSampler:
 		image_width = large_image_side
 		image_height = large_image_side
 		in_latent = None
-		total_frames = (total_video_seconds * 16 * total_video_chunks) + 1
+		total_frames = (total_video_seconds * 16) + 1
 		lora_loader = nodes.LoraLoader()
 		wanVideoEnhanceAVideo = WanVideoEnhanceAVideo()
 		cfgZeroStar = CFGZeroStar()
@@ -319,13 +321,23 @@ class WanImageToVideoAdvancedSampler:
 		output_image = None
 		input_latent = None
 		input_mask = None
-		input_concat_latent_image = None
+		input_clip_latent_image = None
 		last_latent = None
 		
 		# Memory management for full tensors
 		self._memory_checkpoint = None
 		
 		output_to_terminal_successful("Generation started...")
+
+		# CRITICAL DEBUG: Check input parameters
+		output_to_terminal_successful(f"PARAM DEBUG: start_image type: {type(start_image)}")
+		if start_image is not None:
+			output_to_terminal_successful(f"PARAM DEBUG: start_image shape: {start_image.shape}")
+			output_to_terminal_successful(f"PARAM DEBUG: start_image device: {start_image.device if hasattr(start_image, 'device') else 'No device'}")
+		else:
+			output_to_terminal_successful(f"PARAM DEBUG: start_image is None!")
+		output_to_terminal_successful(f"PARAM DEBUG: image_generation_mode: {image_generation_mode}")
+		output_to_terminal_successful(f"PARAM DEBUG: total_video_chunks: {total_video_chunks}")
 
 		for chunk_index in range(total_video_chunks):
 			chunk_frames = (total_video_seconds * 16) + 1 if chunk_index == (total_video_chunks - 1) else (total_video_seconds * 16)
@@ -449,7 +461,10 @@ class WanImageToVideoAdvancedSampler:
 			output_to_terminal_successful("Wan Image to Video started...")
 
 			if (chunk_index == 0):
-				input_latent, input_concat_latent_image, input_mask = wan_image_to_video.make_latent_and_mask(
+				output_to_terminal_successful(f"First chunk: Starting make_latent_and_mask with image_generation_mode: {image_generation_mode}")
+				output_to_terminal_successful(f"First chunk: start_image shape: {start_image.shape if start_image is not None else 'None'}")
+				
+				input_latent, input_clip_latent_image, input_mask = wan_image_to_video.make_latent_and_mask(
 					vae,
 					image_width,
 					image_height,
@@ -462,13 +477,19 @@ class WanImageToVideoAdvancedSampler:
 					end_image
 				)
 				
+				output_to_terminal_successful(f"First chunk: make_latent_and_mask completed successfully")
+				output_to_terminal_successful(f"First chunk: input_latent shape: {input_latent['samples'].shape}")
+				output_to_terminal_successful(f"First chunk: input_clip_latent_image shape: {input_clip_latent_image.shape}")
+				
 				# Set memory checkpoint after creating full tensors
 				self._set_memory_checkpoint("full_tensors_created")
 				
 				# Optimize tensor memory layout for better cache efficiency
 				input_latent["samples"] = self._optimize_tensor_memory_layout(input_latent["samples"])
-				input_concat_latent_image = self._optimize_tensor_memory_layout(input_concat_latent_image)
+				input_clip_latent_image = self._optimize_tensor_memory_layout(input_clip_latent_image)
 				input_mask = self._optimize_tensor_memory_layout(input_mask)
+				
+				output_to_terminal_successful("First chunk: Created initial conditioning from original image")
 
 			# Memory-efficient window extraction with immediate cleanup
 			current_window_start = (total_video_seconds * 16) * chunk_index
@@ -489,19 +510,19 @@ class WanImageToVideoAdvancedSampler:
 				f"latent_window_chunk_{chunk_index}", dimension=2
 			)
 			
-			concat_latent_window = self._extract_window_with_memory_management(
-				input_concat_latent_image, current_window_mask_start, current_window_mask_size, 
-				f"concat_latent_window_chunk_{chunk_index}", dimension=2
+			clip_latent_window = self._extract_window_with_memory_management(
+				input_clip_latent_image, current_window_mask_start, current_window_mask_size, 
+				f"clip_latent_window_chunk_{chunk_index}", dimension=2
 			)
 			
 			output_to_terminal(f"Chunk {chunk_index + 1}: Frame Count: {chunk_frames}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: Latent Shape: {input_latent["samples"].shape}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: Msk Shape: {input_mask.shape}")
-			output_to_terminal(f"Chunk {chunk_index + 1}: Concat Latent Image Shape: {input_concat_latent_image.shape}")
+			output_to_terminal(f"Chunk {chunk_index + 1}: CLIP Latent Image Shape: {input_clip_latent_image.shape}")
 			output_to_terminal_successful(f"Chunk {chunk_index + 1}: Mask Window Start={current_window_mask_start}, Mask Window Size={current_window_mask_size}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: Latent Window Shape: {latent_window.shape}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: Mask Window Shape: {mask_window.shape}")
-			output_to_terminal(f"Chunk {chunk_index + 1}: Concat Latent Window Shape: {concat_latent_window.shape}")
+			output_to_terminal(f"Chunk {chunk_index + 1}: CLIP Latent Window Shape: {clip_latent_window.shape}")
 
 			# Create latent dict with memory-efficient tensor
 			in_latent = {"samples": latent_window}
@@ -517,123 +538,115 @@ class WanImageToVideoAdvancedSampler:
 			self._check_memory_checkpoint(f"window_extraction_chunk_{chunk_index}")
 
 			'''
-			ENHANCED MOTION-GUIDED CONTINUOUS VIDEO GENERATION
-			This implementation uses sophisticated motion-guided conditioning for temporal consistency
-			across video chunks, specifically optimized for WAN 2.1 Image to Video models.
+			SLIDING WINDOW APPROACH FOR SEAMLESS CHUNK GENERATION
+			Each chunk uses fresh conditioning from original_image_start while maintaining 
+			temporal continuity through overlap frames from the previous chunk.
 			'''
-			if (chunk_index > 0):
-				# Motion-guided continuous video generation implementation
-				motion_frames = min(3, last_latent["samples"].shape[2])  # Use last 3 frames for motion estimation
-				overlap_frames = max(1, frames_overlap_chunks // 4)  # Convert to latent space
-				overlap_frames = min(overlap_frames, in_latent["samples"].shape[2])
+			if (chunk_index > 0 and last_latent is not None):
+				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Generating fresh conditioning from original image")
 				
-				# STEP 1: Motion Vector Estimation
-				# Calculate motion between last frames of previous chunk
-				if motion_frames >= 2:
-					# Simple motion estimation using frame differences
-					prev_frames = last_latent["samples"][:, :, -motion_frames:, :, :]
-					motion_vectors = []
+				# STEP 1: Generate fresh conditioning from original_image_start for this chunk
+				# This ensures each chunk maintains connection to the original image (I2V paradigm)
+				chunk_input_latent, chunk_input_clip_latent_image, chunk_input_mask = wan_image_to_video.make_latent_and_mask(
+					vae,
+					image_width,
+					image_height,
+					total_frames,
+					0, 
+					0,
+					fill_noise_latent,
+					image_generation_mode, 
+					start_image,  # Always use original_image_start
+					end_image
+				)
+				
+				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Fresh conditioning generated successfully")
+				
+				# STEP 2: Extract the window for this chunk from the fresh conditioning
+				fresh_clip_latent_window = self._extract_window_with_memory_management(
+					chunk_input_clip_latent_image, current_window_mask_start, current_window_mask_size, 
+					f"fresh_clip_latent_window_chunk_{chunk_index}", dimension=2
+				)
+				
+				# STEP 3: Apply temporal overlap blending for seamless transitions
+				overlap_frames = max(1, frames_overlap_chunks // 4)
+				overlap_frames = min(overlap_frames, clip_latent_window.shape[2])
+				overlap_frames = min(overlap_frames, last_latent["samples"].shape[2])
+				
+				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Applying temporal overlap blending with {overlap_frames} frames")
+				
+				# Get the last few frames from the previous chunk for temporal continuity
+				if overlap_frames > 0:
+					# Extract final frames from previous chunk
+					prev_final_frames = last_latent["samples"][:, :, -overlap_frames:, :, :]
 					
-					for i in range(1, motion_frames):
-						# Calculate frame difference as proxy for motion
-						frame_diff = prev_frames[:, :, i:i+1, :, :] - prev_frames[:, :, i-1:i, :, :]
-						motion_vectors.append(frame_diff)
+					# Blend the first frames of current chunk with temporal information from previous chunk
+					for i in range(min(overlap_frames, clip_latent_window.shape[2])):
+						# Calculate blend strength - stronger at the beginning, weaker towards the end
+						blend_strength = frames_overlap_chunks_blend * (1.0 - float(i) / overlap_frames)
+						
+						# Get the corresponding frame from fresh conditioning and previous chunk
+						fresh_frame = fresh_clip_latent_window[:, :, i:i+1, :, :]
+						
+						if i < prev_final_frames.shape[2]:
+							# Use VAE to encode the previous frame for conditioning compatibility
+							prev_frame_encoded = prev_final_frames[:, :, i:i+1, :, :]
+							
+							# Temporal blending: fresh original conditioning + temporal continuity
+							blended_frame = (fresh_frame * (1.0 - blend_strength) + 
+										   fresh_frame * blend_strength * 0.7 +  # Keep original image influence strong
+										   prev_frame_encoded * blend_strength * 0.3)  # Add temporal continuity
+							
+							clip_latent_window[:, :, i:i+1, :, :] = blended_frame
+							
+							output_to_terminal_successful(f"Chunk {chunk_index + 1}: Blended frame {i} with strength {blend_strength:.3f}")
+						else:
+							# If no corresponding previous frame, use fresh conditioning
+							clip_latent_window[:, :, i:i+1, :, :] = fresh_frame
 					
-					# Average motion vector for stability
-					if motion_vectors:
-						avg_motion = torch.stack(motion_vectors, dim=0).mean(dim=0)
-						# Apply motion smoothing to prevent artifacts
-						motion_weight = frames_overlap_chunks_motion_weight
-						smoothed_motion = avg_motion * motion_weight
-					else:
-						smoothed_motion = torch.zeros_like(last_latent["samples"][:, :, -1:, :, :])
+					# For the rest of the frames, use pure fresh conditioning from original image
+					for i in range(overlap_frames, clip_latent_window.shape[2]):
+						clip_latent_window[:, :, i:i+1, :, :] = fresh_clip_latent_window[:, :, i:i+1, :, :]
 				else:
-					smoothed_motion = torch.zeros_like(last_latent["samples"][:, :, -1:, :, :])
-
-				# STEP 2: Motion-Guided Frame Extrapolation
-				# Predict what the next frames should look like based on motion
-				last_frame = last_latent["samples"][:, :, -1:, :, :]
-				predicted_next_frame = last_frame + smoothed_motion * frames_overlap_chunks_step_gain
+					# No overlap, use pure fresh conditioning
+					clip_latent_window[:, :, :, :, :] = fresh_clip_latent_window[:, :, :, :, :]
 				
-				# STEP 3: Enhanced concat_latent_window Conditioning
-				# Update conditioning with motion-guided predictions instead of static copying
-				concat_latent_window[:, :, 0:1, :, :] = predicted_next_frame
-				
-				# Create smooth transition conditioning for overlapping region
-				for i in range(min(overlap_frames, concat_latent_window.shape[2])):
-					# Progressive motion-guided conditioning with decreasing influence
-					motion_influence = (1.0 - (i / float(overlap_frames))) * frames_overlap_chunks_blend
-					static_influence = 1.0 - motion_influence
-					
-					if i < last_latent["samples"].shape[2]:
-						base_frame = last_latent["samples"][:, :, -(i+1):-(i) if i > 0 else None, :, :]
-						motion_predicted = base_frame + smoothed_motion * (i + 1) * frames_overlap_chunks_step_gain
+				# STEP 4: Apply gentle latent space blending for the overlap region
+				if overlap_frames > 0 and frames_overlap_chunks_blend > 0:
+					for i in range(min(overlap_frames, in_latent["samples"].shape[2])):
+						blend_strength = frames_overlap_chunks_blend * (1.0 - float(i) / overlap_frames) * 0.5
 						
-						# Blend motion prediction with base frame
-						blended_conditioning = (motion_predicted * motion_influence + 
-											 base_frame * static_influence)
-						
-						if i < concat_latent_window.shape[2]:
-							concat_latent_window[:, :, i:i+1, :, :] = blended_conditioning
-
-				# STEP 4: Spatial Blending Mask Application
-				# Create Gaussian spatial mask for smooth blending
-				if frames_overlap_chunks_mask_sigma > 0:
-					h, w = concat_latent_window.shape[-2:]
-					y, x = torch.meshgrid(torch.arange(h, device=concat_latent_window.device),
-										torch.arange(w, device=concat_latent_window.device), indexing='ij')
-					
-					# Center coordinates
-					center_y, center_x = h // 2, w // 2
-					
-					# Gaussian mask
-					sigma = frames_overlap_chunks_mask_sigma * min(h, w)
-					gaussian_mask = torch.exp(-((x - center_x) ** 2 + (y - center_y) ** 2) / (2 * sigma ** 2))
-					gaussian_mask = gaussian_mask.unsqueeze(0).unsqueeze(0).unsqueeze(0)  # Add batch, channel, time dims
-					
-					# Apply spatial blending mask to overlapping region
-					for i in range(min(overlap_frames, concat_latent_window.shape[2])):
-						mask_strength = frames_overlap_chunks_blend * (1.0 - i / float(overlap_frames))
-						spatial_mask = gaussian_mask * mask_strength + (1.0 - mask_strength)
-						concat_latent_window[:, :, i:i+1, :, :] *= spatial_mask
-
-				# STEP 5: Latent Space Anchoring with Motion Awareness
-				# Anchor first latent frames with motion-guided blending
-				anchor_frames = min(overlap_frames, in_latent["samples"].shape[2])
+						if i < last_latent["samples"].shape[2]:
+							prev_frame = last_latent["samples"][:, :, -(i+1):-(i) if i > 0 else None, :, :]
+							current_frame = in_latent["samples"][:, :, i:i+1, :, :]
+							
+							# Gentle blending that preserves temporal continuity
+							blended_frame = (current_frame * (1.0 - blend_strength) + 
+										   prev_frame * blend_strength)
+							
+							in_latent["samples"][:, :, i:i+1, :, :] = blended_frame
+							mask_window[:, :, i:i+1, :, :] = torch.clamp(
+								mask_window[:, :, i:i+1, :, :] + blend_strength * 0.3, 0.0, 1.0
+							)
 				
-				for i in range(anchor_frames):
-					anchor_strength = (1.0 - i / float(anchor_frames)) * frames_overlap_chunks_blend
-					
-					# Get corresponding frame from previous chunk with motion prediction
-					if i < last_latent["samples"].shape[2]:
-						prev_frame = last_latent["samples"][:, :, -(i+1):-(i) if i > 0 else None, :, :]
-						motion_adjusted_frame = prev_frame + smoothed_motion * i * frames_overlap_chunks_step_gain
-						
-						# Blend with existing latent content
-						current_frame = in_latent["samples"][:, :, i:i+1, :, :]
-						blended_frame = (motion_adjusted_frame * anchor_strength + 
-									   current_frame * (1.0 - anchor_strength))
-						
-						in_latent["samples"][:, :, i:i+1, :, :] = blended_frame
-						mask_window[:, :, i:i+1, :, :] = anchor_strength  # Adjust mask based on blend
-
-				# STEP 6: Mask Window Consistency
-				# Ensure mask window reflects the blending operations
-				mask_window[:, :, 0:current_window_mask_size, :, :] = input_mask[:, :, 0:current_window_mask_size, :, :]
+				# Clean up temporary tensors
+				del chunk_input_latent
+				del chunk_input_clip_latent_image
+				del chunk_input_mask
+				del fresh_clip_latent_window
 				
-				# Apply progressive masking for overlapping region
-				for i in range(min(overlap_frames, mask_window.shape[2])):
-					mask_strength = frames_overlap_chunks_blend * (1.0 - i / float(overlap_frames))
-					mask_window[:, :, i:i+1, :, :] = torch.clamp(mask_window[:, :, i:i+1, :, :] + mask_strength, 0.0, 1.0)
-
-				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Applied motion-guided conditioning with {motion_frames} motion frames")
-				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Motion weight: {motion_weight:.3f}, Blend strength: {frames_overlap_chunks_blend:.3f}")
-				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Overlapping frames: {overlap_frames}, Spatial sigma: {frames_overlap_chunks_mask_sigma:.3f}")
+				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Applied sliding window approach with original image conditioning")
+				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Temporal overlap: {overlap_frames} frames, Blend strength: {frames_overlap_chunks_blend:.3f}")
 				
+			else:
+				# First chunk - use the conditioning directly from make_latent_and_mask
+				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Using fresh original image conditioning (first chunk)")
+				output_to_terminal_successful(f"Chunk {chunk_index + 1}: clip_latent_window shape: {clip_latent_window.shape}")
+			
 			'''
-			END ENHANCED MOTION-GUIDED CONTINUOUS VIDEO GENERATION
-			This implementation ensures temporal consistency by using motion-guided conditioning
-			instead of static frame copying, providing smooth transitions between video chunks.
+			END SLIDING WINDOW APPROACH
+			This ensures each chunk is rooted in the original image while maintaining 
+			temporal continuity through proper overlap blending.
 			'''
 
 			positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low = wan_image_to_video.make_conditioning_and_clipvision(
@@ -641,7 +654,7 @@ class WanImageToVideoAdvancedSampler:
 				negative_clip_high,
 				positive_clip_low,
 				negative_clip_low,
-				concat_latent_window,
+				clip_latent_window,
 				mask_window,
 				clip_vision_start_image,
 				clip_vision_end_image,
@@ -685,7 +698,7 @@ class WanImageToVideoAdvancedSampler:
 					input_latent["samples"][:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = in_latent["samples"]
 					input_mask[:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = mask_window
 					# Write back the updated concat window to keep global conditioning consistent
-					input_concat_latent_image[:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = concat_latent_window
+					input_clip_latent_image[:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = clip_latent_window
 
 					output_to_terminal_successful(f"Chunk {chunk_index + 1}: Merged sampled results back to full latent")
 			
@@ -723,7 +736,7 @@ class WanImageToVideoAdvancedSampler:
 			negative_clip_low = None
 
 		mask_window = None
-		concat_latent_window = None
+		clip_latent_window = None
 		last_latent = None
 		last_mask_window = None
 			
@@ -735,7 +748,7 @@ class WanImageToVideoAdvancedSampler:
 		mm.throw_exception_if_processing_interrupted()
 		
 		# Final comprehensive memory cleanup for all chunks
-		self._final_memory_cleanup([input_mask, input_latent, input_concat_latent_image])
+		self._final_memory_cleanup([input_mask, input_latent, input_clip_latent_image])
 		
 		del input_mask
 		del input_latent
