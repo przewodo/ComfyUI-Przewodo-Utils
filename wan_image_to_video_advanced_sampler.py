@@ -504,7 +504,7 @@ class WanImageToVideoAdvancedSampler:
 			
 			# Extract windows with immediate memory optimization
 			mask_window = self._extract_window_with_memory_management(
-				input_mask, 0, current_window_mask_size, 
+				input_mask, current_window_mask_start, current_window_mask_size, 
 				f"mask_window_chunk_{chunk_index}", dimension=2
 			)
 
@@ -546,7 +546,7 @@ class WanImageToVideoAdvancedSampler:
 			temporal continuity through overlap frames from the previous chunk.
 			'''
 			if (chunk_index > 0 and last_latent is not None):
-				clip_latent_window[:, :, 0:clip_latent_window.shape[2], :, :] = in_latent["samples"][:, :, 0:1, :, :]
+				clip_latent_window[:, :, 0:clip_latent_window.shape[2], :, :] = in_latent["samples"][:, :, 0:clip_latent_window.shape[2], :, :]
 #				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Generating fresh conditioning from original image")
 #				
 #				# STEP 1: Generate fresh conditioning from original_image_start for this chunk
