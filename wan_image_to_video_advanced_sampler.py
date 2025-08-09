@@ -504,7 +504,7 @@ class WanImageToVideoAdvancedSampler:
 			
 			# Extract windows with immediate memory optimization
 			mask_window = self._extract_window_with_memory_management(
-				input_mask, current_window_mask_start, current_window_mask_size, 
+				input_mask, 0, current_window_mask_size, 
 				f"mask_window_chunk_{chunk_index}", dimension=2
 			)
 
@@ -547,7 +547,6 @@ class WanImageToVideoAdvancedSampler:
 			'''
 			if (chunk_index > 0 and last_latent is not None):
 				clip_latent_window[:, :, 0:clip_latent_window.shape[2], :, :] = in_latent["samples"][:, :, 0:1, :, :]
-				mask_window[:, :, 0:mask_window.shape[2], :, :] = fill_noise_latent
 #				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Generating fresh conditioning from original image")
 #				
 #				# STEP 1: Generate fresh conditioning from original_image_start for this chunk
@@ -690,7 +689,6 @@ class WanImageToVideoAdvancedSampler:
 			mm.throw_exception_if_processing_interrupted()
 			
 			last_latent = in_latent
-			last_mask_window = mask_window  # Save current mask window for next chunk blending
 
 			# Check memory usage after sampling
 			self._check_memory_checkpoint(f"post_sampling_chunk_{chunk_index}")
@@ -743,7 +741,6 @@ class WanImageToVideoAdvancedSampler:
 		mask_window = None
 		clip_latent_window = None
 		last_latent = None
-		last_mask_window = None
 			
 		output_image, = wan_video_vae_decode.decode(input_latent, vae, 0, image_generation_mode)
 		mm.throw_exception_if_processing_interrupted()
