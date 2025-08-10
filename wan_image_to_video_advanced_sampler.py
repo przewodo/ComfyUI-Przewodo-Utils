@@ -295,8 +295,8 @@ class WanImageToVideoAdvancedSampler:
 		input_mask = None
 		input_clip_latent = None
 		last_latent = None
-		last_mask = None
-		last_clip_latent = None
+		#last_mask = None
+		#last_clip_latent = None
 		
 		# Memory management for full tensors
 		self._memory_checkpoint = None
@@ -532,8 +532,8 @@ class WanImageToVideoAdvancedSampler:
 			mm.throw_exception_if_processing_interrupted()
 			
 			last_latent = input_latent
-			last_mask = input_mask
-			last_clip_latent = input_clip_latent
+			#last_mask = input_mask
+			#last_clip_latent = input_clip_latent
 
 			# Check memory usage after sampling
 			self._check_memory_checkpoint(f"post_sampling_chunk_{chunk_index}")
@@ -578,8 +578,8 @@ class WanImageToVideoAdvancedSampler:
 			mm.throw_exception_if_processing_interrupted()
 
 		last_latent = None
-		last_mask = None
-		last_clip_latent = None
+		#last_mask = None
+		#last_clip_latent = None
 
 		#output_image = vae.decode_tiled(input_latent["samples"], 512, 512, 64, 64, 8)
 		output_to_terminal_successful("Decoding video")
@@ -597,8 +597,6 @@ class WanImageToVideoAdvancedSampler:
 		del input_mask
 		del input_latent
 		del input_clip_latent
-
-		output_to_terminal_successful("All video chunks generated successfully")
 
 		# Force cleanup of main models before final processing - be less aggressive
 		# Only break circular references, don't force cleanup active models
@@ -622,9 +620,18 @@ class WanImageToVideoAdvancedSampler:
 			interpolationEngine = RifeTensorrt()
 			output_image, = interpolationEngine.vfi(output_image, frames_engine, frames_clear_cache_after_n_frames, frames_multiplier, frames_use_cuda_graph, False)
 			self.default_fps = self.default_fps * float(frames_multiplier)
-			return (output_image[:-frames_multiplier+1], self.default_fps,)
+			output_image = output_image[:, :-frames_multiplier+1, :, :, :]
+			output_to_terminal_successful(f"Output Image Shape: {output_image.shape}")
+			output_to_terminal_successful("All video chunks generated successfully")
 		else:
-			return (output_image[:-1], self.default_fps,)
+			output_image = output_image[:, :-1, :, :, :]
+			output_to_terminal_successful("All video chunks generated successfully")
+			output_to_terminal_successful(f"Output Image Shape: {output_image.shape}")
+
+		if len(output_image.shape) == 5: #Combine batches
+			output_image = output_image.reshape(-1, output_image.shape[-3], output_image.shape[-2], output_image.shape[-1])
+
+		return (output_image, self.default_fps,)
 
 	def get_current_prompt(self, prompt_stack, chunk_index, default_positive, default_negative):
 		"""
@@ -1466,56 +1473,6 @@ class WanImageToVideoAdvancedSampler:
 		except Exception as e:
 			output_to_terminal_error(f"Error in adaptive tensor precision: {str(e)}")
 			return tensor
-
-	def _extract_window_with_memory_management(self, tensor, start_idx, window_size, tensor_name, dimension=2):
-		"""
-		Extract a window from a tensor with memory-efficient operations and immediate cleanup.
-		
-		Args:
-			tensor: Input tensor to extract window from
-			start_idx: Starting index for the window
-			window_size: Size of the window to extract
-			tensor_name: Name for logging purposes
-			dimension: Dimension along which to extract (default: 2 for frame dimension)
-			
-		Returns:
-			Extracted window tensor with optimized memory usage
-		"""
-		try:
-			# Log memory before extraction
-			if torch.cuda.is_available():
-				mem_before = torch.cuda.memory_allocated() / (1024**3)
-				output_to_terminal_successful(f"Memory before {tensor_name} extraction: {mem_before:.2f}GB")
-			
-			# Extract window using efficient slicing
-			if dimension == 2:
-				window = tensor[:, :, start_idx:start_idx + window_size, :, :]
-			elif dimension == 0:
-				window = tensor[start_idx:start_idx + window_size]
-			else:
-				# Generic slicing for other dimensions
-				slices = [slice(None)] * tensor.ndim
-				slices[dimension] = slice(start_idx, start_idx + window_size)
-				window = tensor[tuple(slices)]
-			
-			# Force immediate memory cleanup
-			if hasattr(torch.cuda, 'synchronize'):
-				torch.cuda.synchronize()
-			
-			# Log memory after extraction
-			if torch.cuda.is_available():
-				mem_after = torch.cuda.memory_allocated() / (1024**3)
-				output_to_terminal_successful(f"Memory after {tensor_name} extraction: {mem_after:.2f}GB")
-				
-			return window
-			
-		except Exception as e:
-			output_to_terminal_error(f"Error extracting window for {tensor_name}: {str(e)}")
-			# Fallback to basic slicing
-			if dimension == 2:
-				return tensor[:, :, start_idx:start_idx + window_size, :, :]
-			else:
-				return tensor[start_idx:start_idx + window_size]
 
 	def _partial_memory_cleanup(self, chunk_index):
 		"""
