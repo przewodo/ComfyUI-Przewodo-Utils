@@ -449,13 +449,14 @@ class WanImageToVideoAdvancedSampler:
 				self._set_memory_checkpoint("full_tensors_created")
 				output_to_terminal(f"Output Latent Shape: {input_latent['samples'].shape}")
 			else:
-				input_mask = torch.ones((1, 1, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8))
+				input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8], device=mm.intermediate_device())
+				input_mask = torch.ones((1, 1, (((chunk_frames - 1) // 4) + 1) * 4, image_height // 8, image_width // 8))
 
 				if start_image is not None:
 					if (image_generation_mode == START_IMAGE and start_image is not None):
 						input_mask[:, :, 0:1] = 0
 
-				input_clip_latent = torch.zeros([1, 16, (((chunk_frames - 1) // 4) + 1) * 4, image_height // 8, image_width // 8])
+				input_clip_latent = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8])
 				input_mask = input_mask.view(1, input_mask.shape[2] // 4, 4, input_mask.shape[3], input_mask.shape[4]).transpose(1, 2)
 
 				overlap_frames_in_latent_space = frames_overlap_chunks // 4
