@@ -447,7 +447,7 @@ class WanImageToVideoAdvancedSampler:
 				input_mask = input_mask.view(1, input_mask.shape[2] // 4, 4, input_mask.shape[3], input_mask.shape[4]).transpose(1, 2)
 
 				self._set_memory_checkpoint("full_tensors_created")
-				output_to_terminal(f"Output Latent Shape: {input_latent['samples'].shape}")
+				output_to_terminal(f"Output Latent Shape: {output_latent['samples'].shape}")
 			else:
 				input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8], device=mm.intermediate_device())
 				input_mask = torch.ones((1, 1, input_latent['samples'].shape[2] * 4, input_latent['samples'].shape[-2], input_latent['samples'].shape[-1]))
