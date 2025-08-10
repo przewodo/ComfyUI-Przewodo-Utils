@@ -23,9 +23,6 @@ class WanVideoVaeDecode:
 
         out_images = self.vae_decode(vae, latent, 512, 64, 64, 8)
         
-        # Process VAE output to correct format [0, 1] range
-        out_images = torch.clamp((out_images + 1.0) / 2.0, min=0.0, max=1.0)
-
         total_shift = (first_end_frame_shift * 4)
         start_shift = (total_shift // 2)
         end_shift = (total_shift // 2)

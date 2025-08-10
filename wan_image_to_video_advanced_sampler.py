@@ -8,13 +8,13 @@ import weakref
 import sys
 import time
 import comfy.model_management as mm
+import comfy
 from collections import OrderedDict
 from comfy_extras.nodes_model_advanced import ModelSamplingSD3
 from comfy_extras.nodes_cfg import CFGZeroStar
 from .core import *
 from .cache_manager import CacheManager
 from .wan_first_last_first_frame_to_video import WanFirstLastFirstFrameToVideo
-from .wan_video_vae_decode import WanVideoVaeDecode
 from .wan_get_max_image_resolution_by_aspect_ratio import WanGetMaxImageResolutionByAspectRatio
 from .wan_video_enhance_a_video import WanVideoEnhanceAVideo
 
@@ -289,8 +289,7 @@ class WanImageToVideoAdvancedSampler:
 		total_video_chunks = 1 if (divide_video_in_chunks == False and total_video_seconds > 5) else int(math.ceil(total_video_seconds / 5.0))
 		k_sampler = nodes.KSamplerAdvanced()
 		text_encode = nodes.CLIPTextEncode()
-		wan_image_to_video = WanFirstLastFirstFrameToVideo()
-		wan_video_vae_decode = WanVideoVaeDecode()
+#		wan_image_to_video = WanFirstLastFirstFrameToVideo()
 		wan_max_resolution = WanGetMaxImageResolutionByAspectRatio()
 		CLIPVisionLoader = nodes.CLIPVisionLoader()
 		CLIPVisionEncoder = nodes.CLIPVisionEncode()
@@ -313,7 +312,10 @@ class WanImageToVideoAdvancedSampler:
 		model_low_cfg = None
 
 		# Load CLIP Vision Model
-		clip_vision = self.load_clip_vision_model(clip_vision_model, CLIPVisionLoader)
+		if (start_image_clip_vision_enabled == True or end_image_clip_vision_enabled == True):
+			clip_vision = self.load_clip_vision_model(clip_vision_model, CLIPVisionLoader)
+		else:
+			output_to_terminal_error("CLIP vision not enabled...")
 		mm.throw_exception_if_processing_interrupted()
 
 		# Generate video chunks sequentially
@@ -322,23 +324,15 @@ class WanImageToVideoAdvancedSampler:
 		output_image = None
 		input_latent = None
 		input_mask = None
-		input_clip_latent_image = None
+		input_clip_latent = None
 		last_latent = None
+		last_mask = None
+		last_clip_latent = None
 		
 		# Memory management for full tensors
 		self._memory_checkpoint = None
 		
 		output_to_terminal_successful("Generation started...")
-
-		# CRITICAL DEBUG: Check input parameters
-		output_to_terminal_successful(f"PARAM DEBUG: start_image type: {type(start_image)}")
-		if start_image is not None:
-			output_to_terminal_successful(f"PARAM DEBUG: start_image shape: {start_image.shape}")
-			output_to_terminal_successful(f"PARAM DEBUG: start_image device: {start_image.device if hasattr(start_image, 'device') else 'No device'}")
-		else:
-			output_to_terminal_successful(f"PARAM DEBUG: start_image is None!")
-		output_to_terminal_successful(f"PARAM DEBUG: image_generation_mode: {image_generation_mode}")
-		output_to_terminal_successful(f"PARAM DEBUG: total_video_chunks: {total_video_chunks}")
 
 		for chunk_index in range(total_video_chunks):
 			chunck_seconds = 5 if (remainder_video_seconds > 5) else remainder_video_seconds
@@ -464,36 +458,40 @@ class WanImageToVideoAdvancedSampler:
 
 			output_to_terminal_successful("Wan Image to Video started...")
 
+			'''
+			Start creating the latent, mask, and image tensors
+			'''
+			image = None
 			if (chunk_index == 0):
-				output_to_terminal_successful(f"First chunk: Starting make_latent_and_mask with image_generation_mode: {image_generation_mode}")
-				output_to_terminal_successful(f"First chunk: start_image shape: {start_image.shape if start_image is not None else 'None'}")
+				output_to_terminal_successful(f"Generating {total_frames} frames")
+
+				input_latent = {"samples": torch.zeros([1, 16, ((total_frames - 1) // 4) + 1, image_height // 8, image_width // 8]) }
+				image = torch.ones((total_frames, image_height, image_width, 3)) * fill_noise_latent
+				input_mask = torch.ones((1, 1, input_latent["samples"].shape[2] * 4, input_latent["samples"].shape[-2], input_latent["samples"].shape[-1]))
+
+				if start_image is not None:
+					if (image_generation_mode == START_IMAGE and start_image is not None):
+						output_to_terminal_successful("Generating start frame sequence")
+						# Fix first frame with exact input image data
+						image[:start_image.shape[0]] = start_image
+						input_mask[:, :, :start_image.shape[0]] = 0
 				
-				input_latent, input_clip_latent_image, input_mask = wan_image_to_video.make_latent_and_mask(
-					vae,
-					image_width,
-					image_height,
-					total_frames,
-					0, 
-					0,
-					fill_noise_latent,
-					image_generation_mode, 
-					start_image,
-					end_image
-				)
-				
-				output_to_terminal_successful(f"First chunk: make_latent_and_mask completed successfully")
-				output_to_terminal_successful(f"First chunk: input_latent shape: {input_latent['samples'].shape}")
-				output_to_terminal_successful(f"First chunk: input_clip_latent_image shape: {input_clip_latent_image.shape}")
-				
+				input_clip_latent = vae.encode(image[:,:,:,:3])
+				input_mask = input_mask.view(1, input_mask.shape[2] // 4, 4, input_mask.shape[3], input_mask.shape[4]).transpose(1, 2)
+
 				# Set memory checkpoint after creating full tensors
 				self._set_memory_checkpoint("full_tensors_created")
 				
 				# Optimize tensor memory layout for better cache efficiency
 				input_latent["samples"] = self._optimize_tensor_memory_layout(input_latent["samples"])
-				input_clip_latent_image = self._optimize_tensor_memory_layout(input_clip_latent_image)
+				input_clip_latent = self._optimize_tensor_memory_layout(input_clip_latent)
 				input_mask = self._optimize_tensor_memory_layout(input_mask)
-				
-				output_to_terminal_successful("First chunk: Created initial conditioning from original image")
+			else:
+				image = None
+			'''
+			End creating the latent, mask, and image tensors
+			'''
+			mm.throw_exception_if_processing_interrupted()
 
 			# Memory-efficient window extraction with immediate cleanup
 			current_window_start = (chunck_seconds * 16) * chunk_index
@@ -518,21 +516,26 @@ class WanImageToVideoAdvancedSampler:
 				input_latent["samples"], current_window_mask_start, current_window_mask_size,
 				f"latent_window_chunk_{chunk_index}", dimension=2
 			)
+
+			original_latent_window = self._extract_window_with_memory_management(
+				input_latent["samples"], 0, current_window_mask_size,
+				f"latent_window_chunk_{chunk_index}", dimension=2
+			)
 			
 			clip_latent_window = self._extract_window_with_memory_management(
-				input_clip_latent_image, current_window_mask_start, current_window_mask_size, 
+				input_clip_latent, current_window_mask_start, current_window_mask_size, 
 				f"clip_latent_window_chunk_{chunk_index}", dimension=2
 			)
 
 			original_clip_latent_window = self._extract_window_with_memory_management(
-				input_clip_latent_image, 0, current_window_mask_size, 
+				input_clip_latent, 0, current_window_mask_size, 
 				f"original_clip_latent_window_{chunk_index}", dimension=2
 			)
 			
 			output_to_terminal(f"Chunk {chunk_index + 1}: Frame Count: {chunk_frames}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: Latent Shape: {input_latent["samples"].shape}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: Msk Shape: {input_mask.shape}")
-			output_to_terminal(f"Chunk {chunk_index + 1}: CLIP Latent Image Shape: {input_clip_latent_image.shape}")
+			output_to_terminal(f"Chunk {chunk_index + 1}: CLIP Latent Image Shape: {input_clip_latent.shape}")
 			output_to_terminal_successful(f"Chunk {chunk_index + 1}: Mask Window Start={current_window_mask_start}, Mask Window Size={current_window_mask_size}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: Latent Window Shape: {latent_window.shape}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: Mask Window Shape: {mask_window.shape}")
@@ -556,134 +559,59 @@ class WanImageToVideoAdvancedSampler:
 			Each chunk uses fresh conditioning from original_image_start while maintaining 
 			temporal continuity through overlap frames from the previous chunk.
 			'''
-			if (chunk_index > 0 and last_latent is not None):
-				positive_clip_high = node_helpers.conditioning_set_values(positive_clip_high, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
-				negative_clip_high = node_helpers.conditioning_set_values(negative_clip_high, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
-				if positive_clip_low is not None:
-					positive_clip_low = node_helpers.conditioning_set_values(positive_clip_low, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
-				if negative_clip_low is not None:
-					negative_clip_low = node_helpers.conditioning_set_values(negative_clip_low, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
+			#if (chunk_index > 0 and last_latent is not None):
+				#positive_clip_high = node_helpers.conditioning_set_values(positive_clip_high, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
+				#negative_clip_high = node_helpers.conditioning_set_values(negative_clip_high, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
+				#if positive_clip_low is not None:
+				#	positive_clip_low = node_helpers.conditioning_set_values(positive_clip_low, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
+				#if negative_clip_low is not None:
+				#	negative_clip_low = node_helpers.conditioning_set_values(negative_clip_low, {"concat_latent_image": original_clip_latent_window, "concat_mask": original_mask_window})
 
-				clip_latent_window[:, :, 0:clip_latent_window.shape[2], :, :] = in_latent["samples"][:, :, 0:clip_latent_window.shape[2], :, :]
-				
-#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Generating fresh conditioning from original image")
-#				
-#				# STEP 1: Generate fresh conditioning from original_image_start for this chunk
-#				# This ensures each chunk maintains connection to the original image (I2V paradigm)
-#				chunk_input_latent, chunk_input_clip_latent_image, chunk_input_mask = wan_image_to_video.make_latent_and_mask(
-#					vae,
-#					image_width,
-#					image_height,
-#					total_frames,
-#					0, 
-#					0,
-#					fill_noise_latent,
-#					image_generation_mode, 
-#					start_image,  # Always use original_image_start
-#					end_image
-#				)
-#				
-#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Fresh conditioning generated successfully")
-#				
-#				# STEP 2: Extract the window for this chunk from the fresh conditioning
-#				fresh_clip_latent_window = self._extract_window_with_memory_management(
-#					chunk_input_clip_latent_image, current_window_mask_start, current_window_mask_size, 
-#					f"fresh_clip_latent_window_chunk_{chunk_index}", dimension=2
-#				)
-#				
-#				# STEP 3: Apply temporal overlap blending for seamless transitions
-#				overlap_frames = max(1, frames_overlap_chunks // 4)
-#				overlap_frames = min(overlap_frames, clip_latent_window.shape[2])
-#				overlap_frames = min(overlap_frames, last_latent["samples"].shape[2])
-#				
-#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Applying temporal overlap blending with {overlap_frames} frames")
-#				
-#				# Get the last few frames from the previous chunk for temporal continuity
-#				if overlap_frames > 0:
-#					# Extract final frames from previous chunk
-#					prev_final_frames = last_latent["samples"][:, :, -overlap_frames:, :, :]
-#					
-#					# Blend the first frames of current chunk with temporal information from previous chunk
-#					for i in range(min(overlap_frames, clip_latent_window.shape[2])):
-#						# Calculate blend strength - stronger at the beginning, weaker towards the end
-#						blend_strength = frames_overlap_chunks_blend * (1.0 - float(i) / overlap_frames)
-#						
-#						# Get the corresponding frame from fresh conditioning and previous chunk
-#						fresh_frame = fresh_clip_latent_window[:, :, i:i+1, :, :]
-#						
-#						if i < prev_final_frames.shape[2]:
-#							# Use VAE to encode the previous frame for conditioning compatibility
-#							prev_frame_encoded = prev_final_frames[:, :, i:i+1, :, :]
-#							
-#							# Temporal blending: fresh original conditioning + temporal continuity
-#							blended_frame = (fresh_frame * (1.0 - blend_strength) + 
-#										   fresh_frame * blend_strength * 0.7 +  # Keep original image influence strong
-#										   prev_frame_encoded * blend_strength * 0.3)  # Add temporal continuity
-#							
-#							clip_latent_window[:, :, i:i+1, :, :] = blended_frame
-#							
-#							output_to_terminal_successful(f"Chunk {chunk_index + 1}: Blended frame {i} with strength {blend_strength:.3f}")
-#						else:
-#							# If no corresponding previous frame, use fresh conditioning
-#							clip_latent_window[:, :, i:i+1, :, :] = fresh_frame
-#					
-#					# For the rest of the frames, use pure fresh conditioning from original image
-#					for i in range(overlap_frames, clip_latent_window.shape[2]):
-#						clip_latent_window[:, :, i:i+1, :, :] = fresh_clip_latent_window[:, :, i:i+1, :, :]
-#				else:
-#					# No overlap, use pure fresh conditioning
-#					clip_latent_window[:, :, :, :, :] = fresh_clip_latent_window[:, :, :, :, :]
-#				
-#				# STEP 4: Apply gentle latent space blending for the overlap region
-#				if overlap_frames > 0 and frames_overlap_chunks_blend > 0:
-#					for i in range(min(overlap_frames, in_latent["samples"].shape[2])):
-#						blend_strength = frames_overlap_chunks_blend * (1.0 - float(i) / overlap_frames) * 0.5
-#						
-#						if i < last_latent["samples"].shape[2]:
-#							prev_frame = last_latent["samples"][:, :, -(i+1):-(i) if i > 0 else None, :, :]
-#							current_frame = in_latent["samples"][:, :, i:i+1, :, :]
-#							
-#							# Gentle blending that preserves temporal continuity
-#							blended_frame = (current_frame * (1.0 - blend_strength) + 
-#										   prev_frame * blend_strength)
-#							
-#							in_latent["samples"][:, :, i:i+1, :, :] = blended_frame
-#							mask_window[:, :, i:i+1, :, :] = torch.clamp(
-#								mask_window[:, :, i:i+1, :, :] + blend_strength * 0.3, 0.0, 1.0
-#							)
-#				
-#				# Clean up temporary tensors
-#				del chunk_input_latent
-#				del chunk_input_clip_latent_image
-#				del chunk_input_mask
-#				del fresh_clip_latent_window
-#				
-#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Applied sliding window approach with original image conditioning")
-#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Temporal overlap: {overlap_frames} frames, Blend strength: {frames_overlap_chunks_blend:.3f}")
-#				
-#			else:
-#				# First chunk - use the conditioning directly from make_latent_and_mask
-#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: Using fresh original image conditioning (first chunk)")
-#				output_to_terminal_successful(f"Chunk {chunk_index + 1}: clip_latent_window shape: {clip_latent_window.shape}")
-			
+				#clip_latent_window[:, :, 0:clip_latent_window.shape[2], :, :] = last_latent[:, :, :-1, :, :]
 			'''
 			END SLIDING WINDOW APPROACH
 			This ensures each chunk is rooted in the original image while maintaining 
 			temporal continuity through proper overlap blending.
 			'''
 
-			positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low = wan_image_to_video.make_conditioning_and_clipvision(
-				positive_clip_high,
-				negative_clip_high,
-				positive_clip_low,
-				negative_clip_low,
-				clip_latent_window,
-				mask_window,
-				clip_vision_start_image,
-				clip_vision_end_image,
-				clip_vision_strength,
-				image_generation_mode
-			)
+			positive_clip_high = node_helpers.conditioning_set_values(positive_clip_high, {"concat_latent_image": clip_latent_window, "concat_mask": mask_window})
+			negative_clip_high = node_helpers.conditioning_set_values(negative_clip_high, {"concat_latent_image": clip_latent_window, "concat_mask": mask_window})
+			if positive_clip_low is not None:
+				positive_clip_low = node_helpers.conditioning_set_values(positive_clip_low, {"concat_latent_image": clip_latent_window, "concat_mask": mask_window})
+			if negative_clip_low is not None:
+				negative_clip_low = node_helpers.conditioning_set_values(negative_clip_low, {"concat_latent_image": clip_latent_window, "concat_mask": mask_window})
+
+			if (image_generation_mode == START_IMAGE and clip_vision_start_image is not None):
+				output_to_terminal_successful("Running clipvision for start sequence")
+
+				start_hidden = clip_vision_start_image.penultimate_hidden_states
+				# COLOR FIX: Strengthen CLIP vision influence to preserve color characteristics
+				enhanced_strength = clip_vision_strength * 1.5  # Boost color conditioning
+				start_hidden = start_hidden * enhanced_strength
+
+				clip_vision_output = comfy.clip_vision.Output()
+				clip_vision_output.penultimate_hidden_states = start_hidden
+				positive_clip_high = node_helpers.conditioning_set_values(positive_clip_high, {"concat_latent_image": clip_vision_output, "concat_mask": mask_window})
+				negative_clip_high = node_helpers.conditioning_set_values(negative_clip_high, {"concat_latent_image": clip_vision_output, "concat_mask": mask_window})
+				if positive_clip_low is not None:
+					positive_clip_low = node_helpers.conditioning_set_values(positive_clip_low, {"concat_latent_image": clip_vision_output, "concat_mask": mask_window})
+				if negative_clip_low is not None:
+					negative_clip_low = node_helpers.conditioning_set_values(negative_clip_low, {"concat_latent_image": clip_vision_output, "concat_mask": mask_window})
+				
+				output_to_terminal_successful(f"Enhanced CLIP vision strength to {enhanced_strength:.2f} for better color preservation")
+
+			#positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low = wan_image_to_video.make_conditioning_and_clipvision(
+			#	positive_clip_high,
+			#	negative_clip_high,
+			#	positive_clip_low,
+			#	negative_clip_low,
+			#	clip_latent_window,
+			#	mask_window,
+			#	clip_vision_start_image,
+			#	clip_vision_end_image,
+			#	clip_vision_strength,
+			#	image_generation_mode
+			#)
 			mm.throw_exception_if_processing_interrupted()
 			
 			# Apply adaptive precision to conditioning tensors
@@ -708,6 +636,8 @@ class WanImageToVideoAdvancedSampler:
 			mm.throw_exception_if_processing_interrupted()
 			
 			last_latent = in_latent
+			last_mask = mask_window
+			last_clip_latent = clip_latent_window
 
 			# Check memory usage after sampling
 			self._check_memory_checkpoint(f"post_sampling_chunk_{chunk_index}")
@@ -720,7 +650,7 @@ class WanImageToVideoAdvancedSampler:
 					input_latent["samples"][:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = in_latent["samples"]
 					input_mask[:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = mask_window
 					# Write back the updated concat window to keep global conditioning consistent
-					input_clip_latent_image[:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = clip_latent_window
+					input_clip_latent[:, :, current_window_mask_start:current_window_mask_start + current_window_mask_size, :] = clip_latent_window
 
 					output_to_terminal_successful(f"Chunk {chunk_index + 1}: Merged sampled results back to full latent")
 			
@@ -756,12 +686,18 @@ class WanImageToVideoAdvancedSampler:
 			positive_clip_low = None
 			negative_clip_high = None
 			negative_clip_low = None
+			gc.collect()
+			torch.cuda.empty_cache()
+			mm.throw_exception_if_processing_interrupted()
 
 		mask_window = None
 		clip_latent_window = None
 		last_latent = None
-			
-		output_image, = wan_video_vae_decode.decode(input_latent, vae, 0, image_generation_mode)
+		last_mask = None
+		last_clip_latent = None
+
+		#output_image = vae.decode_tiled(input_latent["samples"], 512, 512, 64, 64, 8)
+		output_image = vae.decode(input_latent["samples"])
 		mm.throw_exception_if_processing_interrupted()
 
 		# Subsequent chunks: use original_image as reference for consistency
@@ -769,10 +705,11 @@ class WanImageToVideoAdvancedSampler:
 		mm.throw_exception_if_processing_interrupted()
 		
 		# Final comprehensive memory cleanup for all chunks
-		self._final_memory_cleanup([input_mask, input_latent, input_clip_latent_image])
+		self._final_memory_cleanup([input_mask, input_latent, input_clip_latent])
 		
 		del input_mask
 		del input_latent
+		del input_clip_latent
 
 		output_to_terminal_successful("All video chunks generated successfully")
 
