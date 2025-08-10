@@ -14,7 +14,6 @@ from comfy_extras.nodes_model_advanced import ModelSamplingSD3
 from comfy_extras.nodes_cfg import CFGZeroStar
 from .core import *
 from .cache_manager import CacheManager
-from .wan_first_last_first_frame_to_video import WanFirstLastFirstFrameToVideo
 from .wan_get_max_image_resolution_by_aspect_ratio import WanGetMaxImageResolutionByAspectRatio
 from .wan_video_enhance_a_video import WanVideoEnhanceAVideo
 
@@ -289,7 +288,6 @@ class WanImageToVideoAdvancedSampler:
 		total_video_chunks = 1 if (divide_video_in_chunks == False and total_video_seconds > 5) else int(math.ceil(total_video_seconds / 5.0))
 		k_sampler = nodes.KSamplerAdvanced()
 		text_encode = nodes.CLIPTextEncode()
-#		wan_image_to_video = WanFirstLastFirstFrameToVideo()
 		wan_max_resolution = WanGetMaxImageResolutionByAspectRatio()
 		CLIPVisionLoader = nodes.CLIPVisionLoader()
 		CLIPVisionEncoder = nodes.CLIPVisionEncode()
@@ -600,18 +598,6 @@ class WanImageToVideoAdvancedSampler:
 				
 				output_to_terminal_successful(f"Enhanced CLIP vision strength to {enhanced_strength:.2f} for better color preservation")
 
-			#positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low = wan_image_to_video.make_conditioning_and_clipvision(
-			#	positive_clip_high,
-			#	negative_clip_high,
-			#	positive_clip_low,
-			#	negative_clip_low,
-			#	clip_latent_window,
-			#	mask_window,
-			#	clip_vision_start_image,
-			#	clip_vision_end_image,
-			#	clip_vision_strength,
-			#	image_generation_mode
-			#)
 			mm.throw_exception_if_processing_interrupted()
 			
 			# Apply adaptive precision to conditioning tensors
@@ -690,8 +676,12 @@ class WanImageToVideoAdvancedSampler:
 			torch.cuda.empty_cache()
 			mm.throw_exception_if_processing_interrupted()
 
+		latent_window = None
 		mask_window = None
 		clip_latent_window = None
+		original_latent_window = None
+		original_mask_window = None
+		original_clip_latent_window = None
 		last_latent = None
 		last_mask = None
 		last_clip_latent = None
