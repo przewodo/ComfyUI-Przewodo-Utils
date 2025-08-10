@@ -479,7 +479,7 @@ class WanImageToVideoAdvancedSampler:
 			
 			output_to_terminal(f"Chunk {chunk_index + 1}: Frame Count: {chunk_frames}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: Latent Shape: {input_latent["samples"].shape}")
-			output_to_terminal(f"Chunk {chunk_index + 1}: Msk Shape: {input_mask.shape}")
+			output_to_terminal(f"Chunk {chunk_index + 1}: Mask Shape: {input_mask.shape}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: CLIP Latent Image Shape: {input_clip_latent.shape}")
 
 			# Partial memory cleanup after window extraction
