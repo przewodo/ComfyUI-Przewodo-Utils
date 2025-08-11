@@ -295,8 +295,7 @@ class WanImageToVideoAdvancedSampler:
 		input_mask = None
 		input_clip_latent = None
 		last_latent = None
-		#last_mask = None
-		#last_clip_latent = None
+		last_mask = None
 		
 		# Memory management for full tensors
 		self._memory_checkpoint = None
@@ -440,9 +439,9 @@ class WanImageToVideoAdvancedSampler:
 					if (image_generation_mode == START_IMAGE and start_image is not None):
 						output_to_terminal_successful("Generating start frame sequence")
 
-						image[:start_image.shape[0]] = start_image
+						image[:1] = start_image
 						input_mask[:, :, 0:1] = 0
-				
+
 				input_clip_latent = vae.encode(image[:,:,:,:3])
 				input_mask = input_mask.view(1, input_mask.shape[2] // 4, 4, input_mask.shape[3], input_mask.shape[4]).transpose(1, 2)
 
@@ -460,8 +459,11 @@ class WanImageToVideoAdvancedSampler:
 				input_clip_latent = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8])
 				input_mask = input_mask.view(1, input_mask.shape[2] // 4, 4, input_mask.shape[3], input_mask.shape[4]).transpose(1, 2)
 
-				input_clip_latent[:, :, 0:overlap_frames_in_latent_space, :] = last_latent["samples"][:, :, -overlap_frames_in_latent_space:, :]
-				input_clip_latent[:, :, overlap_frames_in_latent_space:, :] = last_latent["samples"][:, :, -1:, :]
+				output_to_terminal(f"Chunk {chunk_index + 1}: Last Latent Shape: {last_latent["samples"].shape}")
+				
+				input_clip_latent[:, :, 0:overlap_frames_in_latent_space, :, :] = last_latent["samples"][:, :, -overlap_frames_in_latent_space:, :, :]
+#				input_clip_latent[:, :, overlap_frames_in_latent_space:, :, :] = last_latent["samples"][:, :, -1:, :, :]
+				input_clip_latent = input_clip_latent * fill_noise_latent
 
 			input_latent["samples"] = self._optimize_tensor_memory_layout(input_latent["samples"])
 			input_clip_latent = self._optimize_tensor_memory_layout(input_clip_latent)
@@ -469,6 +471,25 @@ class WanImageToVideoAdvancedSampler:
 			'''
 			End creating the latent, mask, and image tensors
 			'''
+			mm.throw_exception_if_processing_interrupted()
+
+			positive_clip_high = node_helpers.conditioning_set_values(positive_clip_high, {"concat_latent_image": input_clip_latent, "concat_mask": input_mask})
+			negative_clip_high = node_helpers.conditioning_set_values(negative_clip_high, {"concat_latent_image": input_clip_latent, "concat_mask": input_mask})
+			positive_clip_low = node_helpers.conditioning_set_values(positive_clip_low, {"concat_latent_image": input_clip_latent, "concat_mask": input_mask}) if use_dual_samplers == True else None
+			negative_clip_low = node_helpers.conditioning_set_values(negative_clip_low, {"concat_latent_image": input_clip_latent, "concat_mask": input_mask}) if use_dual_samplers == True else None
+
+			if (image_generation_mode == START_IMAGE and clip_vision_start_image is not None):
+				output_to_terminal_successful("Running clipvision for start sequence")
+
+				start_hidden = clip_vision_start_image.penultimate_hidden_states * clip_vision_strength
+
+				clip_vision_output = comfy.clip_vision.Output()
+				clip_vision_output.penultimate_hidden_states = start_hidden
+
+				positive_clip_high = node_helpers.conditioning_set_values(positive_clip_high, {"concat_latent_image": clip_vision_output, "concat_mask": input_mask})
+				negative_clip_high = node_helpers.conditioning_set_values(negative_clip_high, {"concat_latent_image": clip_vision_output, "concat_mask": input_mask})
+				positive_clip_low = node_helpers.conditioning_set_values(positive_clip_low, {"concat_latent_image": clip_vision_output, "concat_mask": input_mask}) if use_dual_samplers == True else None
+				negative_clip_low = node_helpers.conditioning_set_values(negative_clip_low, {"concat_latent_image": clip_vision_output, "concat_mask": input_mask}) if use_dual_samplers == True else None
 			mm.throw_exception_if_processing_interrupted()
 
 			current_window_start = (chunck_seconds * 16) * chunk_index
@@ -490,30 +511,6 @@ class WanImageToVideoAdvancedSampler:
 			self._check_memory_checkpoint(f"window_extraction_chunk_{chunk_index}")
 			mm.throw_exception_if_processing_interrupted()
 
-			positive_clip_high = node_helpers.conditioning_set_values(positive_clip_high, {"concat_latent_image": input_clip_latent, "concat_mask": input_mask})
-			negative_clip_high = node_helpers.conditioning_set_values(negative_clip_high, {"concat_latent_image": input_clip_latent, "concat_mask": input_mask})
-			if positive_clip_low is not None:
-				positive_clip_low = node_helpers.conditioning_set_values(positive_clip_low, {"concat_latent_image": input_clip_latent, "concat_mask": input_mask})
-			if negative_clip_low is not None:
-				negative_clip_low = node_helpers.conditioning_set_values(negative_clip_low, {"concat_latent_image": input_clip_latent, "concat_mask": input_mask})
-
-			if (image_generation_mode == START_IMAGE and clip_vision_start_image is not None):
-				output_to_terminal_successful("Running clipvision for start sequence")
-
-				start_hidden = clip_vision_start_image.penultimate_hidden_states * clip_vision_strength
-
-				clip_vision_output = comfy.clip_vision.Output()
-				clip_vision_output.penultimate_hidden_states = start_hidden
-
-				positive_clip_high = node_helpers.conditioning_set_values(positive_clip_high, {"concat_latent_image": clip_vision_output, "concat_mask": input_mask})
-				negative_clip_high = node_helpers.conditioning_set_values(negative_clip_high, {"concat_latent_image": clip_vision_output, "concat_mask": input_mask})
-				if positive_clip_low is not None:
-					positive_clip_low = node_helpers.conditioning_set_values(positive_clip_low, {"concat_latent_image": clip_vision_output, "concat_mask": input_mask})
-				if negative_clip_low is not None:
-					negative_clip_low = node_helpers.conditioning_set_values(negative_clip_low, {"concat_latent_image": clip_vision_output, "concat_mask": input_mask})
-			mm.throw_exception_if_processing_interrupted()
-
-		
 			# Apply adaptive precision to conditioning tensors
 			positive_clip_high = self._adaptive_tensor_precision(positive_clip_high, "encoding")
 			negative_clip_high = self._adaptive_tensor_precision(negative_clip_high, "encoding")
@@ -534,10 +531,21 @@ class WanImageToVideoAdvancedSampler:
 			else:
 				input_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, noise_seed, total_steps, high_cfg, positive_clip_high, negative_clip_high, input_latent, high_denoise)
 			mm.throw_exception_if_processing_interrupted()
-			
-			last_latent = input_latent
-			#last_mask = input_mask
-			#last_clip_latent = input_clip_latent
+
+			if (last_latent is not None):
+				del last_latent
+				last_latent = None
+				torch.cuda.empty_cache() if torch.cuda.is_available() else None
+				gc.collect()
+			last_latent = {}
+			last_latent["samples"] = input_latent["samples"].clone()
+
+			if (last_mask is not None):
+				del last_mask
+				last_mask = None
+				torch.cuda.empty_cache() if torch.cuda.is_available() else None
+				gc.collect()
+			last_mask = input_mask.clone()
 
 			# Check memory usage after sampling
 			self._check_memory_checkpoint(f"post_sampling_chunk_{chunk_index}")
@@ -582,8 +590,7 @@ class WanImageToVideoAdvancedSampler:
 			mm.throw_exception_if_processing_interrupted()
 
 		last_latent = None
-		#last_mask = None
-		#last_clip_latent = None
+		last_mask = None
 
 		#output_image = vae.decode_tiled(input_latent["samples"], 512, 512, 64, 64, 8)
 		output_to_terminal_successful("Decoding video")
