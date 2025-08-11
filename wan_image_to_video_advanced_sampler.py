@@ -461,9 +461,8 @@ class WanImageToVideoAdvancedSampler:
 
 				output_to_terminal(f"Chunk {chunk_index + 1}: Last Latent Shape: {last_latent["samples"].shape}")
 				
-				input_clip_latent[:, :, 0:overlap_frames_in_latent_space, :, :] = last_latent["samples"][:, :, -overlap_frames_in_latent_space:, :, :]
+				input_clip_latent[:, :, 0:overlap_frames_in_latent_space, :, :] = last_latent["samples"][:, :, -overlap_frames_in_latent_space:, :, :] * fill_noise_latent
 #				input_clip_latent[:, :, overlap_frames_in_latent_space:, :, :] = last_latent["samples"][:, :, -1:, :, :]
-				input_clip_latent = input_clip_latent * fill_noise_latent
 
 			input_latent["samples"] = self._optimize_tensor_memory_layout(input_latent["samples"])
 			input_clip_latent = self._optimize_tensor_memory_layout(input_clip_latent)
