@@ -391,8 +391,7 @@ class WanImageToVideoAdvancedSampler:
 
 				start_image, image_width, image_height, clip_vision_start_image = self.process_image(original_image_start,
 					start_image, start_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, 
-					CLIPVisionEncoder, large_image_side, wan_model_size, start_image.shape[2], start_image.shape[1], "Start Image",
-					chunk_index
+					CLIPVisionEncoder, large_image_side, wan_model_size, start_image.shape[2], start_image.shape[1], "Start Image"
 				)
 
 			if end_image is not None and (image_generation_mode == END_TO_START_IMAGE):
@@ -400,8 +399,7 @@ class WanImageToVideoAdvancedSampler:
 
 				end_image, image_width, image_height, clip_vision_end_image = self.process_image(original_image_end,
 					end_image, end_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution,
-					CLIPVisionEncoder, large_image_side, wan_model_size, end_image.shape[2], end_image.shape[1], "End Image",
-					chunk_index
+					CLIPVisionEncoder, large_image_side, wan_model_size, end_image.shape[2], end_image.shape[1], "End Image"
 				)
 			mm.throw_exception_if_processing_interrupted()
 
@@ -432,8 +430,9 @@ class WanImageToVideoAdvancedSampler:
 
 				input_latent = {}
 				input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8], device=mm.intermediate_device())
-				image = torch.ones((chunk_frames, image_height, image_width, 3)) * fill_noise_latent
 				input_mask = torch.ones((1, 1, input_latent['samples'].shape[2] * 4, input_latent['samples'].shape[-2], input_latent['samples'].shape[-1]))
+
+				image = torch.ones((chunk_frames, image_height, image_width, 3)) * fill_noise_latent
 
 				if start_image is not None:
 					if (image_generation_mode == START_IMAGE and start_image is not None):
@@ -448,21 +447,36 @@ class WanImageToVideoAdvancedSampler:
 				self._set_memory_checkpoint("full_tensors_created")
 				output_to_terminal(f"Output Latent Shape: {output_latent['samples'].shape}")
 			else:
-				input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8], device=mm.intermediate_device())
-				input_mask = torch.ones((1, 1, input_latent['samples'].shape[2] * 4, input_latent['samples'].shape[-2], input_latent['samples'].shape[-1]))
 				overlap_frames_in_latent_space = frames_overlap_chunks // 4
 
-				if start_image is not None:
-					if (image_generation_mode == START_IMAGE and start_image is not None):
-						input_mask[:, :, 0:overlap_frames_in_latent_space] = 0
+				input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8], device=mm.intermediate_device())
+
+				input_mask = torch.ones((1, 1, input_latent['samples'].shape[2] * 4, input_latent['samples'].shape[-2], input_latent['samples'].shape[-1]))
+
+				image = torch.ones((chunk_frames, image_height, image_width, 3)) * fill_noise_latent
+				
+				last_latent_images = vae.decode(last_latent["samples"][:, :, -overlap_frames_in_latent_space:, :, :])
+				if len(last_latent_images.shape) == 5:
+					last_latent_images = last_latent_images.reshape(-1, last_latent_images.shape[-3], last_latent_images.shape[-2], last_latent_images.shape[-1])
+
+				last_latent_images, _, _, _ = self.process_image(original_image_start,
+					last_latent_images, start_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, 
+					CLIPVisionEncoder, large_image_side, wan_model_size, last_latent_images.shape[2], last_latent_images.shape[1], "Overlap Chunk Images"
+				)
+
+				image[0:1] = last_latent_images[0:1]
+				input_mask[:, :, 0:overlap_frames_in_latent_space] = 0
+				last_latent_images_latent = vae.encode(image[:,:,:,:3])
 
 				input_clip_latent = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8])
 				input_mask = input_mask.view(1, input_mask.shape[2] // 4, 4, input_mask.shape[3], input_mask.shape[4]).transpose(1, 2)
 
 				output_to_terminal(f"Chunk {chunk_index + 1}: Last Latent Shape: {last_latent["samples"].shape}")
-				
-				input_clip_latent[:, :, 0:overlap_frames_in_latent_space, :, :] = last_latent["samples"][:, :, -overlap_frames_in_latent_space:, :, :] * fill_noise_latent
-#				input_clip_latent[:, :, overlap_frames_in_latent_space:, :, :] = last_latent["samples"][:, :, -1:, :, :]
+				output_to_terminal(f"Chunk {chunk_index + 1}: Last Images Latent Shape: {last_latent_images_latent.shape}")
+
+				input_clip_latent = last_latent_images_latent
+				#input_clip_latent[:, :, 0:overlap_frames_in_latent_space, :, :] = last_latent_images_latent[:, :, -overlap_frames_in_latent_space:, :, :]
+				#input_clip_latent[:, :, overlap_frames_in_latent_space:, :, :] = last_latent_images_latent[:, :, -1:, :, :]
 
 			input_latent["samples"] = self._optimize_tensor_memory_layout(input_latent["samples"])
 			input_clip_latent = self._optimize_tensor_memory_layout(input_clip_latent)
@@ -863,7 +877,7 @@ class WanImageToVideoAdvancedSampler:
 			output_to_terminal_error("No clip vision model selected, skipping...")
 			return None
 
-	def process_image(self, reference_image, image, image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size, image_width, image_height, image_type, chunck_index):
+	def process_image(self, reference_image, image, image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, CLIPVisionEncoder, large_image_side, wan_model_size, image_width, image_height, image_type):
 		"""
 		Process and resize an image, and encode CLIP vision if enabled.
 		
@@ -889,41 +903,35 @@ class WanImageToVideoAdvancedSampler:
 			original_width = image.shape[2]
 			original_height = image.shape[1]
 
-			if (chunck_index == 0):
-				# Calculate new dimensions while maintaining aspect ratio
+			# Calculate new dimensions while maintaining aspect ratio
+			new_width = large_image_side
+			new_height = large_image_side
+			
+			# Calculate aspect ratio
+			aspect_ratio = original_width / original_height
+			
+			# Determine new dimensions based on which side is larger
+			if original_width >= original_height:
+				# Width is larger or equal - scale based on width
 				new_width = large_image_side
-				new_height = large_image_side
-				
-				# Calculate aspect ratio
-				aspect_ratio = original_width / original_height
-				
-				# Determine new dimensions based on which side is larger
-				if original_width >= original_height:
-					# Width is larger or equal - scale based on width
-					new_width = large_image_side
-					new_height = int(large_image_side / aspect_ratio)
-				else:
-					# Height is larger - scale based on height
-					new_height = large_image_side
-					new_width = int(large_image_side * aspect_ratio)
-				
-				
-				tmp_width, tmp_height, = wan_max_resolution.run(wan_model_size, image)
-
-				wan_large_side = max(tmp_width, tmp_height)
-				img_large_side = max(new_width, new_height)
-
-				if (wan_large_side < img_large_side):
-					image, image_width, image_height, _ = resizer.resize(image, tmp_width, tmp_height, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
-				else:
-					image, image_width, image_height, _ = resizer.resize(image, new_width, new_height, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
-
-				output_to_terminal_successful(f"{image_type} final size: {image_width}x{image_height}")
+				new_height = int(large_image_side / aspect_ratio)
 			else:
-				# For subsequent chunks, maintain previous dimensions
-				image_width = original_width
-				image_height = original_height
-				output_to_terminal_successful(f"{image_type} final size: {original_width}x{original_height}")
+				# Height is larger - scale based on height
+				new_height = large_image_side
+				new_width = int(large_image_side * aspect_ratio)
+			
+			
+			tmp_width, tmp_height, = wan_max_resolution.run(wan_model_size, image)
+
+			wan_large_side = max(tmp_width, tmp_height)
+			img_large_side = max(new_width, new_height)
+
+			if (wan_large_side < img_large_side):
+				image, image_width, image_height, _ = resizer.resize(image, tmp_width, tmp_height, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
+			else:
+				image, image_width, image_height, _ = resizer.resize(image, new_width, new_height, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
+
+			output_to_terminal_successful(f"{image_type} final size: {image_width}x{image_height}")
 
 			if (image_clip_vision_enabled) and (clip_vision is not None):
 				output_to_terminal_successful(f"Encoding CLIP Vision for {image_type}...")
