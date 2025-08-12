@@ -1,5 +1,7 @@
 ﻿import os
 import torch
+import torch.nn.functional as F
+import numpy as np
 import nodes
 import folder_paths
 import node_helpers
@@ -447,36 +449,27 @@ class WanImageToVideoAdvancedSampler:
 				self._set_memory_checkpoint("full_tensors_created")
 				output_to_terminal(f"Output Latent Shape: {output_latent['samples'].shape}")
 			else:
-				overlap_frames_in_latent_space = frames_overlap_chunks // 4
-
-				input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8], device=mm.intermediate_device())
-
-				input_mask = torch.ones((1, 1, input_latent['samples'].shape[2] * 4, input_latent['samples'].shape[-2], input_latent['samples'].shape[-1]))
-
-				image = torch.ones((chunk_frames, image_height, image_width, 3)) * fill_noise_latent
-				
-				last_latent_images = vae.decode(last_latent["samples"][:, :, -overlap_frames_in_latent_space:, :, :])
-				if len(last_latent_images.shape) == 5:
-					last_latent_images = last_latent_images.reshape(-1, last_latent_images.shape[-3], last_latent_images.shape[-2], last_latent_images.shape[-1])
-
-				last_latent_images, _, _, _ = self.process_image(original_image_start,
-					last_latent_images, start_image_clip_vision_enabled, clip_vision, resizer, wan_max_resolution, 
-					CLIPVisionEncoder, large_image_side, wan_model_size, last_latent_images.shape[2], last_latent_images.shape[1], "Overlap Chunk Images"
+				# Use seamless chunk generation with overlap handling
+				input_latent, input_mask, input_clip_latent, _ = self.guide_next_chunk(
+					previous_latent=last_latent,
+					overlap_frames=frames_overlap_chunks,
+					blend_strength=frames_overlap_chunks_blend,
+					motion_weight=frames_overlap_chunks_motion_weight,
+					mask_sigma=frames_overlap_chunks_mask_sigma,
+					step_gain=frames_overlap_chunks_step_gain,
+					vae=vae,
+					chunk_index=chunk_index,
+					chunk_frames=chunk_frames,
+					image_height=image_height,
+					image_width=image_width,
+					reference_image=original_image_start,
+					clip_vision=clip_vision,
+					resizer=resizer,
+					wan_max_resolution=wan_max_resolution,
+					CLIPVisionEncoder=CLIPVisionEncoder,
+					large_image_side=large_image_side,
+					wan_model_size=wan_model_size
 				)
-
-				image[0:1] = last_latent_images[0:1]
-				input_mask[:, :, 0:overlap_frames_in_latent_space] = 0
-				last_latent_images_latent = vae.encode(image[:,:,:,:3])
-
-				input_clip_latent = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8])
-				input_mask = input_mask.view(1, input_mask.shape[2] // 4, 4, input_mask.shape[3], input_mask.shape[4]).transpose(1, 2)
-
-				output_to_terminal(f"Chunk {chunk_index + 1}: Last Latent Shape: {last_latent["samples"].shape}")
-				output_to_terminal(f"Chunk {chunk_index + 1}: Last Images Latent Shape: {last_latent_images_latent.shape}")
-
-				input_clip_latent = last_latent_images_latent
-				#input_clip_latent[:, :, 0:overlap_frames_in_latent_space, :, :] = last_latent_images_latent[:, :, -overlap_frames_in_latent_space:, :, :]
-				#input_clip_latent[:, :, overlap_frames_in_latent_space:, :, :] = last_latent_images_latent[:, :, -1:, :, :]
 
 			input_latent["samples"] = self._optimize_tensor_memory_layout(input_latent["samples"])
 			input_clip_latent = self._optimize_tensor_memory_layout(input_clip_latent)
@@ -1153,6 +1146,143 @@ class WanImageToVideoAdvancedSampler:
 				model_high_cfg, updated_clip_high, = lora_loader.load_lora(model_high_cfg, updated_clip_high, causvid_lora, high_cfg_causvid_strength, 1.0)
 
 		return model_high_cfg, model_low_cfg, updated_clip_high, updated_clip_low
+
+	def guide_next_chunk(self, previous_latent, overlap_frames, blend_strength, motion_weight, mask_sigma, step_gain, vae, chunk_index, chunk_frames, image_height, image_width, reference_image=None, clip_vision=None, resizer=None, wan_max_resolution=None, CLIPVisionEncoder=None, large_image_side=832, wan_model_size="WAN_720P"):
+		"""
+		Create seamless next chunk with overlap handling for Wan2.1 video generation.
+		
+		This simplified approach focuses on core Wan2.1 requirements:
+		1. Proper noise initialization (multiply by 0.5)
+		2. Correct masking (1s for generation, 0s for keyframes)
+		3. Overlap frame blending using configurable parameters
+		4. Color matching for consistency
+		
+		Args:
+			previous_latent: Latent from previous chunk for overlap extraction
+			overlap_frames: Number of overlapping frames between chunks
+			blend_strength: Blending strength for overlap transitions
+			motion_weight: Motion guidance weight (currently for future use)
+			mask_sigma: Mask smoothing parameter
+			step_gain: Step gain for blending (currently for future use)
+			vae: VAE for encoding/decoding
+			chunk_index: Current chunk index
+			chunk_frames: Total frames in current chunk
+			image_height, image_width: Frame dimensions
+			Other args: For image processing and color matching
+			
+		Returns:
+			tuple: (input_latent, input_mask, input_clip_latent, None)
+		"""
+		try:
+			output_to_terminal_successful(f"Creating seamless chunk {chunk_index + 1} with {overlap_frames} overlap frames")
+			
+			# Create base latent for new chunk
+			input_latent = {}
+			input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8], device=mm.intermediate_device())
+			
+			# Create base image tensor with Wan2.1 noise (multiply by 0.5)
+			image = torch.ones((chunk_frames, image_height, image_width, 3)) * 0.5
+			
+			# Create mask - ones for generation, zeros for keyframes
+			input_mask = torch.ones((1, 1, input_latent['samples'].shape[2] * 4, input_latent['samples'].shape[-2], input_latent['samples'].shape[-1]))
+			
+			# Handle overlap frames if we have a previous chunk
+			if previous_latent is not None and overlap_frames > 0:
+				overlap_frames_in_latent_space = overlap_frames // 4
+				
+				# Extract overlap region from previous latent
+				if previous_latent["samples"].shape[2] >= overlap_frames_in_latent_space:
+					prev_overlap_latent = previous_latent["samples"][:, :, -overlap_frames_in_latent_space:, :, :]
+					
+					# Decode overlap frames from previous chunk
+					overlap_images = vae.decode(prev_overlap_latent)
+					if len(overlap_images.shape) == 5:
+						overlap_images = overlap_images.reshape(-1, overlap_images.shape[-3], overlap_images.shape[-2], overlap_images.shape[-1])
+					
+					# Process overlap images for consistency
+					if resizer is not None and wan_max_resolution is not None:
+						overlap_images, _, _, _ = self.process_image(reference_image,
+							overlap_images, False, clip_vision, resizer, wan_max_resolution, 
+							CLIPVisionEncoder, large_image_side, wan_model_size, 
+							overlap_images.shape[2], overlap_images.shape[1], "Overlap Images"
+						)
+					
+					# Apply color matching for consistency
+					if reference_image is not None:
+						try:
+							colorMatch = ColorMatch()
+							overlap_images, = colorMatch.colormatch(reference_image, overlap_images, "hm-mvgd-hm", blend_strength)
+							output_to_terminal(f"Applied color matching with blend strength {blend_strength}")
+						except Exception as e:
+							output_to_terminal_error(f"Color matching failed: {e}")
+					
+					# Place overlap frames at start of new chunk with blending
+					actual_overlap = min(overlap_frames, overlap_images.shape[0], chunk_frames)
+					for i in range(actual_overlap):
+						# Progressive blending - stronger at beginning, weaker toward end
+						blend_factor = 1.0 - (i / max(1, actual_overlap - 1)) * (1.0 - blend_strength)
+						
+						# Blend overlap frame with base noise
+						blended_frame = overlap_images[i] * blend_factor + image[i] * (1.0 - blend_factor)
+						image[i] = blended_frame
+					
+					# Set mask to 0 for overlap frames (keyframes in Wan2.1)
+					input_mask[:, :, 0:actual_overlap] = 0
+					
+					# Apply progressive mask transition using mask_sigma
+					if actual_overlap > 2 and mask_sigma > 0:
+						# Create smooth transition zone after overlap
+						transition_frames = min(4, max(1, int(actual_overlap * mask_sigma)))
+						for i in range(transition_frames):
+							transition_idx = actual_overlap + i
+							if transition_idx < input_mask.shape[2]:
+								# Smooth transition from 0 to 1
+								transition_strength = (i + 1) / (transition_frames + 1)
+								input_mask[:, :, transition_idx] = transition_strength
+					
+					output_to_terminal(f"Applied {actual_overlap} overlap frames with progressive blending")
+			
+			# Encode final image tensor to latent space for CLIP conditioning
+			input_clip_latent = vae.encode(image[:,:,:,:3])
+			
+			# Reshape mask for compatibility with latent dimensions
+			input_mask = input_mask.view(1, input_mask.shape[2] // 4, 4, input_mask.shape[3], input_mask.shape[4]).transpose(1, 2)
+			
+			output_to_terminal_successful(f"Chunk {chunk_index + 1} prepared successfully")
+			output_to_terminal(f"Input Latent Shape: {input_latent['samples'].shape}")
+			output_to_terminal(f"Input Mask Shape: {input_mask.shape}")
+			output_to_terminal(f"Input CLIP Latent Shape: {input_clip_latent.shape}")
+			
+			# Return None for motion guidance as we're using simple approach
+			return input_latent, input_mask, input_clip_latent, None
+			
+		except Exception as e:
+			output_to_terminal_error(f"Error in guide_next_chunk: {e}")
+			# Fallback to basic chunk creation
+			return self._create_simple_chunk_fallback(chunk_frames, image_height, image_width, overlap_frames, vae)
+
+	def _create_simple_chunk_fallback(self, chunk_frames, image_height, image_width, overlap_frames, vae):
+		"""
+		Fallback method for simple chunk creation.
+		"""
+		output_to_terminal_error("Using fallback chunk creation method")
+		
+		# Create basic tensors
+		input_latent = {}
+		input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8], device=mm.intermediate_device())
+		
+		input_mask = torch.ones((1, 1, input_latent['samples'].shape[2] * 4, input_latent['samples'].shape[-2], input_latent['samples'].shape[-1]))
+		
+		image = torch.ones((chunk_frames, image_height, image_width, 3)) * 0.5
+		
+		# Set overlap region mask to 0
+		if overlap_frames > 0:
+			input_mask[:, :, 0:overlap_frames] = 0
+		
+		input_clip_latent = vae.encode(image[:,:,:,:3])
+		input_mask = input_mask.view(1, input_mask.shape[2] // 4, 4, input_mask.shape[3], input_mask.shape[4]).transpose(1, 2)
+		
+		return input_latent, input_mask, input_clip_latent, None
 
 	def apply_color_match_to_image(self, original_image, image, apply_color_match, colorMatch, strength=1.0):
 		"""
