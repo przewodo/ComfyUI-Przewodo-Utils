@@ -407,6 +407,17 @@ class WanImageToVideoAdvancedSampler:
 			model_high_cfg, model_low_cfg, working_clip_high, working_clip_low = self.apply_causvid_lora_processing(working_model_high, working_model_low, working_clip_high, working_clip_low, lora_loader, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, use_dual_samplers)
 			mm.throw_exception_if_processing_interrupted()
 
+			#original_input_latent = {}
+			#original_input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8])
+			#original_input_mask = torch.ones((1, 1, original_input_latent['samples'].shape[2] * 4, original_input_latent['samples'].shape[-2], original_input_latent['samples'].shape[-1]))
+			#original_image = torch.ones((chunk_frames, image_height, image_width, 3)) * fill_noise_latent
+			#original_image[0:chunk_frames] = start_image
+			#original_input_latent = vae.encode(original_image[:,:,:,:3])
+			#original_input_mask = original_input_mask.view(1, original_input_mask.shape[2] // 4, 4, original_input_mask.shape[3], original_input_mask.shape[4]).transpose(1, 2)
+			#positive = node_helpers.conditioning_set_values(positive, {"concat_latent_image": original_input_latent, "concat_mask": original_input_mask})
+			#negative = node_helpers.conditioning_set_values(negative, {"concat_latent_image": original_input_latent, "concat_mask": original_input_mask})
+			#mm.throw_exception_if_processing_interrupted()
+
 			output_to_terminal_successful("Encoding Positive CLIP text...")
 			positive_clip_high, = text_encode.encode(working_clip_high, positive)
 			positive_clip_low, = text_encode.encode(working_clip_low, positive) if use_dual_samplers else (None,)
@@ -429,7 +440,7 @@ class WanImageToVideoAdvancedSampler:
 				output_images = torch.ones((total_frames, image_height, image_width, 3))
 
 				input_latent = {}
-				input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8], device=mm.intermediate_device())
+				input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8])
 				input_mask = torch.ones((1, 1, input_latent['samples'].shape[2] * 4, input_latent['samples'].shape[-2], input_latent['samples'].shape[-1]))
 
 				image = torch.ones((chunk_frames, image_height, image_width, 3)) * fill_noise_latent
@@ -448,7 +459,7 @@ class WanImageToVideoAdvancedSampler:
 				output_to_terminal(f"Output Images Shape: {output_images.shape}")
 			else:
 				input_latent = {}
-				input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8], device=mm.intermediate_device())
+				input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8])
 				input_mask = torch.ones((1, 1, input_latent['samples'].shape[2] * 4, input_latent['samples'].shape[-2], input_latent['samples'].shape[-1]))
 
 				image = torch.ones((chunk_frames, image_height, image_width, 3)) * fill_noise_latent
@@ -494,7 +505,7 @@ class WanImageToVideoAdvancedSampler:
 			mm.throw_exception_if_processing_interrupted()
 					
 			current_window_mask_start = (chunck_seconds * 16) * chunk_index
-			current_window_mask_size = (16 * chunck_seconds) + 1 if (chunk_index == total_video_chunks - 1) else (16 * chunck_seconds)
+			current_window_mask_size = chunk_frames if (chunk_index == total_video_chunks - 1) else chunk_frames - 1
 			
 			output_to_terminal(f"Chunk {chunk_index + 1}: Frame Count: {chunk_frames}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: Latent Shape: {input_latent["samples"].shape}")
