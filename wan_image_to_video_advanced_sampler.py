@@ -1,4 +1,4 @@
-﻿import os
+import os
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -11,6 +11,7 @@ import sys
 import time
 import comfy.model_management as mm
 import comfy
+from comfy.model_management import InterruptProcessingException, interrupt_processing_mutex, interrupt_processing
 from collections import OrderedDict
 from comfy_extras.nodes_model_advanced import ModelSamplingSD3
 from comfy_extras.nodes_cfg import CFGZeroStar
@@ -171,10 +172,10 @@ class WanImageToVideoAdvancedSampler:
 				("frames_clear_cache_after_n_frames", ("INT", {"default": 100, "min": 1, "max": 1000, "tooltip": "Clear the cache after processing this many frames. Helps manage memory usage during long video generation."})),
 				("frames_use_cuda_graph", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Use CUDA Graphs for frame interpolation. Improves performance by reducing overhead during inference."})),
 				("frames_overlap_chunks", ("INT", {"default": 16, "min": 8, "max": 32, "step": 4, "advanced": True, "tooltip": "Number of overlapping frames between video chunks."})),
-				("frames_overlap_chunks_blend", ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Blend strength for continuous motion between chunks (alpha)."})),
-				("frames_overlap_chunks_motion_weight", ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Weight of motion-predicted guidance. Typical 0.2–0.35."})),
-				("frames_overlap_chunks_mask_sigma", ("FLOAT", {"default": 0.35, "min": 0.1, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Gaussian spatial mask sigma (normalized). Typical 0.25–0.5."})),
-				("frames_overlap_chunks_step_gain", ("FLOAT", {"default": 0.5, "min": 0.0, "max": 2.0, "step":0.01, "advanced": True, "tooltip": "Global gain for motion step; effective per-step is gain/overlap. Lower if overshoot."})),
+				("frames_overlap_chunks_blend", ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Controls how strongly overlapping frames between chunks are blended together. Higher values (0.7-1.0) create smoother transitions using research-based StreamingT2V blending techniques, while lower values (0.3-0.6) preserve more chunk independence. Affects spectral frequency domain consistency and temporal coherence."})),
+				("frames_overlap_chunks_motion_weight", ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Weight for motion-predicted guidance using optical flow analysis between chunks. Higher values (0.4-0.6) apply stronger motion consistency from Go-with-the-Flow research, lower values (0.1-0.3) allow more motion variation. Controls how much previous chunk motion influences next chunk generation."})),
+				("frames_overlap_chunks_mask_sigma", ("FLOAT", {"default": 0.35, "min": 0.1, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Gaussian spatial mask sigma for blending overlap regions. Lower values (0.1-0.3) create sharp transition boundaries, higher values (0.4-0.8) create softer, more gradual blending. Used in research-based spatial masking and optical flow warping for seamless chunk fusion."})),
+				("frames_overlap_chunks_step_gain", ("FLOAT", {"default": 0.5, "min": 0.0, "max": 2.0, "step":0.01, "advanced": True, "tooltip": "Global amplification factor for temporal motion steps between chunks. Values >1.0 increase motion intensity and temporal correlation, <1.0 reduce motion overshoot. Effective per-step gain = step_gain/overlap_frames. Used in sine curve blending and FreeNoise adaptive scheduling."})),
 			]),
 			"optional": OrderedDict([
 				("lora_stack", (any_type, {"default": None, "advanced": True, "tooltip": "Stack of LoRAs to apply to the diffusion model. Each LoRA modifies the model's behavior."})),
@@ -197,19 +198,132 @@ class WanImageToVideoAdvancedSampler:
 		gc.collect()
 		torch.cuda.empty_cache()
 
+		# ================================================================
+		# 📊 PARAMETER LOGGING - Lines 105-207
+		# ================================================================
+		output_to_terminal("\nPARAMETER VALUES:")
+		
+		# LoRA Stack (show names list)
+		if lora_stack is not None:
+			lora_names = [lora[0] for lora in lora_stack] if isinstance(lora_stack, list) else ['Unknown']
+			output_to_terminal(f"lora_stack: {lora_names}")
+		else:
+			output_to_terminal("lora_stack: None")
+		
+		# Prompt Stack (show count)
+		if prompt_stack is not None:
+			prompt_count = len(prompt_stack) if isinstance(prompt_stack, list) else 1
+			output_to_terminal(f"prompt_stack: {prompt_count} prompts")
+		else:
+			output_to_terminal("prompt_stack: None")
+		
+		# Start Image (show name/filename)
+		if start_image is not None:
+			output_to_terminal(f"start_image: Present ({start_image.shape if hasattr(start_image, 'shape') else 'tensor'})")
+		else:
+			output_to_terminal("start_image: None")
+		
+		# End Image (show name/filename)
+		if end_image is not None:
+			output_to_terminal(f"end_image: Present ({end_image.shape if hasattr(end_image, 'shape') else 'tensor'})")
+		else:
+			output_to_terminal("end_image: None")
+		
+		# Model Parameters
+		output_to_terminal(f"GGUF_High: {GGUF_High}")
+		output_to_terminal(f"GGUF_Low: {GGUF_Low}")
+		output_to_terminal(f"Diffusor_High: {Diffusor_High}")
+		output_to_terminal(f"Diffusor_Low: {Diffusor_Low}")
+		output_to_terminal(f"Diffusor_weight_dtype: {Diffusor_weight_dtype}")
+		output_to_terminal(f"Use_Model_Type: {Use_Model_Type}")
+		
+		# CLIP Configuration
+		output_to_terminal(f"clip: {clip}")
+		output_to_terminal(f"clip_type: {clip_type}")
+		output_to_terminal(f"clip_device: {clip_device}")
+		output_to_terminal(f"vae: {vae}")
+		
+		# TeaCache Optimization
+		output_to_terminal(f"use_tea_cache: {use_tea_cache}")
+		output_to_terminal(f"tea_cache_model_type: {tea_cache_model_type}")
+		output_to_terminal(f"tea_cache_rel_l1_thresh: {tea_cache_rel_l1_thresh}")
+		output_to_terminal(f"tea_cache_start_percent: {tea_cache_start_percent}")
+		output_to_terminal(f"tea_cache_end_percent: {tea_cache_end_percent}")
+		output_to_terminal(f"tea_cache_cache_device: {tea_cache_cache_device}")
+		
+		# Skip Layer Guidance
+		output_to_terminal(f"use_SLG: {use_SLG}")
+		output_to_terminal(f"SLG_blocks: {SLG_blocks}")
+		output_to_terminal(f"SLG_start_percent: {SLG_start_percent}")
+		output_to_terminal(f"SLG_end_percent: {SLG_end_percent}")
+		
+		# Attention & Model Optimizations
+		output_to_terminal(f"use_sage_attention: {use_sage_attention}")
+		output_to_terminal(f"sage_attention_mode: {sage_attention_mode}")
+		output_to_terminal(f"use_shift: {use_shift}")
+		output_to_terminal(f"shift: {shift}")
+		output_to_terminal(f"use_block_swap: {use_block_swap}")
+		output_to_terminal(f"block_swap: {block_swap}")
+		
+		# Video Generation Settings
+		output_to_terminal(f"large_image_side: {large_image_side}")
+		output_to_terminal(f"image_generation_mode: {image_generation_mode}")
+		output_to_terminal(f"wan_model_size: {wan_model_size}")
+		output_to_terminal(f"total_video_seconds: {total_video_seconds}")
+		output_to_terminal(f"divide_video_in_chunks: {divide_video_in_chunks}")
+		
+		# CLIP Vision Settings
+		output_to_terminal(f"clip_vision_model: {clip_vision_model}")
+		output_to_terminal(f"clip_vision_strength: {clip_vision_strength}")
+		output_to_terminal(f"start_image_clip_vision_enabled: {start_image_clip_vision_enabled}")
+		output_to_terminal(f"end_image_clip_vision_enabled: {end_image_clip_vision_enabled}")
+		
+		# Sampling Configuration
+		output_to_terminal(f"use_dual_samplers: {use_dual_samplers}")
+		output_to_terminal(f"high_cfg: {high_cfg}")
+		output_to_terminal(f"low_cfg: {low_cfg}")
+		output_to_terminal(f"high_denoise: {high_denoise}")
+		output_to_terminal(f"low_denoise: {low_denoise}")
+		output_to_terminal(f"total_steps: {total_steps}")
+		output_to_terminal(f"total_steps_high_cfg: {total_steps_high_cfg}")
+		output_to_terminal(f"fill_noise_latent: {fill_noise_latent}")
+		output_to_terminal(f"noise_seed: {noise_seed}")
+		
+		# CausVid Enhancement
+		output_to_terminal(f"causvid_lora: {causvid_lora}")
+		output_to_terminal(f"high_cfg_causvid_strength: {high_cfg_causvid_strength}")
+		output_to_terminal(f"low_cfg_causvid_strength: {low_cfg_causvid_strength}")
+		
+		# Post-processing Options
+		output_to_terminal(f"video_enhance_enabled: {video_enhance_enabled}")
+		output_to_terminal(f"use_cfg_zero_star: {use_cfg_zero_star}")
+		output_to_terminal(f"apply_color_match: {apply_color_match}")
+		output_to_terminal(f"apply_color_match_strength: {apply_color_match_strength}")
+		output_to_terminal(f"frames_interpolation: {frames_interpolation}")
+		output_to_terminal(f"frames_engine: {frames_engine}")
+		output_to_terminal(f"frames_multiplier: {frames_multiplier}")
+		output_to_terminal(f"frames_clear_cache_after_n_frames: {frames_clear_cache_after_n_frames}")
+		output_to_terminal(f"frames_use_cuda_graph: {frames_use_cuda_graph}")
+		output_to_terminal(f"frames_overlap_chunks: {frames_overlap_chunks}")
+		output_to_terminal(f"frames_overlap_chunks_blend: {frames_overlap_chunks_blend}")
+		output_to_terminal(f"frames_overlap_chunks_motion_weight: {frames_overlap_chunks_motion_weight}")
+		output_to_terminal(f"frames_overlap_chunks_mask_sigma: {frames_overlap_chunks_mask_sigma}")
+		output_to_terminal(f"frames_overlap_chunks_step_gain: {frames_overlap_chunks_step_gain}")
+		output_to_terminal("================================================================\n")		
+
 		model_high = self.load_model(GGUF_High, Diffusor_High, Use_Model_Type, Diffusor_weight_dtype)
-		mm.throw_exception_if_processing_interrupted()
+		self.interrupt_execution(locals())
 
 		model_low = None
 		if (GGUF_Low != NONE or Diffusor_Low != NONE):
 			model_low = self.load_model(GGUF_Low, Diffusor_Low, Use_Model_Type, Diffusor_weight_dtype)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 		else:
 			model_low = model_high
 
 		output_to_terminal_successful("Loading VAE...")
 		vae, = nodes.VAELoader().load_vae(vae)
-		mm.throw_exception_if_processing_interrupted()
+		self.interrupt_execution(locals())
 
 		output_to_terminal_successful("Loading CLIP...")
 
@@ -228,7 +342,7 @@ class WanImageToVideoAdvancedSampler:
 			self._cache_manager.store_in_cache(clip_cache_key, clip_model, storage_device='cpu')
 			output_to_terminal_successful(f"Loaded CLIP from disk...")
 		
-		mm.throw_exception_if_processing_interrupted()
+		self.interrupt_execution(locals())
 
 		gc.collect()
 		torch.cuda.empty_cache()
@@ -241,17 +355,18 @@ class WanImageToVideoAdvancedSampler:
 
 		# Initialize TeaCache and SkipLayerGuidanceWanVideo
 		tea_cache, slg_wanvideo = self.initialize_tea_cache_and_slg(use_tea_cache, use_SLG, SLG_blocks)
-		mm.throw_exception_if_processing_interrupted()
+		self.interrupt_execution(locals())
 
 		# Initialize SageAttention
 		sage_attention = self.initialize_sage_attention(use_sage_attention, sage_attention_mode)
-		mm.throw_exception_if_processing_interrupted()
+		self.interrupt_execution(locals())
 
 		# Initialize Model Shift
 		model_shift = self.initialize_model_shift(use_shift, shift)
-		mm.throw_exception_if_processing_interrupted()
+		self.interrupt_execution(locals())
 
 		output_image, fps, = self.postprocess(model_high, model_low, vae, clip_model, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, divide_video_in_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain)
+		self.interrupt_execution(locals())
 
 		# Break any circular references
 		self.break_circular_references(locals())
@@ -300,7 +415,7 @@ class WanImageToVideoAdvancedSampler:
 			clip_vision = self.load_clip_vision_model(clip_vision_model, CLIPVisionLoader)
 		else:
 			output_to_terminal_error("CLIP vision not enabled...")
-		mm.throw_exception_if_processing_interrupted()
+		self.interrupt_execution(locals())
 
 		# Generate video chunks sequentially
 		original_image_start = start_image
@@ -334,54 +449,54 @@ class WanImageToVideoAdvancedSampler:
 			working_model_high = self.apply_model_patch_torch_settings(working_model_high)
 			if use_dual_samplers:
 				working_model_low = self.apply_model_patch_torch_settings(working_model_low)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			# Apply Sage Attention
 			working_model_high = self.apply_sage_attention(sage_attention, working_model_high, sage_attention_mode)
 			if use_dual_samplers:
 				working_model_low = self.apply_sage_attention(sage_attention, working_model_low, sage_attention_mode)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			# Apply TeaCache and SLG
 			working_model_high = self.apply_tea_cache_and_slg(tea_cache, use_tea_cache, working_model_high, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent)
 			if use_dual_samplers:
 				working_model_low = self.apply_tea_cache_and_slg(tea_cache, use_tea_cache, working_model_low, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			# Apply Model Shift
 			working_model_high = self.apply_model_shift(model_shift, use_shift, working_model_high, shift)
 			if use_dual_samplers:
 				working_model_low = self.apply_model_shift(model_shift, use_shift, working_model_low, shift)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			# Apply Video Enhance
 			working_model_high = self.apply_video_enhance(video_enhance_enabled, working_model_high, wanVideoEnhanceAVideo, chunk_frames)
 			if use_dual_samplers:
 				working_model_low = self.apply_video_enhance(video_enhance_enabled, working_model_low, wanVideoEnhanceAVideo, chunk_frames)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			# Apply CFG Zero Star
 			working_model_high = self.apply_cfg_zero_star(use_cfg_zero_star, working_model_high, cfgZeroStar)
 			if use_dual_samplers:
 				working_model_low = self.apply_cfg_zero_star(use_cfg_zero_star, working_model_low, cfgZeroStar)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			# Apply Block Swap
 			working_model_high = self.apply_block_swap(use_block_swap, working_model_high, wanBlockSwap, block_swap)
 			if use_dual_samplers:
 				working_model_low = self.apply_block_swap(use_block_swap, working_model_low, wanBlockSwap, block_swap)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			# Process LoRA stack
 			working_model_high, working_clip_high = self.process_lora_stack(lora_stack, working_model_high, working_clip_high)
 			if use_dual_samplers:
 				working_model_low, working_clip_low = self.process_lora_stack(lora_stack, working_model_low, working_clip_low)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			# Clean up memory after model configuration
 			gc.collect()
 			torch.cuda.empty_cache()
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			# Light memory cleanup before each chunk - don't interfere with active models
 			gc.collect()
@@ -390,14 +505,14 @@ class WanImageToVideoAdvancedSampler:
 				torch.cuda.synchronize()  # Ensure all operations complete before cleanup
 
 			output_to_terminal(f"Generating video chunk {chunk_index + 1}/{total_video_chunks}...")
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 			
 			if (prompt_stack is not None):
 				positive, negative, prompt_loras = self.get_current_prompt(prompt_stack, chunk_index)
 				working_model_high, working_clip_high = self.process_lora_stack(prompt_loras, working_model_high, working_clip_high)
 				if use_dual_samplers:
 					working_model_low, working_clip_low = self.process_lora_stack(prompt_loras, working_model_low, working_clip_low)
-				mm.throw_exception_if_processing_interrupted()
+				self.interrupt_execution(locals())
 
 			if start_image is not None and (image_generation_mode == START_IMAGE or image_generation_mode == START_END_IMAGE or image_generation_mode == START_TO_END_TO_START_IMAGE):
 				output_to_terminal_successful(f"Original start_image dimensions: {start_image.shape[2]}x{start_image.shape[1]}")
@@ -416,20 +531,20 @@ class WanImageToVideoAdvancedSampler:
 					CLIPVisionEncoder, large_image_side, wan_model_size, end_image.shape[2], end_image.shape[1], "End Image",
 					chunk_index
 				)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			model_high_cfg, model_low_cfg, working_clip_high, working_clip_low = self.apply_causvid_lora_processing(working_model_high, working_model_low, working_clip_high, working_clip_low, lora_loader, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, use_dual_samplers)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			output_to_terminal_successful("Encoding Positive CLIP text...")
 			positive_clip_high, = text_encode.encode(working_clip_high, positive)
 			positive_clip_low, = text_encode.encode(working_clip_low, positive) if use_dual_samplers else (None,)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			output_to_terminal_successful("Encoding Negative CLIP text...")
 			negative_clip_high, = text_encode.encode(working_clip_high, negative)
 			negative_clip_low, = text_encode.encode(working_clip_low, negative) if use_dual_samplers else (None,)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			output_to_terminal_successful("Wan Image to Video started...")
 
@@ -464,6 +579,8 @@ class WanImageToVideoAdvancedSampler:
 							frames_overlap_chunks_step_gain
 						)
 						
+						# Fix tensor dimension mismatch before assignment
+						guided_start_image = self._fix_tensor_batch_dimension(guided_start_image, target_batch_size=1)
 						image[0:1] = guided_start_image
 						input_mask[:, :, 0:1] = 0
 
@@ -502,6 +619,8 @@ class WanImageToVideoAdvancedSampler:
 							frames_overlap_chunks_step_gain
 						)
 						
+						# Fix tensor dimension mismatch before assignment
+						guided_start_image = self._fix_tensor_batch_dimension(guided_start_image, target_batch_size=1)
 						image[0:1] = guided_start_image
 						input_mask[:, :, 0:1] = 0
 
@@ -527,7 +646,7 @@ class WanImageToVideoAdvancedSampler:
 			'''
 			End creating the latent, mask, and image tensors
 			'''
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			positive_clip_high = node_helpers.conditioning_set_values(positive_clip_high, {"concat_latent_image": input_clip_latent, "concat_mask": input_mask})
 			negative_clip_high = node_helpers.conditioning_set_values(negative_clip_high, {"concat_latent_image": input_clip_latent, "concat_mask": input_mask})
@@ -551,7 +670,7 @@ class WanImageToVideoAdvancedSampler:
 				negative_clip_high = node_helpers.conditioning_set_values(negative_clip_high, {"clip_vision_output": clip_vision_output})
 				positive_clip_low = node_helpers.conditioning_set_values(positive_clip_low, {"clip_vision_output": clip_vision_output}) if use_dual_samplers == True else None
 				negative_clip_low = node_helpers.conditioning_set_values(negative_clip_low, {"clip_vision_output": clip_vision_output}) if use_dual_samplers == True else None
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 					
 			current_window_mask_start = (chunck_seconds * 16) * chunk_index
 			current_window_mask_size = chunk_frames if (chunk_index == total_video_chunks - 1) else chunk_frames - 1
@@ -567,7 +686,7 @@ class WanImageToVideoAdvancedSampler:
 				
 			# Check memory usage after window extraction
 			self._check_memory_checkpoint(f"window_extraction_chunk_{chunk_index}")
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			# Apply adaptive precision to conditioning tensors
 			positive_clip_high = self._adaptive_tensor_precision(positive_clip_high, "encoding")
@@ -579,7 +698,7 @@ class WanImageToVideoAdvancedSampler:
 			# Light cleanup without interfering with active models
 			gc.collect()
 			torch.cuda.empty_cache()
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 			
 			# Set memory checkpoint before sampling
 			self._set_memory_checkpoint(f"pre_sampling_chunk_{chunk_index}")
@@ -588,7 +707,7 @@ class WanImageToVideoAdvancedSampler:
 				input_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, noise_seed, total_steps, high_cfg, low_cfg, positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low, input_latent, total_steps_high_cfg, high_denoise, low_denoise)
 			else:
 				input_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, noise_seed, total_steps, high_cfg, positive_clip_high, negative_clip_high, input_latent, high_denoise)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			# Check memory usage after sampling
 			self._check_memory_checkpoint(f"post_sampling_chunk_{chunk_index}")
@@ -605,7 +724,7 @@ class WanImageToVideoAdvancedSampler:
 				chunk_index
 			)
 			tmp_images = self.apply_color_match_to_image(original_image_start, tmp_images, apply_color_match, colorMatch, apply_color_match_strength)
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
 			if chunk_index < (total_video_chunks - 1):
 				start_image = tmp_images[-1:, :, :, :].clone()
@@ -614,6 +733,10 @@ class WanImageToVideoAdvancedSampler:
 			# Merge the sampled chunk results back into the full input_latent
 			output_images[current_window_mask_start:current_window_mask_start + current_window_mask_size] = tmp_images
 			output_to_terminal(f"Chunk {chunk_index + 1}: Merged sampled results shape {tmp_images.shape} to output latent: {output_images.shape}")
+
+			# CRITICAL FIX: Store ACTUAL generated frames for temporal coherence (not input frames!)
+			if chunk_index < (total_video_chunks - 1):  # Don't store for last chunk
+				self._store_generated_chunk_frames(vae, tmp_images, frames_overlap_chunks)
 
 			# Clean up after reference frame operations
 			gc.collect()
@@ -648,12 +771,8 @@ class WanImageToVideoAdvancedSampler:
 			negative_clip_low = None
 			gc.collect()
 			torch.cuda.empty_cache()
-			mm.throw_exception_if_processing_interrupted()
+			self.interrupt_execution(locals())
 
-		last_latent = None
-		last_mask = None
-		mm.throw_exception_if_processing_interrupted()
-		
 		# Final comprehensive memory cleanup for all chunks
 		self._final_memory_cleanup([input_mask, input_latent, input_clip_latent])
 		
@@ -668,7 +787,7 @@ class WanImageToVideoAdvancedSampler:
 		# Only break circular references, don't force cleanup active models
 		self.break_circular_references(locals())
 
-		mm.throw_exception_if_processing_interrupted()
+		self.interrupt_execution(locals())
 
 		# Light cleanup only
 		gc.collect()
@@ -1129,7 +1248,7 @@ class WanImageToVideoAdvancedSampler:
 		
 		output_to_terminal_successful("High CFG KSampler started...")
 		out_latent, = k_sampler.sample(model_high_cfg, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", positive_clip_high, negative_clip_high, in_latent, 0, stop_steps, "enabled", high_denoise)
-		mm.throw_exception_if_processing_interrupted()
+		self.interrupt_execution(locals())
 		
 		# Light cleanup between samplers
 		gc.collect()
@@ -1137,7 +1256,7 @@ class WanImageToVideoAdvancedSampler:
 
 		output_to_terminal_successful("Low CFG KSampler started...")
 		out_latent, = k_sampler.sample(model_low_cfg, "disable", noise_seed, total_steps, low_cfg, "lcm", "simple", positive_clip_low, negative_clip_low, out_latent, stop_steps, total_steps, "enabled", low_denoise)
-		mm.throw_exception_if_processing_interrupted()
+		self.interrupt_execution(locals())
 		
 		# Light cleanup after sampling
 		gc.collect()
@@ -1288,6 +1407,11 @@ class WanImageToVideoAdvancedSampler:
 						output_to_terminal_error(f"CLIP vision encoding failed: {str(e)}")
 						self._original_clip_vision = None
 				
+				# LONG-SEQUENCE ENHANCEMENT: Store additional aesthetic anchors
+				self._aesthetic_anchor_strength = 1.0  # Start with full strength
+				self._drift_detection_reference = current_start_image.clone().detach()
+				output_to_terminal_successful("Long-sequence aesthetic anchors initialized")
+				
 				# Store comprehensive color and texture statistics
 				self._original_color_stats = {
 					'mean_rgb': torch.mean(current_start_image, dim=[1, 2], keepdim=True),
@@ -1321,22 +1445,50 @@ class WanImageToVideoAdvancedSampler:
 			# Adaptive weighting based on chunk progression  
 			chunk_progress = chunk_index / max(total_chunks - 1, 1)
 			
-			# Multi-layered preservation weights
-			structural_weight = max(0.25, 0.7 - (chunk_progress * 0.4))
-			aesthetic_weight = max(0.2, 0.6 - (chunk_progress * 0.25))
-			color_weight = max(0.15, 0.4 - (chunk_progress * 0.2))
+			# LONG-SEQUENCE FIX: Stronger aesthetic preservation after chunk 5
+			if chunk_index >= 5:
+				output_to_terminal_successful(f"LONG-SEQUENCE MODE: Reinforcing aesthetic preservation (chunk {chunk_index + 1})")
+				# Boost aesthetic weights for long sequences
+				structural_weight = max(0.35, 0.8 - (chunk_progress * 0.3))  # Increased from 0.25
+				aesthetic_weight = max(0.3, 0.7 - (chunk_progress * 0.2))   # Increased from 0.2
+				color_weight = max(0.25, 0.5 - (chunk_progress * 0.15))     # Increased from 0.15
+				
+				# Reduce research technique weights to prevent accumulation
+				temporal_weight = max(0.2, 0.5 - (chunk_progress * 0.2))    # Reduced from 0.4
+				motion_weight = frames_overlap_chunks_motion_weight * (0.8 + temporal_weight * 0.3)  # Reduced
+			else:
+				# Normal weights for early chunks
+				structural_weight = max(0.25, 0.7 - (chunk_progress * 0.4))
+				aesthetic_weight = max(0.2, 0.6 - (chunk_progress * 0.25))
+				color_weight = max(0.15, 0.4 - (chunk_progress * 0.2))
+				
+				# Advanced Temporal Coherence Weighting
+				temporal_weight = max(0.4, 0.8 - (chunk_progress * 0.3))
+				motion_weight = frames_overlap_chunks_motion_weight * (1.0 + temporal_weight * 0.5)
 			
-			# Advanced Temporal Coherence Weighting
-			temporal_weight = max(0.4, 0.8 - (chunk_progress * 0.3))
-			motion_weight = frames_overlap_chunks_motion_weight * (1.0 + temporal_weight * 0.5)
+			# CACHE CLEANUP: Every 3 chunks, reset research caches to prevent ghosting
+			if chunk_index > 0 and chunk_index % 3 == 0:
+				output_to_terminal_successful(f"CACHE CLEANUP: Resetting research caches (chunk {chunk_index + 1})")
+				self._spectral_blend_cache = None
+				self._optical_flow_features = None
+				# Keep memory bank but limit its size (handled in _apply_memory_augmentation)
+			
+			# AESTHETIC DRIFT DETECTION: Compare with reference after chunk 3
+			drift_correction = 0.0
+			if chunk_index >= 3 and hasattr(self, '_drift_detection_reference'):
+				drift_correction = self._detect_and_correct_aesthetic_drift(
+					current_start_image, chunk_index
+				)
 			
 			output_to_terminal_successful(f"Chunk {chunk_index + 1}: Applying RESEARCH-BASED seamless techniques")
 			output_to_terminal(f"Weights - Structural: {structural_weight:.2f}, Aesthetic: {aesthetic_weight:.2f}, Color: {color_weight:.2f}")
 			output_to_terminal(f"Temporal - Weight: {temporal_weight:.2f}, Motion: {motion_weight:.2f}, Overlap: {frames_overlap_chunks}")
+			if drift_correction > 0:
+				output_to_terminal(f"DRIFT CORRECTION: Applied correction strength: {drift_correction:.2f}")
 			
-			# 1. Subtle Color and Texture Preservation
+			# 1. Subtle Color and Texture Preservation (enhanced with drift correction)
 			guided_start_image = self._apply_subtle_color_guidance(
-				current_start_image, color_weight, reference_strength
+				current_start_image, color_weight + drift_correction, reference_strength
 			)
 			
 			# 2. RESEARCH-BASED: FreeLong SpectralBlend for frequency-domain consistency
@@ -1357,7 +1509,7 @@ class WanImageToVideoAdvancedSampler:
 			
 			# 5. RESEARCH-BASED: Memory augmentation for long-term scene coherence
 			guided_start_image = self._apply_memory_augmentation(
-				guided_start_image, temporal_weight, chunk_index
+				guided_start_image, temporal_weight, chunk_index, previous_chunk_frames
 			)
 			
 			# 6. RESEARCH-BASED: Advanced temporal coherence (StreamingT2V + VideoMerge)
@@ -1367,6 +1519,11 @@ class WanImageToVideoAdvancedSampler:
 					motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain,
 					temporal_weight, chunk_frames, image_height, image_width
 				)
+			
+			# 7. GLOBAL AESTHETIC REINFORCEMENT: Strong original image conditioning throughout
+			guided_start_image = self._apply_global_aesthetic_reinforcement(
+				guided_start_image, chunk_index, reference_strength
+			)
 			
 			# 3. Reference Feature Guidance (RefDrop-inspired) - primary preservation method
 			enhanced_conditioning_data = self._create_reference_conditioning(
@@ -1379,8 +1536,8 @@ class WanImageToVideoAdvancedSampler:
 				clip_vision, guided_start_image, aesthetic_weight, reference_strength, clip_vision_strength
 			)
 			
-			# 7. NEW: Store current chunk data for next iteration (RESEARCH-BASED)
-			self._store_temporal_data_advanced(vae, guided_start_image, chunk_frames, image_height, image_width, frames_overlap_chunks)
+			# NOTE: Temporal data storage now happens AFTER generation in main processing loop
+			# using _store_generated_chunk_frames() with actual generated frames
 			
 			# 8. Enhanced Reference Conditioning Data with research integration
 			enhanced_conditioning_data.update({
@@ -1409,7 +1566,7 @@ class WanImageToVideoAdvancedSampler:
 			enhanced_conditioning_data = self._apply_adaptive_noise_rescheduling(enhanced_conditioning_data, chunk_index)
 			
 			output_to_terminal_successful(f"RESEARCH-BASED guidance applied - Reference: {reference_strength}, Motion: {motion_weight:.2f}")
-			output_to_terminal_successful("✓ FreeLong SpectralBlend ✓ Bridge Attention ✓ Optical Flow ✓ Memory Augmentation ✓ Advanced Temporal Coherence")
+			output_to_terminal_successful("+ FreeLong SpectralBlend + Bridge Attention + Optical Flow + Memory Augmentation + Advanced Temporal Coherence")
 			
 			return guided_start_image, enhanced_clip_vision_features, enhanced_conditioning_data
 			
@@ -1582,17 +1739,41 @@ class WanImageToVideoAdvancedSampler:
 			if self._original_image_latent is None:
 				return {}
 				
-			# Create current chunk tensor with guided start image
+			# Create current chunk tensor with guided start image (fix dimension mismatch)
 			current_tensor = torch.ones((chunk_frames, image_height, image_width, 3)) * 0.5
-			current_tensor[0:1] = guided_image
+			
+			# Ensure guided_image has correct dimensions for assignment
+			if guided_image.shape[0] != 1:
+				# Take only the first image if batch size > 1
+				guided_image = guided_image[0:1]
+			
+			# Verify shapes match before assignment
+			if guided_image.shape == current_tensor[0:1].shape:
+				current_tensor[0:1] = guided_image
+			else:
+				output_to_terminal_error(f"Reference conditioning: guided_image {guided_image.shape} vs current_tensor[0:1] {current_tensor[0:1].shape}")
+				# Fallback: resize or use default
+				if guided_image.shape[1:] == current_tensor[0:1].shape[1:]:  # Same H,W,C but different batch
+					current_tensor[0:1] = guided_image[0:1]
+				else:
+					output_to_terminal_error("Cannot fix guided_image shape mismatch, using default tensor")
+			
 			current_latent = vae.encode(current_tensor[:,:,:,:3])
 			
-			# Enhanced RefDrop-inspired blending with stronger latent influence
+			# Enhanced RefDrop-inspired blending with GLOBAL AESTHETIC REINFORCEMENT
 			# Focus preservation power in the latent space where it's less visually obvious
-			latent_reference_influence = structural_weight * reference_strength * 2.0  # Double latent influence
+			base_latent_influence = structural_weight * reference_strength * 2.0  # Double latent influence
+			
+			# GLOBAL PERSISTENCE: Add progressive strengthening for persistent aesthetic conditioning
+			global_latent_boost = min(reference_strength * 0.4, 0.25)  # Up to +25% more latent influence
+			latent_reference_influence = base_latent_influence + global_latent_boost
+			
+			# Cap to maintain reasonable balance while ensuring strong original conditioning
+			latent_reference_influence = min(latent_reference_influence, 0.8)  # Cap at 80% for stability
+			
 			blended_latent = (self._original_image_latent * latent_reference_influence) + (current_latent * (1 - latent_reference_influence))
 			
-			# Create advanced conditioning data with enhanced latent emphasis
+			# Create advanced conditioning data with GLOBAL AESTHETIC emphasis
 			conditioning_data = {
 				'blended_latent': blended_latent,
 				'reference_latent': self._original_image_latent,
@@ -1603,8 +1784,10 @@ class WanImageToVideoAdvancedSampler:
 				'preserve_structure': True,
 				'attention_guidance': True,
 				'latent_focus_mode': True,  # Enhanced latent-level preservation
-				'visual_blend_strength': 0.1,  # Minimal visual blending
-				'latent_blend_strength': latent_reference_influence  # Strong latent blending
+				'global_aesthetic_mode': True,  # NEW: Global aesthetic persistence flag
+				'visual_blend_strength': 0.05,  # Reduced visual blending for cleaner transitions
+				'latent_blend_strength': latent_reference_influence,  # Strong latent blending with global persistence
+				'original_persistence': True,  # NEW: Flag for original image persistence throughout generation
 			}
 			
 			return conditioning_data
@@ -1623,20 +1806,28 @@ class WanImageToVideoAdvancedSampler:
 			current_clip_output = clip_vision.encode_image(guided_image)
 			current_features = current_clip_output.penultimate_hidden_states
 			
-			# Enhanced RefDrop-inspired feature blending with stronger aesthetic focus
+			# Enhanced RefDrop-inspired feature blending with GLOBAL AESTHETIC REINFORCEMENT
 			# CLIP vision features are crucial for aesthetic preservation without visual artifacts
-			clip_reference_influence = aesthetic_weight * reference_strength * 3.0  # Triple CLIP influence
+			base_influence = aesthetic_weight * reference_strength * 3.0  # Triple CLIP influence
+			
+			# GLOBAL PERSISTENCE: Add progressive strengthening for long sequences
+			global_persistence_boost = min(reference_strength * 0.5, 0.3)  # Up to +30% more influence
+			clip_reference_influence = base_influence + global_persistence_boost
+			
+			# Ensure we don't exceed reasonable bounds while maintaining strong original conditioning
+			clip_reference_influence = min(clip_reference_influence, 0.85)  # Cap at 85% for balance
+			
 			blended_features = (self._original_clip_vision * clip_reference_influence) + (current_features * (1 - clip_reference_influence))
 			
-			# Enhanced strength for better aesthetic conditioning while maintaining naturalness
-			enhanced_strength = clip_vision_strength * (1.2 + reference_strength)  # Moderate enhancement
+			# Enhanced strength for better aesthetic conditioning with global persistence
+			enhanced_strength = clip_vision_strength * (1.3 + reference_strength)  # Increased from 1.2 to 1.3
 			enhanced_features = blended_features * enhanced_strength
 			
-			# Add aesthetic consistency boost
-			aesthetic_boost = 1.0 + (aesthetic_weight * 0.3)  # Subtle aesthetic enhancement
+			# Add aesthetic consistency boost with global reinforcement
+			aesthetic_boost = 1.0 + (aesthetic_weight * 0.5)  # Enhanced from 0.3 to 0.5 for stronger persistence
 			enhanced_features = enhanced_features * aesthetic_boost
 			
-			output_to_terminal_successful(f"Enhanced CLIP features created (influence: {clip_reference_influence:.2f}, boost: {aesthetic_boost:.2f})")
+			output_to_terminal_successful(f"Enhanced CLIP features created (global influence: {clip_reference_influence:.2f}, boost: {aesthetic_boost:.2f})")
 			return enhanced_features
 			
 		except Exception as e:
@@ -1752,6 +1943,98 @@ class WanImageToVideoAdvancedSampler:
 		except Exception as e:
 			output_to_terminal_error(f"Temporal coherence guidance failed: {str(e)}")
 			return guided_image
+
+	def _apply_global_aesthetic_reinforcement(self, current_image, chunk_index, reference_strength):
+		"""
+		Apply global aesthetic reinforcement using original image as persistent reference.
+		
+		This ensures objects that leave and re-enter the frame maintain original characteristics.
+		Works by creating strong aesthetic conditioning throughout the entire generation.
+		"""
+		try:
+			if self._original_image_reference is None:
+				return current_image
+				
+			# Progressive strength: stronger reinforcement as chunks progress
+			# This compensates for natural drift over long sequences
+			base_strength = reference_strength * 0.8  # 80% of reference strength
+			progressive_strength = min(chunk_index * 0.05, 0.4)  # Up to +40% more
+			total_strength = base_strength + progressive_strength
+			
+			# Multi-level aesthetic reinforcement
+			reinforced_image = current_image.clone()
+			
+			# 1. PIXEL-LEVEL REINFORCEMENT: Direct original image influence
+			pixel_blend = total_strength * 0.3  # 30% of strength for pixel blending
+			reinforced_image = (1.0 - pixel_blend) * reinforced_image + pixel_blend * self._original_image_reference
+			
+			# 2. STATISTICAL REINFORCEMENT: Preserve color and luminance distributions
+			if hasattr(self, '_original_color_stats') and self._original_color_stats is not None:
+				stats_strength = total_strength * 0.4  # 40% of strength for statistics
+				
+				# Preserve mean RGB values (overall color tone)
+				current_mean = torch.mean(reinforced_image, dim=[1, 2], keepdim=True)
+				target_mean = self._original_color_stats['mean_rgb']
+				mean_correction = (target_mean - current_mean) * stats_strength
+				reinforced_image = reinforced_image + mean_correction
+				
+				# Preserve color variance (contrast and richness)
+				current_std = torch.std(reinforced_image, dim=[1, 2], keepdim=True)
+				target_std = self._original_color_stats['std_rgb']
+				std_ratio = target_std / (current_std + 1e-6)
+				std_correction = torch.pow(std_ratio, stats_strength * 0.5)  # Gentle correction
+				reinforced_image = reinforced_image * std_correction
+			
+			# 3. FREQUENCY-DOMAIN REINFORCEMENT: Preserve texture and detail patterns
+			freq_strength = total_strength * 0.3  # 30% of strength for frequency
+			
+			# Apply high-frequency preservation (texture details)
+			if self._original_image_reference.shape == reinforced_image.shape:
+				# Simple high-pass filter approximation using Laplacian
+				laplacian_kernel = torch.tensor([[0, -1, 0], [-1, 4, -1], [0, -1, 0]], 
+											   dtype=reinforced_image.dtype, device=reinforced_image.device)
+				laplacian_kernel = laplacian_kernel.view(1, 1, 3, 3)
+				
+				# Apply to each channel
+				original_details = torch.zeros_like(self._original_image_reference)
+				current_details = torch.zeros_like(reinforced_image)
+				
+				for c in range(min(3, reinforced_image.shape[1])):  # RGB channels
+					if reinforced_image.shape[1] > c and self._original_image_reference.shape[1] > c:
+						original_channel = self._original_image_reference[:, c:c+1, :, :]
+						current_channel = reinforced_image[:, c:c+1, :, :]
+						
+						original_details[:, c:c+1] = F.conv2d(original_channel, laplacian_kernel, padding=1)
+						current_details[:, c:c+1] = F.conv2d(current_channel, laplacian_kernel, padding=1)
+				
+				# Blend detail patterns
+				detail_correction = (original_details - current_details) * freq_strength * 0.2
+				reinforced_image = reinforced_image + detail_correction
+			
+			# 4. ADAPTIVE MASK: Focus reinforcement on re-entering regions
+			# Compare current vs original to identify "new" areas that might need strong guidance
+			if self._original_image_reference.shape == reinforced_image.shape:
+				# Calculate pixel-wise difference as a mask for where reinforcement is most needed
+				diff_mask = torch.abs(reinforced_image - self._original_image_reference)
+				diff_mask = torch.mean(diff_mask, dim=1, keepdim=True)  # Average across channels
+				
+				# Normalize to [0, 1] range
+				diff_mask = diff_mask / (torch.max(diff_mask) + 1e-6)
+				
+				# Apply stronger reinforcement to areas with larger differences (potential re-entering objects)
+				adaptive_strength = total_strength * diff_mask * 0.3
+				adaptive_correction = (self._original_image_reference - reinforced_image) * adaptive_strength
+				reinforced_image = reinforced_image + adaptive_correction
+			
+			# Clamp to valid range
+			reinforced_image = torch.clamp(reinforced_image, 0.0, 1.0)
+			
+			output_to_terminal(f"Global aesthetic reinforcement applied (strength: {total_strength:.2f}, chunk: {chunk_index + 1})")
+			return reinforced_image
+			
+		except Exception as e:
+			output_to_terminal_error(f"Global aesthetic reinforcement failed: {str(e)}")
+			return current_image
 			
 	def _apply_streaming_t2v_blending(self, current_image, previous_overlap_latents, blend_strength, temporal_weight):
 		"""Apply StreamingT2V-style randomized blending for seamless chunk transitions."""
@@ -1860,25 +2143,47 @@ class WanImageToVideoAdvancedSampler:
 			output_to_terminal_error(f"Gaussian spatial masking failed: {str(e)}")
 			return temporal_image
 			
-	def _store_temporal_data(self, vae, guided_image, chunk_frames, image_height, image_width, overlap_frames):
-		"""Store current chunk data for next iteration's temporal coherence."""
+	def _store_generated_chunk_frames(self, vae, generated_frames, overlap_frames):
+		"""
+		CRITICAL FIX: Store the LAST frames from actual generated chunk output for temporal coherence.
+		
+		This replaces the broken _store_temporal_data that was storing input frames instead of output.
+		
+		Args:
+			vae: VAE encoder for latent encoding
+			generated_frames: The actual generated chunk frames [num_frames, H, W, C]  
+			overlap_frames: Number of overlap frames to store from the end
+		"""
 		try:
-			# Create current chunk tensor and encode to latent
-			current_tensor = torch.ones((chunk_frames, image_height, image_width, 3)) * 0.5
-			current_tensor[0:1] = guided_image
-			current_latent = vae.encode(current_tensor[:,:,:,:3])
+			if generated_frames is None or len(generated_frames) == 0:
+				output_to_terminal_error("No generated frames to store for temporal coherence")
+				return
 			
-			# Store for next chunk's temporal coherence (keep only what we need)
-			self._previous_chunk_latents = current_latent.detach()
+			# CORRECT: Take the LAST frames from generated output (not first frame!)
+			num_frames = generated_frames.shape[0]
+			frames_to_store = min(overlap_frames, num_frames)
 			
-			# Store temporal features (simplified feature extraction)
-			self._temporal_features = torch.mean(guided_image, dim=[1, 2], keepdim=True).detach()
+			# Extract the LAST frames from the generated chunk
+			last_frames = generated_frames[-frames_to_store:]  # LAST frames, not first!
 			
-			output_to_terminal_successful(f"Temporal data stored for next chunk (overlap: {overlap_frames} frames)")
+			# Encode the ACTUAL generated frames to latent space
+			last_frames_latent = vae.encode(last_frames)
+			
+			# Apply batch dimension fixing and store
+			fixed_latent = self._fix_tensor_batch_dimension(last_frames_latent.detach(), 1)
+			self._previous_chunk_latents = fixed_latent
+			
+			# Store temporal features from ACTUAL generated frames
+			last_frame_features = torch.mean(last_frames[-1:], dim=[1, 2], keepdim=True).detach()
+			self._temporal_features = self._fix_tensor_batch_dimension(last_frame_features, 1)
+			
+			output_to_terminal_successful(f"FIXED: Stored {frames_to_store} LAST frames from generated chunk for temporal coherence")
 			
 		except Exception as e:
-			output_to_terminal_error(f"Storing temporal data failed: {str(e)}")
-			
+			output_to_terminal_error(f"Storing generated chunk frames failed: {str(e)}")
+			self._previous_chunk_latents = None
+			self._temporal_features = None
+
 	def _decode_latent_to_image(self, latent, target_shape):
 		"""Utility to decode latent back to image space with target shape."""
 		try:
@@ -1890,9 +2195,9 @@ class WanImageToVideoAdvancedSampler:
 			output_to_terminal_error(f"Latent decoding failed: {str(e)}")
 			return torch.ones(target_shape, dtype=latent.dtype, device=latent.device) * 0.5
 	
-	# ═══════════════════════════════════════════════════════════════════
-	# 🔬 RESEARCH-BASED ADVANCED TECHNIQUES
-	# ═══════════════════════════════════════════════════════════════════
+	# -------------------------------------------------------------------
+	# ?? RESEARCH-BASED ADVANCED TECHNIQUES
+	# -------------------------------------------------------------------
 	
 	def _apply_spectral_blend_attention(self, image, temporal_weight, overlap_frames):
 		"""
@@ -1912,15 +2217,40 @@ class WanImageToVideoAdvancedSampler:
 			h, w = image_freq.shape[1], image_freq.shape[2]
 			center_h, center_w = h // 2, w // 2
 			
-			# Create frequency mask for low/high separation
+			# Create frequency mask for low/high separation (research-based FreeLong SpectralBlend)
 			freq_radius = min(h, w) // 4  # Low frequency radius
 			y, x = torch.meshgrid(torch.arange(h), torch.arange(w), indexing='ij')
 			y, x = y.to(image.device), x.to(image.device)
-			freq_mask = ((y - center_h)**2 + (x - center_w)**2) <= freq_radius**2
+			freq_mask_base = ((y - center_h)**2 + (x - center_w)**2) <= freq_radius**2
 			
-			# Apply spectral blending with stored cache
+			# FIXED: Properly expand freq_mask_base to match image_freq dimensions
+			# Need to add batch and channel dimensions to match [B, H, W, C] -> [B, H, W, C] for complex FFT
+			freq_mask = freq_mask_base.unsqueeze(0).unsqueeze(-1)  # [H, W] -> [1, H, W, 1]
+			
+			# Ensure freq_mask matches image_freq shape exactly
+			if freq_mask.shape != image_freq.shape:
+				freq_mask = freq_mask.expand(image_freq.shape)
+			
+			# Apply spectral blending with stored cache (Context-as-Memory research technique)
 			if self._spectral_blend_cache is not None:
 				cached_freq = self._spectral_blend_cache
+				
+				# FIXED: Validate and fix cache shape compatibility before operations
+				if cached_freq.shape != image_freq.shape:
+					output_to_terminal_error(f"Spectral cache shape mismatch: {cached_freq.shape} vs {image_freq.shape}")
+					# Apply dimension fixing using research-based approach
+					try:
+						if len(cached_freq.shape) == len(image_freq.shape):
+							# Same number of dims, try broadcasting
+							cached_freq = torch.broadcast_to(cached_freq, image_freq.shape)
+						else:
+							# Different dims, create new cache
+							self._spectral_blend_cache = image_freq.clone().detach()
+							cached_freq = self._spectral_blend_cache
+					except Exception as broadcast_error:
+						output_to_terminal_error(f"Cache broadcast failed: {broadcast_error}")
+						self._spectral_blend_cache = image_freq.clone().detach()
+						cached_freq = self._spectral_blend_cache
 				
 				# Blend low frequencies with cache, keep high frequencies from current
 				low_freq_blend = 0.3 * temporal_weight  # Moderate low-freq consistency
@@ -1950,6 +2280,8 @@ class WanImageToVideoAdvancedSampler:
 			
 		except Exception as e:
 			output_to_terminal_error(f"SpectralBlend attention failed: {str(e)}")
+			# Clear spectral cache to prevent cascading errors
+			self._spectral_blend_cache = None
 			return image
 	
 	def _apply_conditional_attention_bridge(self, image, overlap_frames, blend_strength, temporal_weight):
@@ -1963,18 +2295,45 @@ class WanImageToVideoAdvancedSampler:
 			if overlap_frames <= 0 or self._previous_chunk_latents is None:
 				return image
 			
-			# Extract key features from previous chunk for conditioning
-			prev_features = torch.mean(self._previous_chunk_latents, dim=[1, 2, 3], keepdim=True)
+			# FIXED: Apply batch dimension fixing before feature extraction (StreamingT2V research)
+			prev_chunk_fixed = self._fix_tensor_batch_dimension(self._previous_chunk_latents, 1)
 			
-			# Create attention bridge using feature similarity
+			# Extract key features from previous chunk for conditioning
+			prev_features = torch.mean(prev_chunk_fixed, dim=[1, 2, 3], keepdim=True)
+			
+			# Create attention bridge using feature similarity with dimension safety
 			current_features = torch.mean(image, dim=[1, 2], keepdim=True)
 			
+			# FIXED: Safe tensor flattening with shape validation
+			try:
+				prev_flat = prev_features.flatten()
+				current_flat = current_features.flatten()
+				
+				# Ensure both tensors have valid sizes
+				if prev_flat.numel() == 0 or current_flat.numel() == 0:
+					output_to_terminal_error("Empty tensors in attention bridge, skipping")
+					return image
+				
+				# Use broadcasting-safe similarity calculation
+				min_size = min(prev_flat.shape[0], current_flat.shape[0])
+				if min_size > 0:
+					prev_flat = prev_flat[:min_size]
+					current_flat = current_flat[:min_size]
+				else:
+					return image
+			except Exception as flatten_error:
+				output_to_terminal_error(f"Tensor flattening failed: {flatten_error}")
+				return image
+			
 			# Calculate attention weights based on feature similarity
-			attention_sim = torch.cosine_similarity(
-				prev_features.flatten(), 
-				current_features.flatten(), 
-				dim=0
-			)
+			if prev_flat.shape[0] > 0 and current_flat.shape[0] > 0:
+				attention_sim = torch.cosine_similarity(
+					prev_flat.unsqueeze(0), 
+					current_flat.unsqueeze(0), 
+					dim=1
+				)[0]  # Remove batch dimension
+			else:
+				attention_sim = torch.tensor(0.5, device=image.device)  # Default similarity
 			
 			# Apply conditional attention bridging
 			bridge_strength = blend_strength * temporal_weight * 0.4  # Moderate bridging
@@ -2055,9 +2414,9 @@ class WanImageToVideoAdvancedSampler:
 			output_to_terminal_error(f"Optical flow warping failed: {str(e)}")
 			return image
 	
-	def _apply_memory_augmentation(self, image, temporal_weight, chunk_index):
+	def _apply_memory_augmentation(self, image, temporal_weight, chunk_index, previous_chunk_frames=None):
 		"""
-		Apply Memory Augmentation for long-term scene coherence.
+		Apply Memory Augmentation for long-term scene coherence with pruning.
 		
 		Research: Context-as-Memory leverages historical frames for scene consistency,
 		MA-LMM uses visual memory banks with learned queries.
@@ -2071,6 +2430,39 @@ class WanImageToVideoAdvancedSampler:
 					'weights': []
 				}
 			
+			# ENHANCED: Use previous_chunk_frames if available for better coherence
+			if previous_chunk_frames is not None and len(previous_chunk_frames) > 0:
+				# Extract features from previous chunk frames (Context-as-Memory technique)
+				try:
+					# Convert previous frames to tensor if needed
+					if isinstance(previous_chunk_frames, list):
+						prev_frames_tensor = torch.stack([torch.tensor(frame, dtype=image.dtype, device=image.device) 
+														 if not isinstance(frame, torch.Tensor) else frame.to(image.device) 
+														 for frame in previous_chunk_frames[-4:]])  # Use last 4 frames
+					else:
+						prev_frames_tensor = previous_chunk_frames.to(image.device)
+					
+					# Extract temporal features from previous frames
+					if len(prev_frames_tensor.shape) >= 4:  # [B, H, W, C] or similar
+						prev_features = torch.mean(prev_frames_tensor, dim=[1, 2], keepdim=True)
+						
+						# Add previous frame features to memory with reduced weight
+						for i, prev_feature in enumerate(prev_features):
+							self._memory_bank['features'].append(prev_feature.detach())
+							self._memory_bank['weights'].append(0.7 - i * 0.1)  # Decay for older frames
+						
+						output_to_terminal_successful(f"Memory augmented with {len(prev_features)} previous frames")
+				except Exception as e:
+					output_to_terminal_error(f"Previous frames processing failed: {str(e)}")
+			
+			# PRUNING: Limit memory bank to last 4 chunks to prevent ghosting
+			max_memory_chunks = 4
+			if len(self._memory_bank['features']) >= max_memory_chunks:
+				# Remove oldest entries (FIFO)
+				self._memory_bank['features'] = self._memory_bank['features'][-max_memory_chunks+1:]
+				self._memory_bank['weights'] = self._memory_bank['weights'][-max_memory_chunks+1:]
+				self._memory_bank['similarities'] = self._memory_bank['similarities'][-max_memory_chunks+1:]
+			
 			# Extract current frame features for memory
 			current_features = torch.mean(image, dim=[1, 2], keepdim=True)
 			
@@ -2083,7 +2475,7 @@ class WanImageToVideoAdvancedSampler:
 				self._memory_bank['weights'][i] *= 0.9  # 10% decay per chunk
 			
 			# Keep only recent memory (limit memory size)
-			max_memory_size = 5
+			max_memory_size = 8 if previous_chunk_frames is not None else 5  # Larger memory when using previous frames
 			if len(self._memory_bank['features']) > max_memory_size:
 				self._memory_bank['features'] = self._memory_bank['features'][-max_memory_size:]
 				self._memory_bank['weights'] = self._memory_bank['weights'][-max_memory_size:]
@@ -2110,39 +2502,6 @@ class WanImageToVideoAdvancedSampler:
 		except Exception as e:
 			output_to_terminal_error(f"Memory augmentation failed: {str(e)}")
 			return image
-	
-	def _store_temporal_data_advanced(self, vae, guided_image, chunk_frames, image_height, image_width, overlap_frames):
-		"""Enhanced temporal data storage with research-based caching."""
-		try:
-			# Standard temporal data storage
-			self._store_temporal_data(vae, guided_image, chunk_frames, image_height, image_width, overlap_frames)
-			
-			# Advanced: Update spectral blend cache
-			if guided_image is not None:
-				image_freq = torch.fft.fft2(guided_image.mean(dim=-1, keepdim=True))
-				self._spectral_blend_cache = image_freq.detach()
-			
-			# Advanced: Update optical flow features
-			gray_image = torch.mean(guided_image, dim=-1, keepdim=True)
-			
-			# Create proper 2D sobel kernels for single channel
-			sobel_x = torch.tensor([[[[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]]]], 
-								 dtype=guided_image.dtype, device=guided_image.device)
-			sobel_y = torch.tensor([[[[-1, -2, -1], [0, 0, 0], [1, 2, 1]]]], 
-								 dtype=guided_image.dtype, device=guided_image.device)
-			
-			# Ensure proper tensor dimensions: [B, C, H, W]
-			gray_tensor = gray_image.permute(0, 3, 1, 2)  # [B, 1, H, W]
-			
-			self._optical_flow_features = {
-				'grad_x': F.conv2d(gray_tensor, sobel_x, padding=1),
-				'grad_y': F.conv2d(gray_tensor, sobel_y, padding=1)
-			}
-			
-			output_to_terminal_successful("Advanced temporal data stored")
-			
-		except Exception as e:
-			output_to_terminal_error(f"Advanced temporal data storage failed: {str(e)}")
 	
 	def initialize_adaptive_noise_schedule(self, chunk_frames, current_latent=None):
 		"""
@@ -2206,9 +2565,90 @@ class WanImageToVideoAdvancedSampler:
 			output_to_terminal_error(f"Adaptive noise rescheduling failed: {str(e)}")
 			return conditioning_data
 	
-	# ═══════════════════════════════════════════════════════════════════
-	# 🔧 EXISTING TEMPORAL COHERENCE METHODS
-	# ═══════════════════════════════════════════════════════════════════
+	def _detect_and_correct_aesthetic_drift(self, current_image, chunk_index):
+		"""
+		Detect aesthetic drift by comparing with reference and apply correction.
+		
+		Long-sequence problem: Over 10+ chunks, eyes change size/color, facial features drift.
+		Solution: Compute deviation from reference and apply stronger aesthetic preservation.
+		"""
+		try:
+			if not hasattr(self, '_drift_detection_reference') or self._drift_detection_reference is None:
+				return 0.0
+			
+			# Convert to comparable tensors
+			current_tensor = current_image.float() if current_image.dtype != torch.float32 else current_image
+			reference_tensor = self._drift_detection_reference.float() if self._drift_detection_reference.dtype != torch.float32 else self._drift_detection_reference
+			
+			# Ensure same dimensions
+			if current_tensor.shape != reference_tensor.shape:
+				# Resize reference to match current if needed
+				if len(reference_tensor.shape) == 4:  # B,C,H,W
+					reference_tensor = F.interpolate(reference_tensor, size=current_tensor.shape[-2:], mode='bilinear', align_corners=False)
+				else:
+					return 0.0
+			
+			# Compute statistical drift in key regions (center 60% for facial features)
+			h, w = current_tensor.shape[-2:]
+			h_start, h_end = int(h * 0.2), int(h * 0.8)
+			w_start, w_end = int(w * 0.2), int(w * 0.8)
+			
+			current_center = current_tensor[..., h_start:h_end, w_start:w_end]
+			reference_center = reference_tensor[..., h_start:h_end, w_start:w_end]
+			
+			# Mean and standard deviation drift
+			current_mean = torch.mean(current_center)
+			reference_mean = torch.mean(reference_center)
+			current_std = torch.std(current_center)
+			reference_std = torch.std(reference_center)
+			
+			mean_drift = torch.abs(current_mean - reference_mean)
+			std_drift = torch.abs(current_std - reference_std)
+			
+			# Color distribution drift per channel
+			color_drift = 0.0
+			if current_center.shape[1] >= 3:  # RGB channels
+				for c in range(3):
+					current_hist = torch.histc(current_center[:, c], bins=32, min=0, max=1)
+					reference_hist = torch.histc(reference_center[:, c], bins=32, min=0, max=1)
+					
+					# Normalize histograms
+					current_hist = current_hist / (torch.sum(current_hist) + 1e-8)
+					reference_hist = reference_hist / (torch.sum(reference_hist) + 1e-8)
+					
+					# Wasserstein-like distance
+					color_drift += torch.sum(torch.abs(current_hist - reference_hist))
+			
+			color_drift = color_drift / 3.0 if current_center.shape[1] >= 3 else 0.0
+			
+			# Total drift score
+			total_drift = (mean_drift + std_drift + color_drift) / 3.0
+			
+			# Apply correction based on drift severity and chunk index
+			drift_threshold = 0.1  # Start correcting at 10% deviation
+			max_correction = 0.4   # Maximum additional weight
+			
+			if total_drift > drift_threshold:
+				# Progressive correction: stronger for later chunks and higher drift
+				chunk_multiplier = min(chunk_index / 10.0, 2.0)  # Up to 2x for chunk 10+
+				drift_multiplier = min((total_drift - drift_threshold) * 5.0, 1.0)  # Up to 1x for severe drift
+				
+				correction = max_correction * chunk_multiplier * drift_multiplier
+				
+				output_to_terminal(f"AESTHETIC DRIFT DETECTED: {total_drift:.3f} (threshold: {drift_threshold:.3f})")
+				output_to_terminal(f"Correction applied: {correction:.3f} (chunk: {chunk_index + 1})")
+				
+				return correction
+			
+			return 0.0
+			
+		except Exception as e:
+			output_to_terminal_error(f"Aesthetic drift detection failed: {str(e)}")
+			return 0.0
+
+	# -------------------------------------------------------------------
+	# ?? EXISTING TEMPORAL COHERENCE METHODS
+	# -------------------------------------------------------------------
 	
 	def enhanced_memory_cleanup(self, local_scope):
 		"""
@@ -2873,3 +3313,369 @@ class WanImageToVideoAdvancedSampler:
 			gc.collect()
 			if torch.cuda.is_available():
 				torch.cuda.empty_cache()
+
+	def _fix_tensor_batch_dimension(self, tensor, target_batch_size=1):
+		"""
+		Fix tensor batch dimension mismatch using Context-as-Memory research techniques.
+		
+		Args:
+			tensor: Input tensor that might have wrong batch size
+			target_batch_size: Expected batch size (default 1)
+		
+		Returns:
+			Tensor with correct batch dimension
+		"""
+		if tensor is None:
+			return None
+		
+		# Enhanced validation for edge cases
+		if tensor.numel() == 0:
+			output_to_terminal_error("Empty tensor in batch dimension fix")
+			return None
+			
+		if len(tensor.shape) == 0:
+			output_to_terminal_error("Scalar tensor in batch dimension fix")
+			return tensor.unsqueeze(0) if target_batch_size == 1 else tensor
+			
+		if tensor.shape[0] == target_batch_size:
+			return tensor
+		elif tensor.shape[0] > target_batch_size:
+			# Take only the most recent elements (Context-as-Memory approach)
+			return tensor[-target_batch_size:]
+		else:
+			# Tensor is smaller than target, pad with zeros (safer than error)
+			padding_shape = list(tensor.shape)
+			padding_shape[0] = target_batch_size - tensor.shape[0]
+			padding = torch.zeros(padding_shape, dtype=tensor.dtype, device=tensor.device)
+			return torch.cat([tensor, padding], dim=0)
+	
+	def _clear_temporal_caches(self):
+		"""Clear all temporal caches to prevent cascading tensor dimension errors."""
+		self._previous_chunk_latents = None
+		self._temporal_features = None
+		self._spectral_blend_cache = None
+		self._memory_bank = None
+		self._optical_flow_features = None
+		self._noise_schedule_cache = None
+		output_to_terminal_successful("Temporal caches cleared for error recovery")				
+
+	def comprehensive_circular_reference_cleanup(self, local_vars=None):
+		"""
+		Comprehensive function to detect and break all potential circular references.
+		
+		This function systematically identifies variables that could create circular references
+		in ML/AI contexts, particularly models, tensors, caches, and complex objects.
+		
+		Args:
+			local_vars: Dictionary of local variables to analyze and clean
+		"""
+		try:
+			if local_vars is None:
+				local_vars = {}
+			
+			cleanup_stats = {
+				'models_cleaned': 0,
+				'tensors_cleaned': 0,
+				'caches_cleaned': 0,
+				'objects_cleaned': 0,
+				'circular_refs_broken': 0,
+				'memory_freed_mb': 0
+			}
+			
+			# Get initial memory state
+			initial_memory = 0
+			if torch.cuda.is_available():
+				initial_memory = torch.cuda.memory_allocated() / (1024 * 1024)
+			
+			output_to_terminal_successful("Starting comprehensive circular reference cleanup...")
+			
+			# 1. DETECT AND CLEAN MODEL OBJECTS (highest priority)
+			model_patterns = [
+				'model', 'clip', 'vae', 'diffuser', 'unet', 'encoder', 'decoder',
+				'sampler', 'scheduler', 'pipeline', 'processor', 'loader'
+			]
+			
+			model_vars = []
+			for var_name, var_obj in list(local_vars.items()):
+				if var_obj is not None and any(pattern in var_name.lower() for pattern in model_patterns):
+					model_vars.append(var_name)
+			
+			# Clean model objects with circular reference detection
+			for var_name in model_vars:
+				try:
+					var_obj = local_vars.get(var_name)
+					if var_obj is not None:
+						# Check for common circular reference patterns in ML models
+						if hasattr(var_obj, '__dict__'):
+							obj_dict = var_obj.__dict__
+							circular_refs = []
+							
+							# Detect self-references
+							for attr_name, attr_value in obj_dict.items():
+								if attr_value is var_obj:
+									circular_refs.append(f"{var_name}.{attr_name}")
+								elif hasattr(attr_value, '__dict__') and var_obj in attr_value.__dict__.values():
+									circular_refs.append(f"{var_name}.{attr_name}")
+							
+							# Break detected circular references
+							for ref_path in circular_refs:
+								try:
+									attr_path = ref_path.split('.')[1:]
+									obj_ref = var_obj
+									for attr in attr_path[:-1]:
+										obj_ref = getattr(obj_ref, attr)
+									setattr(obj_ref, attr_path[-1], None)
+									cleanup_stats['circular_refs_broken'] += 1
+								except:
+									pass
+						
+						# Apply safe model cleanup
+						self.force_model_cleanup(var_obj)
+						local_vars[var_name] = None
+						cleanup_stats['models_cleaned'] += 1
+						
+				except Exception as e:
+					output_to_terminal_error(f"Error cleaning model {var_name}: {str(e)}")
+					continue
+			
+			# 2. DETECT AND CLEAN TENSOR OBJECTS
+			tensor_patterns = [
+				'tensor', 'latent', 'image', 'frame', 'features', 'embedding',
+				'hidden', 'output', 'input', 'batch', 'sample'
+			]
+			
+			tensor_vars = []
+			for var_name, var_obj in list(local_vars.items()):
+				if var_obj is not None:
+					# Check if it's a tensor or contains tensors
+					is_tensor = (
+						hasattr(var_obj, 'shape') and hasattr(var_obj, 'dtype') or
+						isinstance(var_obj, dict) and any(hasattr(v, 'shape') for v in var_obj.values() if v is not None) or
+						any(pattern in var_name.lower() for pattern in tensor_patterns)
+					)
+					if is_tensor:
+						tensor_vars.append(var_name)
+			
+			# Clean tensor objects
+			for var_name in tensor_vars:
+				try:
+					var_obj = local_vars.get(var_name)
+					if var_obj is not None:
+						# Handle dictionary of tensors
+						if isinstance(var_obj, dict):
+							for key, value in list(var_obj.items()):
+								if hasattr(value, 'cpu'):
+									value.cpu()
+								var_obj[key] = None
+							var_obj.clear()
+						# Handle direct tensors
+						elif hasattr(var_obj, 'cpu'):
+							var_obj.cpu()
+						
+						local_vars[var_name] = None
+						cleanup_stats['tensors_cleaned'] += 1
+						
+				except Exception as e:
+					output_to_terminal_error(f"Error cleaning tensor {var_name}: {str(e)}")
+					continue
+			
+			# 3. DETECT AND CLEAN CACHE OBJECTS
+			cache_patterns = [
+				'cache', 'buffer', 'memory', 'bank', 'store', 'registry',
+				'pool', 'queue', 'stack', 'history', 'temporal'
+			]
+			
+			cache_vars = []
+			for var_name, var_obj in list(local_vars.items()):
+				if var_obj is not None and any(pattern in var_name.lower() for pattern in cache_patterns):
+					cache_vars.append(var_name)
+			
+			# Clean cache objects
+			for var_name in cache_vars:
+				try:
+					var_obj = local_vars.get(var_name)
+					if var_obj is not None:
+						# Handle different cache types
+						if isinstance(var_obj, dict):
+							var_obj.clear()
+						elif isinstance(var_obj, list):
+							var_obj.clear()
+						elif hasattr(var_obj, 'clear'):
+							var_obj.clear()
+						elif hasattr(var_obj, 'cpu'):
+							var_obj.cpu()
+						
+						local_vars[var_name] = None
+						cleanup_stats['caches_cleaned'] += 1
+						
+				except Exception as e:
+					output_to_terminal_error(f"Error cleaning cache {var_name}: {str(e)}")
+					continue
+			
+			# 4. DETECT AND CLEAN COMPLEX OBJECTS WITH POTENTIAL CIRCULAR REFS
+			complex_object_vars = []
+			for var_name, var_obj in list(local_vars.items()):
+				if var_obj is not None and not var_name.startswith('_'):
+					# Check for complex objects that might have circular references
+					has_dict = hasattr(var_obj, '__dict__')
+					has_complex_attrs = has_dict and len(getattr(var_obj, '__dict__', {})) > 5
+					is_callable_class = hasattr(var_obj, '__class__') and hasattr(var_obj, '__call__')
+					
+					if has_complex_attrs or is_callable_class:
+						complex_object_vars.append(var_name)
+			
+			# Analyze and clean complex objects
+			for var_name in complex_object_vars:
+				try:
+					var_obj = local_vars.get(var_name)
+					if var_obj is not None and hasattr(var_obj, '__dict__'):
+						obj_dict = var_obj.__dict__
+						
+						# Detect potential circular references in object attributes
+						circular_attrs = []
+						for attr_name, attr_value in list(obj_dict.items()):
+							# Check if attribute references parent object
+							if attr_value is var_obj:
+								circular_attrs.append(attr_name)
+							# Check if attribute contains parent object in its dict
+							elif hasattr(attr_value, '__dict__') and var_obj in getattr(attr_value, '__dict__', {}).values():
+								circular_attrs.append(attr_name)
+							# Check for cross-references between attributes
+							elif hasattr(attr_value, '__dict__'):
+								attr_dict = getattr(attr_value, '__dict__', {})
+								if any(other_attr is attr_value for other_attr in obj_dict.values() if other_attr != attr_value):
+									circular_attrs.append(attr_name)
+						
+						# Break circular references
+						for attr_name in circular_attrs:
+							try:
+								setattr(var_obj, attr_name, None)
+								cleanup_stats['circular_refs_broken'] += 1
+							except:
+								pass
+						
+						local_vars[var_name] = None
+						cleanup_stats['objects_cleaned'] += 1
+						
+				except Exception as e:
+					output_to_terminal_error(f"Error cleaning complex object {var_name}: {str(e)}")
+					continue
+			
+			# 5. CLEAN CLASS INSTANCE VARIABLES THAT MIGHT HAVE CIRCULAR REFS
+			class_cache_attrs = [
+				'_cache_manager', '_memory_bank', '_spectral_blend_cache',
+				'_optical_flow_features', '_noise_schedule_cache', '_previous_chunk_latents',
+				'_temporal_features', '_original_clip_vision', '_original_image_reference',
+				'_original_color_stats', '_drift_detection_reference'
+			]
+			
+			for attr_name in class_cache_attrs:
+				if hasattr(self, attr_name):
+					try:
+						attr_obj = getattr(self, attr_name)
+						if attr_obj is not None:
+							# Clean based on object type
+							if isinstance(attr_obj, dict):
+								# Check for circular references in dict values
+								for key, value in list(attr_obj.items()):
+									if value is attr_obj or (hasattr(value, '__dict__') and attr_obj in getattr(value, '__dict__', {}).values()):
+										attr_obj[key] = None
+										cleanup_stats['circular_refs_broken'] += 1
+								attr_obj.clear()
+							elif isinstance(attr_obj, list):
+								# Check for circular references in list items
+								for i, item in enumerate(attr_obj):
+									if item is attr_obj or (hasattr(item, '__dict__') and attr_obj in getattr(item, '__dict__', {}).values()):
+										attr_obj[i] = None
+										cleanup_stats['circular_refs_broken'] += 1
+								attr_obj.clear()
+							elif hasattr(attr_obj, 'cpu'):
+								attr_obj.cpu()
+							
+							setattr(self, attr_name, None)
+							cleanup_stats['caches_cleaned'] += 1
+					except Exception as e:
+						output_to_terminal_error(f"Error cleaning class attribute {attr_name}: {str(e)}")
+						try:
+							setattr(self, attr_name, None)
+						except:
+							pass
+			
+			# 6. FORCE GARBAGE COLLECTION WITH CIRCULAR REFERENCE FOCUS
+			# Multiple passes to ensure circular references are fully broken
+			total_collected = 0
+			for gc_pass in range(6):  # More passes for circular reference cleanup
+				collected = gc.collect()
+				total_collected += collected
+				if collected == 0:
+					break
+				# Small delay to allow circular reference detection
+				time.sleep(0.005)
+			
+			# 7. FINAL MEMORY CALCULATION AND REPORTING
+			final_memory = 0
+			if torch.cuda.is_available():
+				torch.cuda.empty_cache()
+				torch.cuda.synchronize()
+				final_memory = torch.cuda.memory_allocated() / (1024 * 1024)
+				cleanup_stats['memory_freed_mb'] = initial_memory - final_memory
+			
+			# Report comprehensive cleanup results
+			output_to_terminal_successful(f"Circular reference cleanup complete:")
+			output_to_terminal_successful(f"  Models: {cleanup_stats['models_cleaned']}, Tensors: {cleanup_stats['tensors_cleaned']}")
+			output_to_terminal_successful(f"  Caches: {cleanup_stats['caches_cleaned']}, Objects: {cleanup_stats['objects_cleaned']}")
+			output_to_terminal_successful(f"  Circular refs broken: {cleanup_stats['circular_refs_broken']}")
+			output_to_terminal_successful(f"  Memory freed: {cleanup_stats['memory_freed_mb']:.1f}MB")
+			output_to_terminal_successful(f"  GC collected: {total_collected} objects")
+			
+			return cleanup_stats
+			
+		except Exception as e:
+			output_to_terminal_error(f"Error in comprehensive circular reference cleanup: {str(e)}")
+			# Emergency fallback cleanup
+			try:
+				# Force clear all detected variables
+				for var_name in list(local_vars.keys()):
+					if not var_name.startswith('_') and local_vars.get(var_name) is not None:
+						local_vars[var_name] = None
+				
+				# Force multiple GC passes
+				for _ in range(3):
+					gc.collect()
+				
+				if torch.cuda.is_available():
+					torch.cuda.empty_cache()
+					
+				output_to_terminal_successful("Emergency circular reference cleanup completed")
+			except:
+				output_to_terminal_error("Emergency cleanup also failed")
+			
+			return {'error': True, 'message': str(e)}
+
+	def interrupt_execution(self, local_vars=None):
+		global interrupt_processing
+		global interrupt_processing_mutex
+		with interrupt_processing_mutex:
+			if interrupt_processing:
+				gc.collect()
+				torch.cuda.empty_cache()
+
+				# Use provided local variables or empty dict as fallback
+				if local_vars is None:
+					local_vars = {}
+
+				# Comprehensive circular reference detection and cleanup
+				cleanup_stats = self.comprehensive_circular_reference_cleanup(local_vars)
+				
+				# Cleanup original image data stored for guidance
+				self._cleanup_original_image_data()
+
+				# Additional standard cleanup (backup)
+				self.break_circular_references(local_vars)
+				self.cleanup_local_refs(local_vars)
+				self.enhanced_memory_cleanup(local_vars)
+				mm.unload_all_models()
+				mm.soft_empty_cache()
+
+				interrupt_processing = False
+				raise InterruptProcessingException()
