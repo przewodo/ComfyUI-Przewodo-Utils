@@ -648,6 +648,9 @@ class WanImageToVideoAdvancedSampler:
 			# Check memory usage after sampling
 			self._check_memory_checkpoint(f"post_sampling_chunk_{chunk_index}")
 
+			# Store latent data for adaptive noise scheduling in next chunk
+			self.initialize_adaptive_noise_schedule(chunk_frames, input_latent["samples"].detach().clone())
+
 			tmp_images = vae.decode(input_latent["samples"])
 			if len(tmp_images.shape) == 5:
 				tmp_images = tmp_images.reshape(-1, tmp_images.shape[-3], tmp_images.shape[-2], tmp_images.shape[-1])
@@ -705,9 +708,6 @@ class WanImageToVideoAdvancedSampler:
 		# Final comprehensive memory cleanup for all chunks
 		self._final_memory_cleanup([input_mask, input_latent, input_clip_latent])
 		
-		# Cleanup original image data stored for guidance
-		self._cleanup_original_image_data()
-
 		del input_mask
 		del input_latent
 		del input_clip_latent
@@ -1760,118 +1760,6 @@ class WanImageToVideoAdvancedSampler:
 				torch.cuda.empty_cache()
 			gc.collect()
 	
-	def _cleanup_original_image_data(self):
-		"""
-		Clean up stored original image data and research-based caches after video generation.
-		
-		This method clears all class-level stored data used for aesthetic preservation
-		and advanced temporal coherence across chunks to prevent memory leaks.
-		"""
-		try:
-			cleanup_count = 0
-			
-			# Clean up original aesthetic preservation data
-			if self._original_image_latent is not None:
-				if hasattr(self._original_image_latent, 'cpu'):
-					self._original_image_latent.cpu()
-				del self._original_image_latent
-				self._original_image_latent = None
-				cleanup_count += 1
-			
-			# Clean up research-based caches
-			if self._spectral_blend_cache is not None:
-				if hasattr(self._spectral_blend_cache, 'cpu'):
-					self._spectral_blend_cache.cpu()
-				del self._spectral_blend_cache
-				self._spectral_blend_cache = None
-				cleanup_count += 1
-			
-			if self._memory_bank is not None:
-				del self._memory_bank
-				self._memory_bank = None
-				cleanup_count += 1
-				
-			if self._optical_flow_features is not None:
-				for key in self._optical_flow_features:
-					if hasattr(self._optical_flow_features[key], 'cpu'):
-						self._optical_flow_features[key].cpu()
-				del self._optical_flow_features
-				self._optical_flow_features = None
-				cleanup_count += 1
-				
-			if self._noise_schedule_cache is not None:
-				del self._noise_schedule_cache
-				self._noise_schedule_cache = None
-				cleanup_count += 1
-			
-			if self._previous_chunk_latents is not None:
-				if hasattr(self._previous_chunk_latents, 'cpu'):
-					self._previous_chunk_latents.cpu()
-				del self._previous_chunk_latents
-				self._previous_chunk_latents = None
-				cleanup_count += 1
-				
-			if self._temporal_features is not None:
-				if hasattr(self._temporal_features, 'cpu'):
-					self._temporal_features.cpu()
-				del self._temporal_features
-				self._temporal_features = None
-				cleanup_count += 1
-				
-			if self._original_clip_vision is not None:
-				if hasattr(self._original_clip_vision, 'cpu'):
-					self._original_clip_vision.cpu()
-				del self._original_clip_vision
-				self._original_clip_vision = None
-				cleanup_count += 1
-				
-			if self._original_image_reference is not None:
-				if hasattr(self._original_image_reference, 'cpu'):
-					self._original_image_reference.cpu()
-				del self._original_image_reference
-				self._original_image_reference = None
-				cleanup_count += 1
-				
-			if self._original_color_stats is not None:
-				for key in list(self._original_color_stats.keys()):
-					if hasattr(self._original_color_stats[key], 'cpu'):
-						self._original_color_stats[key].cpu()
-					del self._original_color_stats[key]
-				self._original_color_stats.clear()
-				self._original_color_stats = None
-				cleanup_count += 1
-			
-			if cleanup_count > 0:
-				# Light cleanup after removing stored data
-				gc.collect()
-				if torch.cuda.is_available():
-					torch.cuda.empty_cache()
-				
-				output_to_terminal_successful(f"Cleaned up {cleanup_count} data objects (aesthetic + research-based caches)")
-			
-		except Exception as e:
-			output_to_terminal_error(f"Error cleaning up stored data: {str(e)}")
-			# Force reset all class variables as fallback
-			self._original_image_latent = None
-			self._original_clip_vision = None
-			self._original_image_reference = None
-			self._original_color_stats = None
-			self._spectral_blend_cache = None
-			self._memory_bank = None
-			self._optical_flow_features = None
-			self._noise_schedule_cache = None
-			self._previous_chunk_latents = None
-			self._temporal_features = None
-			# Reset memory checkpoint
-			self._memory_checkpoint = None
-			
-		except Exception as e:
-			output_to_terminal_error(f"Error in final memory cleanup: {str(e)}")
-			# Emergency cleanup
-			gc.collect()
-			if torch.cuda.is_available():
-				torch.cuda.empty_cache()
-
 	def comprehensive_circular_reference_cleanup(self, local_vars=None):
 		"""
 		Comprehensive function to detect and break all potential circular references.
@@ -2180,9 +2068,6 @@ class WanImageToVideoAdvancedSampler:
 				# Comprehensive circular reference detection and cleanup
 				cleanup_stats = self.comprehensive_circular_reference_cleanup(local_vars)
 				
-				# Cleanup original image data stored for guidance
-				self._cleanup_original_image_data()
-
 				# Additional standard cleanup (backup)
 				self.break_circular_references(local_vars)
 				self.cleanup_local_refs(local_vars)
