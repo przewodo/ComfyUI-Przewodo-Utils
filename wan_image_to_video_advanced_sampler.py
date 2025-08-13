@@ -74,8 +74,6 @@ class WanImageToVideoAdvancedSampler:
 				# ═════════════════════════════════════════════════════════════════
 				# 📝 TEXT & CLIP CONFIGURATION  
 				# ═════════════════════════════════════════════════════════════════
-				("positive", ("STRING", {"default": None, "advanced": True, "tooltip": "Positive text prompt describing what you want to generate in the video."})),
-				("negative", ("STRING", {"default": None, "advanced": True, "tooltip": "Negative text prompt describing what you want to avoid in the video generation."})),
 				("clip", (clip_names, {"default": None, "advanced": True, "tooltip": "CLIP text encoder model to use for processing text prompts."})),
 				("clip_type", (CLIP_TYPE_LIST, {"default": CLIP_WAN, "advanced": True, "tooltip": "Type of CLIP encoder. WAN is optimized for Wan2.1 models."})),
 				("clip_device", (CLIP_DEVICE_LIST, {"default": CLIP_DEVICE_DEFAULT, "advanced": True, "tooltip": "Device to run CLIP text encoding on (CPU/GPU)."})),
@@ -179,7 +177,7 @@ class WanImageToVideoAdvancedSampler:
 
 	CATEGORY = "PrzewodoUtils/Wan"
 
-	def run(self, GGUF_High, GGUF_Low, Diffusor_High, Diffusor_Low, Diffusor_weight_dtype, Use_Model_Type, positive, negative, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.05, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=8.0, use_block_swap=True, block_swap=20, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, divide_video_in_chunks=True, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, apply_color_match_strength=1.0, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True, frames_overlap_chunks=8, frames_overlap_chunks_blend=0.3, frames_overlap_chunks_motion_weight=0.3, frames_overlap_chunks_mask_sigma=0.35, frames_overlap_chunks_step_gain=0.5):
+	def run(self, GGUF_High, GGUF_Low, Diffusor_High, Diffusor_Low, Diffusor_weight_dtype, Use_Model_Type, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.05, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=8.0, use_block_swap=True, block_swap=20, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, divide_video_in_chunks=True, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, apply_color_match_strength=1.0, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True, frames_overlap_chunks=8, frames_overlap_chunks_blend=0.3, frames_overlap_chunks_motion_weight=0.3, frames_overlap_chunks_mask_sigma=0.35, frames_overlap_chunks_step_gain=0.5):
 		self.default_fps = 16.0
 
 		gc.collect()
@@ -239,7 +237,7 @@ class WanImageToVideoAdvancedSampler:
 		model_shift = self.initialize_model_shift(use_shift, shift)
 		mm.throw_exception_if_processing_interrupted()
 
-		output_image, fps, = self.postprocess(model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, divide_video_in_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain)
+		output_image, fps, = self.postprocess(model_high, model_low, vae, clip_model, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, divide_video_in_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain)
 
 		# Break any circular references
 		self.break_circular_references(locals())
@@ -252,10 +250,12 @@ class WanImageToVideoAdvancedSampler:
 
 		return (output_image, fps,)
 
-	def postprocess(self, model_high, model_low, vae, clip_model, positive, negative, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, divide_video_in_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain):
+	def postprocess(self, model_high, model_low, vae, clip_model, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, divide_video_in_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain):
 		gc.collect()
 		torch.cuda.empty_cache()
 
+		positive = None
+		negative = None
 		remainder_video_seconds = total_video_seconds
 		total_frames = (total_video_seconds * 16) + 1
 		total_video_chunks = 1 if (divide_video_in_chunks == False and total_video_seconds > 5) else int(math.ceil(total_video_seconds / 5.0))
@@ -381,7 +381,7 @@ class WanImageToVideoAdvancedSampler:
 			mm.throw_exception_if_processing_interrupted()
 			
 			if (prompt_stack is not None):
-				positive, negative, prompt_loras = self.get_current_prompt(prompt_stack, chunk_index, positive, negative)
+				positive, negative, prompt_loras = self.get_current_prompt(prompt_stack, chunk_index)
 				working_model_high, working_clip_high = self.process_lora_stack(prompt_loras, working_model_high, working_clip_high)
 				if use_dual_samplers:
 					working_model_low, working_clip_low = self.process_lora_stack(prompt_loras, working_model_low, working_clip_low)
@@ -657,7 +657,7 @@ class WanImageToVideoAdvancedSampler:
 
 		return (output_images, self.default_fps,)
 
-	def get_current_prompt(self, prompt_stack, chunk_index, default_positive, default_negative):
+	def get_current_prompt(self, prompt_stack, chunk_index):
 		"""
 		Get the current prompt based on the chunk index and prompt stack.
 		"""
@@ -683,10 +683,10 @@ class WanImageToVideoAdvancedSampler:
 				output_to_terminal_successful(f"Using prompt from stack: index {selected_prompt[2]}")
 				return positive, negative, lora_stack
 			else:
-				return default_positive, default_negative, None
+				return "", "", None
 		else:
-			return default_positive, default_negative, None
-   
+			return "", "", None
+
 	def load_model(self, GGUF, Diffusor, Use_Model_Type, Diffusor_weight_dtype):
 		"""
 		Load the model based on the selected type.
