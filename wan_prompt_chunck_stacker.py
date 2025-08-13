@@ -26,6 +26,7 @@ class WanPromptChunkStacker:
 
         chunk_index = start_on_seconds // 5 if start_on_seconds > 0 else 0
 
+        output_to_terminal_successful (f"Creating prompt for second {start_on_seconds} with lora count {len(lora_stack) if lora_stack else 0}")
         previous_prompt.append([positive_prompt, negative_prompt, chunk_index, lora_stack])
 
         return (previous_prompt,)

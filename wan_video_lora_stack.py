@@ -1,4 +1,5 @@
 import folder_paths
+import copy
 from .core import *
 
 class WanVideoLoraStack:
@@ -25,12 +26,11 @@ class WanVideoLoraStack:
     def load_lora(self, lora_name, strength_model, strength_clip, previous_lora=None):
         if (previous_lora is None):
             previous_lora = []
+        else:
+            previous_lora = copy.deepcopy(previous_lora)
 
         if strength_model == 0 and strength_clip == 0:
             return (previous_lora,)
-        
-        if (previous_lora is None):
-            previous_lora = []
 
         previous_lora.append([lora_name, strength_model, strength_clip])
 
