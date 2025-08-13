@@ -648,9 +648,6 @@ class WanImageToVideoAdvancedSampler:
 			# Check memory usage after sampling
 			self._check_memory_checkpoint(f"post_sampling_chunk_{chunk_index}")
 
-			# Store latent data for adaptive noise scheduling in next chunk
-			self.initialize_adaptive_noise_schedule(chunk_frames, input_latent["samples"].detach().clone())
-
 			tmp_images = vae.decode(input_latent["samples"])
 			if len(tmp_images.shape) == 5:
 				tmp_images = tmp_images.reshape(-1, tmp_images.shape[-3], tmp_images.shape[-2], tmp_images.shape[-1])
