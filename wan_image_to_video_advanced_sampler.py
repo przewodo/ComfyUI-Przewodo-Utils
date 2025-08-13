@@ -648,9 +648,6 @@ class WanImageToVideoAdvancedSampler:
 			# Check memory usage after sampling
 			self._check_memory_checkpoint(f"post_sampling_chunk_{chunk_index}")
 
-			# Store latent data for adaptive noise scheduling in next chunk
-			self.initialize_adaptive_noise_schedule(chunk_frames, input_latent["samples"].detach().clone())
-
 			tmp_images = vae.decode(input_latent["samples"])
 			if len(tmp_images.shape) == 5:
 				tmp_images = tmp_images.reshape(-1, tmp_images.shape[-3], tmp_images.shape[-2], tmp_images.shape[-1])
@@ -2195,3 +2192,57 @@ class WanImageToVideoAdvancedSampler:
 
 				interrupt_processing = False
 				raise InterruptProcessingException()
+						
+	def _adaptive_tensor_precision(self, tensor, operation_type="general"):
+		"""
+		Adaptively adjust tensor precision based on operation type and memory pressure.
+		
+		Args:
+			tensor: Input tensor to potentially convert
+			operation_type: Type of operation ("sampling", "encoding", "general")
+			
+		Returns:
+			Tensor with appropriate precision
+		"""
+		try:
+			# If tensor is None or not a torch tensor, return as-is
+			if tensor is None or not hasattr(tensor, 'dtype'):
+				return tensor
+				
+			# Only convert float32 tensors
+			if tensor.dtype != torch.float32:
+				return tensor
+				
+			# Check current memory pressure
+			if torch.cuda.is_available():
+				try:
+					allocated = torch.cuda.memory_allocated() / (1024**3)  # GB
+					total_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
+					memory_pressure = allocated / total_memory
+					
+					# High memory pressure scenarios
+					if memory_pressure > 0.8:  # Using more than 80% of VRAM
+						if operation_type in ["encoding", "general"]:
+							output_to_terminal_successful(f"High memory pressure ({memory_pressure:.1%}), converting tensor to half precision")
+							return tensor.half()
+						elif operation_type == "sampling":
+							# Be more conservative with sampling tensors
+							if memory_pressure > 0.9:  # Only convert at very high pressure
+								output_to_terminal_successful(f"Very high memory pressure ({memory_pressure:.1%}), converting sampling tensor to half precision")
+								return tensor.half()
+					
+					# Check tensor size - convert very large tensors regardless of memory pressure
+					if hasattr(tensor, 'numel'):
+						tensor_size_mb = tensor.numel() * 4 / (1024 * 1024)  # 4 bytes per float32
+						if tensor_size_mb > 500:  # Larger than 500MB
+							output_to_terminal_successful(f"Large tensor ({tensor_size_mb:.1f}MB), converting to half precision")
+							return tensor.half()
+							
+				except Exception as e:
+					output_to_terminal_error(f"Error checking memory pressure: {str(e)}")
+					
+			return tensor
+			
+		except Exception as e:
+			output_to_terminal_error(f"Error in adaptive tensor precision: {str(e)}")
+			return tensor
