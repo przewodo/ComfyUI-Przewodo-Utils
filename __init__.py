@@ -9,13 +9,6 @@ and various utility functions for ComfyUI workflows.
 WEB_DIRECTORY = "./web"
 
 try:
-    from .node_mappings import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
-except ImportError:
-    # Handle import errors gracefully during testing or when dependencies aren't available
-    NODE_CLASS_MAPPINGS = {}
-    NODE_DISPLAY_NAME_MAPPINGS = {}
-
-try:
     from .__version__ import VERSION as __version__
 except ImportError:
     __version__ = "1.0.0"  # Fallback version
@@ -26,6 +19,13 @@ except ImportError:
     __version__ = "1.0.0"  # Fallback version
 
 output_to_terminal(f"Version {__version__}")
+
+try:
+    from .node_mappings import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
+except ImportError:
+    # Handle import errors gracefully during testing or when dependencies aren't available
+    NODE_CLASS_MAPPINGS = {}
+    NODE_DISPLAY_NAME_MAPPINGS = {}
 
 __all__ = [
     "NODE_CLASS_MAPPINGS",

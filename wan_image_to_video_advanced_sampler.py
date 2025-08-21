@@ -19,6 +19,7 @@ from .core import *
 from .cache_manager import CacheManager
 from .wan_get_max_image_resolution_by_aspect_ratio import WanGetMaxImageResolutionByAspectRatio
 from .wan_video_enhance_a_video import WanVideoEnhanceAVideo
+from .temporal_frame_buffer import TemporalFrameBuffer
 
 # Import external custom nodes using the centralized import function
 imported_nodes = {}
@@ -152,6 +153,7 @@ class WanImageToVideoAdvancedSampler:
 				("use_cfg_zero_star", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Enable CFG Zero Star optimization for improved sampling efficiency and quality."})),
 				("apply_color_match", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Apply color matching between start image and generated output for consistent color grading."})),
 				("apply_color_match_strength", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "advanced": True, "tooltip": "Strength of color matching between start image and generated output. 0.0 = no color matching, 1.0 = full color matching."})),
+				("clip_vision_astetics_strength", ("FLOAT", {"default": 2.0, "min": 0.0, "max": 2.0, "step": 0.01, "advanced": True, "tooltip": "How strong to preserve the astetics of the original image"})),
 				("frames_interpolation", ("BOOLEAN", {"default": False, "advanced": True, "tooltip": "Make frame interpolation with Rife TensorRT. This will make the video smoother by generating additional frames between existing ones."})),
 				("frames_engine", (rife_engines, {"default": NONE, "tooltip": "Rife TensorRT engine to use for frame interpolation."})),
 				("frames_multiplier", ("INT", {"default": 2, "min": 2, "max": 100, "step":1, "advanced": True, "tooltip": "Multiplier for the number of frames generated during interpolation."})),
@@ -160,8 +162,8 @@ class WanImageToVideoAdvancedSampler:
 				("frames_overlap_chunks", ("INT", {"default": 16, "min": 8, "max": 32, "step": 4, "advanced": True, "tooltip": "Number of overlapping frames between video chunks."})),
 				("frames_overlap_chunks_blend", ("FLOAT", {"default": 0.8, "min": 0.0, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Controls how strongly overlapping frames between chunks are blended together. Higher values (0.7-1.0) create smoother transitions using research-based StreamingT2V blending techniques, while lower values (0.3-0.6) preserve more chunk independence. Affects spectral frequency domain consistency and temporal coherence."})),
 				("frames_overlap_chunks_motion_weight", ("FLOAT", {"default": 0.3, "min": 0.0, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Weight for motion-predicted guidance using optical flow analysis between chunks. Higher values (0.4-0.6) apply stronger motion consistency from Go-with-the-Flow research, lower values (0.1-0.3) allow more motion variation. Controls how much previous chunk motion influences next chunk generation."})),
-				("frames_overlap_chunks_mask_sigma", ("FLOAT", {"default": 0.35, "min": 0.1, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "Gaussian spatial mask sigma for blending overlap regions. Lower values (0.1-0.3) create sharp transition boundaries, higher values (0.4-0.8) create softer, more gradual blending. Used in research-based spatial masking and optical flow warping for seamless chunk fusion."})),
-				("frames_overlap_chunks_step_gain", ("FLOAT", {"default": 0.5, "min": 0.0, "max": 2.0, "step":0.01, "advanced": True, "tooltip": "Global amplification factor for temporal motion steps between chunks. Values >1.0 increase motion intensity and temporal correlation, <1.0 reduce motion overshoot. Effective per-step gain = step_gain/overlap_frames. Used in sine curve blending and FreeNoise adaptive scheduling."})),
+				("frames_overlap_chunks_motion_smooth", ("BOOLEAN", {"default": True, "advanced": True, "tooltip": "Smooth transition blending motion"})),
+				("frames_overlap_chunks_motion_decay", ("FLOAT", {"default": 0.92, "min": 0.1, "max": 1.0, "step":0.01, "advanced": True, "tooltip": "How fast the last chunk motion decays over the next chunk"})),
 			]),
 			"optional": OrderedDict([
 				("lora_stack", (any_type, {"default": None, "advanced": True, "tooltip": "Stack of LoRAs to apply to the diffusion model. Each LoRA modifies the model's behavior."})),
@@ -178,7 +180,7 @@ class WanImageToVideoAdvancedSampler:
 
 	CATEGORY = "PrzewodoUtils/Wan"
 
-	def run(self, GGUF_High, GGUF_Low, Diffusor_High, Diffusor_Low, Diffusor_weight_dtype, Use_Model_Type, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.05, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=8.0, use_block_swap=True, block_swap=20, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, divide_video_in_chunks=True, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, apply_color_match_strength=1.0, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True, frames_overlap_chunks=8, frames_overlap_chunks_blend=0.3, frames_overlap_chunks_motion_weight=0.3, frames_overlap_chunks_mask_sigma=0.35, frames_overlap_chunks_step_gain=0.5):
+	def run(self, GGUF_High, GGUF_Low, Diffusor_High, Diffusor_Low, Diffusor_weight_dtype, Use_Model_Type, clip, clip_type, clip_device, vae, use_tea_cache, tea_cache_model_type="wan2.1_i2v_720p_14B", tea_cache_rel_l1_thresh=0.05, tea_cache_start_percent=0.2, tea_cache_end_percent=0.8, tea_cache_cache_device="cuda", use_SLG=True, SLG_blocks="10", SLG_start_percent=0.2, SLG_end_percent=0.8, use_sage_attention=True, sage_attention_mode="auto", use_shift=True, shift=8.0, use_block_swap=True, block_swap=20, large_image_side=832, image_generation_mode=START_IMAGE, wan_model_size=WAN_720P, total_video_seconds=1, divide_video_in_chunks=True, clip_vision_model=NONE, clip_vision_strength=1.0, use_dual_samplers=True, high_cfg=1.0, low_cfg=1.0, total_steps=15, total_steps_high_cfg=5, noise_seed=0, lora_stack=None, start_image=None, start_image_clip_vision_enabled=True, end_image=None, end_image_clip_vision_enabled=True, video_enhance_enabled=True, use_cfg_zero_star=True, apply_color_match=True, apply_color_match_strength=1.0, causvid_lora=NONE, high_cfg_causvid_strength=1.0, low_cfg_causvid_strength=1.0, high_denoise=1.0, low_denoise=1.0, prompt_stack=None, fill_noise_latent=0.5, frames_interpolation=False, frames_engine=NONE, frames_multiplier=2, frames_clear_cache_after_n_frames=100, frames_use_cuda_graph=True, frames_overlap_chunks=8, frames_overlap_chunks_blend=0.3, frames_overlap_chunks_motion_weight=0.3, frames_overlap_chunks_motion_smooth=True, frames_overlap_chunks_motion_decay=0.92, clip_vision_astetics_strength = 2.0):
 		self.default_fps = 16.0
 
 		gc.collect()
@@ -285,6 +287,7 @@ class WanImageToVideoAdvancedSampler:
 		output_to_terminal(f"use_cfg_zero_star: {use_cfg_zero_star}")
 		output_to_terminal(f"apply_color_match: {apply_color_match}")
 		output_to_terminal(f"apply_color_match_strength: {apply_color_match_strength}")
+		output_to_terminal(f"clip_vision_astetics_strength: {clip_vision_astetics_strength}")		
 		output_to_terminal(f"frames_interpolation: {frames_interpolation}")
 		output_to_terminal(f"frames_engine: {frames_engine}")
 		output_to_terminal(f"frames_multiplier: {frames_multiplier}")
@@ -293,8 +296,8 @@ class WanImageToVideoAdvancedSampler:
 		output_to_terminal(f"frames_overlap_chunks: {frames_overlap_chunks}")
 		output_to_terminal(f"frames_overlap_chunks_blend: {frames_overlap_chunks_blend}")
 		output_to_terminal(f"frames_overlap_chunks_motion_weight: {frames_overlap_chunks_motion_weight}")
-		output_to_terminal(f"frames_overlap_chunks_mask_sigma: {frames_overlap_chunks_mask_sigma}")
-		output_to_terminal(f"frames_overlap_chunks_step_gain: {frames_overlap_chunks_step_gain}")
+		output_to_terminal(f"frames_overlap_chunks_motion_smooth: {frames_overlap_chunks_motion_smooth}")
+		output_to_terminal(f"frames_overlap_chunks_motion_decay: {frames_overlap_chunks_motion_decay}")
 		output_to_terminal("================================================================\n")		
 
 		model_high = self.load_model(GGUF_High, Diffusor_High, Use_Model_Type, Diffusor_weight_dtype)
@@ -351,26 +354,18 @@ class WanImageToVideoAdvancedSampler:
 		model_shift = self.initialize_model_shift(use_shift, shift)
 		self.interrupt_execution(locals())
 
-		output_image, fps, = self.postprocess(model_high, model_low, vae, clip_model, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, divide_video_in_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain)
+		output_image, fps, = self.postprocess(model_high, model_low, vae, clip_model, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, divide_video_in_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_motion_smooth, frames_overlap_chunks_motion_decay, clip_vision_astetics_strength)
 		self.interrupt_execution(locals())
 
-		# Break any circular references
-		self.break_circular_references(locals())
-		
-		# Standard cleanup
-		self.cleanup_local_refs(locals())
-		self.enhanced_memory_cleanup(locals())
-		mm.unload_all_models()
-		mm.soft_empty_cache()
+		self.full_memory_cleanup(locals())
 
 		return (output_image, fps,)
 
-	def postprocess(self, model_high, model_low, vae, clip_model, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, divide_video_in_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_mask_sigma, frames_overlap_chunks_step_gain):
+	def postprocess(self, model_high, model_low, vae, clip_model, sage_attention, sage_attention_mode, model_shift, shift, use_shift, wanBlockSwap, use_block_swap, block_swap, tea_cache, use_tea_cache, tea_cache_model_type, tea_cache_rel_l1_thresh, tea_cache_start_percent, tea_cache_end_percent, tea_cache_cache_device, slg_wanvideo, use_SLG, SLG_blocks, SLG_start_percent, SLG_end_percent, clip_vision_model, clip_vision_strength, start_image, start_image_clip_vision_enabled, end_image, end_image_clip_vision_enabled, large_image_side, wan_model_size, total_video_seconds, image_generation_mode, use_dual_samplers, high_cfg, low_cfg, high_denoise, low_denoise, total_steps, total_steps_high_cfg, noise_seed, video_enhance_enabled, use_cfg_zero_star, apply_color_match, apply_color_match_strength, lora_stack, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, divide_video_in_chunks, prompt_stack, fill_noise_latent, frames_interpolation, frames_engine, frames_multiplier, frames_clear_cache_after_n_frames, frames_use_cuda_graph, frames_overlap_chunks, frames_overlap_chunks_blend, frames_overlap_chunks_motion_weight, frames_overlap_chunks_motion_smooth, frames_overlap_chunks_motion_decay, clip_vision_astetics_strength):
 		gc.collect()
 		torch.cuda.empty_cache()
 
-		positive = None
-		negative = None
+		frame_buffer = TemporalFrameBuffer(frames_overlap_chunks * 3, frames_overlap_chunks)
 		remainder_video_seconds = total_video_seconds
 		total_frames = (total_video_seconds * 16) + 1
 		total_video_chunks = 1 if (divide_video_in_chunks == False and total_video_seconds > 5) else int(math.ceil(total_video_seconds / 5.0))
@@ -388,6 +383,8 @@ class WanImageToVideoAdvancedSampler:
 		colorMatch = ColorMatch()
 		clip_vision_start_image = None
 		clip_vision_end_image = None
+		positive = None
+		negative = None
 		positive_clip_high = None
 		positive_clip_low = None
 		negative_clip_high = None
@@ -404,26 +401,25 @@ class WanImageToVideoAdvancedSampler:
 		self.interrupt_execution(locals())
 
 		# Generate video chunks sequentially
-		original_image_start = start_image
+		original_image_start = start_image.clone()
 		original_image_end = end_image
 		output_images = None
-		input_latent = None		
+		input_latent = None
 		input_mask = None
 		input_clip_latent = None
-		
-		# Memory management for full tensors
-		self._memory_checkpoint = None
+		all_output_frames = []
 		
 		output_to_terminal_successful("Generation started...")
 
 		for chunk_index in range(total_video_chunks):
 			chunck_seconds = 5 if (remainder_video_seconds > 5) else remainder_video_seconds
-			chunk_frames = (chunck_seconds * 16) + 1
+			chunk_frames = (chunck_seconds * 16) + 1 + (frames_overlap_chunks if (remainder_video_seconds > 5) else 0)
 			remainder_video_seconds = remainder_video_seconds - 5
 
 			working_model_high = model_high.clone()
 			# Only clone low model if dual samplers are used
 			working_model_low = model_low.clone() if use_dual_samplers else None
+
 			working_clip_high = clip_model.clone()
 			# Only clone low clip if dual samplers are used
 			working_clip_low = clip_model.clone() if use_dual_samplers else None
@@ -508,6 +504,7 @@ class WanImageToVideoAdvancedSampler:
 					CLIPVisionEncoder, large_image_side, wan_model_size, start_image.shape[2], start_image.shape[1], "Start Image",
 					chunk_index
 				)
+				self.interrupt_execution(locals())
 
 			if end_image is not None and (image_generation_mode == END_TO_START_IMAGE):
 				output_to_terminal_successful(f"Original end_image dimensions: {end_image.shape[2]}x{end_image.shape[1]}")
@@ -517,7 +514,7 @@ class WanImageToVideoAdvancedSampler:
 					CLIPVisionEncoder, large_image_side, wan_model_size, end_image.shape[2], end_image.shape[1], "End Image",
 					chunk_index
 				)
-			self.interrupt_execution(locals())
+				self.interrupt_execution(locals())
 
 			model_high_cfg, model_low_cfg, working_clip_high, working_clip_low = self.apply_causvid_lora_processing(working_model_high, working_model_low, working_clip_high, working_clip_low, lora_loader, causvid_lora, high_cfg_causvid_strength, low_cfg_causvid_strength, use_dual_samplers)
 			self.interrupt_execution(locals())
@@ -532,58 +529,39 @@ class WanImageToVideoAdvancedSampler:
 			negative_clip_low, = text_encode.encode(working_clip_low, negative) if use_dual_samplers else (None,)
 			self.interrupt_execution(locals())
 
+			positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low = self.apply_clipvision_astetics(chunk_index, original_image_start, positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low, start_image_clip_vision_enabled, clip_vision, CLIPVisionEncoder, clip_vision_astetics_strength)
+			self.interrupt_execution(locals())
+
 			output_to_terminal_successful("Wan Image to Video started...")
 
 			'''
 			Start creating the latent, mask, and image tensors
 			'''
-			image = None
-			if (chunk_index == 0):
-				output_to_terminal_successful(f"Generating {total_frames} frames")
+			#image = None
+			keep_frames = 0
 
-				output_images = torch.ones((total_frames, image_height, image_width, 3))
-
-				input_latent = {}
-				input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8])
-				input_mask = torch.ones((1, 1, input_latent['samples'].shape[2] * 4, input_latent['samples'].shape[-2], input_latent['samples'].shape[-1]))
-
-				image = torch.ones((chunk_frames, image_height, image_width, 3)) * fill_noise_latent
-
-				if start_image is not None:
-					if (image_generation_mode == START_IMAGE and start_image is not None):
-						output_to_terminal_successful("Generating start frame sequence")
-
-						image[0:1] = start_image
-						input_mask[:, :, 0:1] = 0
-
-				input_clip_latent = vae.encode(image[:,:,:,:3])
-				input_mask = input_mask.view(1, input_mask.shape[2] // 4, 4, input_mask.shape[3], input_mask.shape[4]).transpose(1, 2)
-
-				self._set_memory_checkpoint("full_tensors_created")
-				output_to_terminal(f"Output Images Shape: {output_images.shape}")
+			if chunk_index == 0:
+				keep_frames = chunk_frames - frames_overlap_chunks - 1
+			elif chunk_index == total_video_chunks - 1:
+				remaining_frames = total_frames - sum(len(chunk) for chunk in all_output_frames)
+				keep_frames = remaining_frames - 1
 			else:
-				input_latent = {}
-				input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8])
-				input_mask = torch.ones((1, 1, input_latent['samples'].shape[2] * 4, input_latent['samples'].shape[-2], input_latent['samples'].shape[-1]))
+				keep_frames = chunk_frames - frames_overlap_chunks - 1
 
-				image = torch.ones((chunk_frames, image_height, image_width, 3)) * fill_noise_latent
+			input_latent = {}
+			input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8])
 
-				if start_image is not None:
-					if (image_generation_mode == START_IMAGE and start_image is not None):
-						output_to_terminal_successful("Generating start frame sequence")
-
-						image[0:1] = start_image
-						input_mask[:, :, 0:1] = 0
-
-				input_clip_latent = vae.encode(image[:,:,:,:3])
-				input_mask = input_mask.view(1, input_mask.shape[2] // 4, 4, input_mask.shape[3], input_mask.shape[4]).transpose(1, 2)
-
-				self._set_memory_checkpoint("full_tensors_created")
-				output_to_terminal(f"Output Images Shape: {output_images.shape}")
-
-			input_latent["samples"] = self._optimize_tensor_memory_layout(input_latent["samples"])
-			input_clip_latent = self._optimize_tensor_memory_layout(input_clip_latent)
-			input_mask = self._optimize_tensor_memory_layout(input_mask)
+			# Create conditioning with buffer management
+			input_clip_latent, input_mask = self.create_buffer_managed_conditioning(
+				vae,
+				image_width,
+				image_height,
+				chunk_frames,
+				frame_buffer,
+				frames_overlap_chunks + 1,
+				use_motion_prediction=True,
+				start_image=start_image if chunk_index == 0 else None
+			)
 			'''
 			End creating the latent, mask, and image tensors
 			'''
@@ -594,7 +572,7 @@ class WanImageToVideoAdvancedSampler:
 			positive_clip_low = node_helpers.conditioning_set_values(positive_clip_low, {"concat_latent_image": input_clip_latent, "concat_mask": input_mask}) if use_dual_samplers == True else None
 			negative_clip_low = node_helpers.conditioning_set_values(negative_clip_low, {"concat_latent_image": input_clip_latent, "concat_mask": input_mask}) if use_dual_samplers == True else None
 
-			if (image_generation_mode == START_IMAGE and clip_vision_start_image is not None):
+			if (chunk_index > 0 and image_generation_mode == START_IMAGE and clip_vision_start_image is not None):
 				output_to_terminal_successful("Running clipvision for start sequence")
 
 				start_hidden = clip_vision_start_image.penultimate_hidden_states * clip_vision_strength
@@ -608,64 +586,54 @@ class WanImageToVideoAdvancedSampler:
 				negative_clip_low = node_helpers.conditioning_set_values(negative_clip_low, {"clip_vision_output": clip_vision_output}) if use_dual_samplers == True else None
 			self.interrupt_execution(locals())
 					
-			current_window_mask_start = (chunck_seconds * 16) * chunk_index
-			current_window_mask_size = chunk_frames if (chunk_index == total_video_chunks - 1) else chunk_frames - 1
-			
 			output_to_terminal(f"Chunk {chunk_index + 1}: Frame Count: {chunk_frames}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: Latent Shape: {input_latent["samples"].shape}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: Mask Shape: {input_mask.shape}")
 			output_to_terminal(f"Chunk {chunk_index + 1}: CLIP Latent Image Shape: {input_clip_latent.shape}")
 
-			# Partial memory cleanup after window extraction
-			if chunk_index > 0:
-				self._partial_memory_cleanup(chunk_index)
-				
-			# Check memory usage after window extraction
-			self._check_memory_checkpoint(f"window_extraction_chunk_{chunk_index}")
 			self.interrupt_execution(locals())
-
-			# Apply adaptive precision to conditioning tensors
-			positive_clip_high = self._adaptive_tensor_precision(positive_clip_high, "encoding")
-			negative_clip_high = self._adaptive_tensor_precision(negative_clip_high, "encoding")
-			if use_dual_samplers:
-				positive_clip_low = self._adaptive_tensor_precision(positive_clip_low, "encoding")
-				negative_clip_low = self._adaptive_tensor_precision(negative_clip_low, "encoding")
 
 			# Light cleanup without interfering with active models
 			gc.collect()
 			torch.cuda.empty_cache()
 			self.interrupt_execution(locals())
 			
-			# Set memory checkpoint before sampling
-			self._set_memory_checkpoint(f"pre_sampling_chunk_{chunk_index}")
-
 			if (use_dual_samplers):
 				input_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, noise_seed, total_steps, high_cfg, low_cfg, positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low, input_latent, total_steps_high_cfg, high_denoise, low_denoise)
 			else:
 				input_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, noise_seed, total_steps, high_cfg, positive_clip_high, negative_clip_high, input_latent, high_denoise)
 			self.interrupt_execution(locals())
 
-			# Check memory usage after sampling
-			self._check_memory_checkpoint(f"post_sampling_chunk_{chunk_index}")
-
-			tmp_images = vae.decode(input_latent["samples"])
-			if len(tmp_images.shape) == 5:
-				tmp_images = tmp_images.reshape(-1, tmp_images.shape[-3], tmp_images.shape[-2], tmp_images.shape[-1])
-			tmp_images, _, _, _ = self.process_image(original_image_start,
-				tmp_images, False, None, resizer, wan_max_resolution, 
-				None, large_image_side, wan_model_size, tmp_images.shape[2], tmp_images.shape[1], "Chunk Images",
+			chunk_images = vae.decode(input_latent["samples"])
+			if len(chunk_images.shape) == 5:
+				chunk_images = chunk_images.reshape(-1, chunk_images.shape[-3], chunk_images.shape[-2], chunk_images.shape[-1])
+			chunk_images, _, _, _ = self.process_image(original_image_start,
+				chunk_images, False, None, resizer, wan_max_resolution, 
+				None, large_image_side, wan_model_size, chunk_images.shape[2], chunk_images.shape[1], "Chunk Images",
 				chunk_index
 			)
-			tmp_images = self.apply_color_match_to_image(original_image_start, tmp_images, apply_color_match, colorMatch, apply_color_match_strength)
-			self.interrupt_execution(locals())
 
-			if chunk_index < (total_video_chunks - 1):
-				start_image = tmp_images[-1:, :, :, :].clone()
-				tmp_images = tmp_images[0:chunk_frames - 1, :, :, :]
+			chunk_images = self.apply_color_match_to_image(original_image_start, chunk_images, apply_color_match, colorMatch, apply_color_match_strength)
+
+			# Process chunk based on position
+			if chunk_index == 0:
+				# First chunk: keep all frames except overlap buffer
+				output_frames = chunk_images[:keep_frames]
+				buffer_frames = chunk_images  # Initialize buffer with full chunk
+				
+				# Initialize buffer
+				frame_buffer.initialize_buffer(buffer_frames, input_latent["samples"])
+			else:
+				# Subsequent chunks: skip overlap, keep new content
+				new_frames = chunk_images[frames_overlap_chunks+1:] if (chunk_index == (total_video_chunks - 1)) else chunk_images[1:]
+				output_frames = new_frames[:keep_frames] if (chunk_index == (total_video_chunks - 1)) else new_frames
+				
+				# Update buffer with new frames
+				frame_buffer.add_frames(new_frames, input_latent["samples"][:, :, frames_overlap_chunks+1:])
 
 			# Merge the sampled chunk results back into the full input_latent
-			output_images[current_window_mask_start:current_window_mask_start + current_window_mask_size] = tmp_images
-			output_to_terminal(f"Chunk {chunk_index + 1}: Merged sampled results shape {tmp_images.shape} to output latent: {output_images.shape}")
+			all_output_frames.append(output_frames)
+			output_to_terminal(f"Chunk {chunk_index + 1}: Merged sampled results shape {output_frames.shape}")
 
 			# Clean up after reference frame operations
 			gc.collect()
@@ -697,23 +665,24 @@ class WanImageToVideoAdvancedSampler:
 			positive_clip_high = None
 			positive_clip_low = None
 			negative_clip_high = None
-			negative_clip_low = None
+			negative_clip_low = None			
 			gc.collect()
 			torch.cuda.empty_cache()
 			self.interrupt_execution(locals())
 
+		output_images = torch.cat(all_output_frames, dim=0)
+
 		# Final comprehensive memory cleanup for all chunks
 		self._final_memory_cleanup([input_mask, input_latent, input_clip_latent])
 		
-		del input_mask
-		del input_latent
-		del input_clip_latent
-
 		# Force cleanup of main models before final processing - be less aggressive
 		# Only break circular references, don't force cleanup active models
 		self.break_circular_references(locals())
 
 		self.interrupt_execution(locals())
+
+		frame_buffer.clear_buffer()
+		del frame_buffer
 
 		# Light cleanup only
 		gc.collect()
@@ -742,6 +711,24 @@ class WanImageToVideoAdvancedSampler:
 		output_to_terminal(f"Final Output Image Shape: {output_images.shape}")
 
 		return (output_images, self.default_fps,)
+
+	def apply_clipvision_astetics(self, chunk_index, reference_image, clip_positive_high, clip_negative_high, clip_positive_low, clip_negative_low, image_clip_vision_enabled, clip_vision, CLIPVisionEncoder, clip_vision_astetics_strength):
+		if (chunk_index > 0) and (image_clip_vision_enabled) and (clip_vision is not None):
+			output_to_terminal_successful(f"Encoding CLIP Vision for Astetics...")
+
+			clip_vision_image, = CLIPVisionEncoder.encode(clip_vision, reference_image, "center")
+
+			hidden = clip_vision_image.penultimate_hidden_states * clip_vision_astetics_strength
+
+			clip_vision_output = comfy.clip_vision.Output()
+			clip_vision_output.penultimate_hidden_states = hidden
+
+			clip_positive_high = node_helpers.conditioning_set_values(clip_positive_high, {"clip_vision_output": clip_vision_output})
+			clip_negative_high = node_helpers.conditioning_set_values(clip_negative_high, {"clip_vision_output": clip_vision_output})
+			clip_positive_low = node_helpers.conditioning_set_values(clip_positive_low, {"clip_vision_output": clip_vision_output}) if clip_positive_low is not None else None
+			clip_negative_low = node_helpers.conditioning_set_values(clip_negative_low, {"clip_vision_output": clip_vision_output}) if clip_negative_low is not None else None
+
+		return clip_positive_high, clip_negative_high, clip_positive_low, clip_negative_low
 
 	def get_current_prompt(self, prompt_stack, chunk_index):
 		"""
@@ -1511,31 +1498,6 @@ class WanImageToVideoAdvancedSampler:
 		# Light garbage collection
 		gc.collect()
 
-	def _partial_memory_cleanup(self, chunk_index):
-		"""
-		Perform partial memory cleanup during chunk processing.
-		
-		Args:
-			chunk_index: Current chunk being processed
-		"""
-		try:
-			# Light garbage collection
-			collected = gc.collect()
-			
-			# CUDA memory management
-			if torch.cuda.is_available():
-				torch.cuda.empty_cache()
-				if hasattr(torch.cuda, 'synchronize'):
-					torch.cuda.synchronize()
-					
-				# Log memory status
-				mem_allocated = torch.cuda.memory_allocated() / (1024**3)
-				mem_reserved = torch.cuda.memory_reserved() / (1024**3)
-				output_to_terminal_successful(f"Chunk {chunk_index + 1} partial cleanup - Allocated: {mem_allocated:.2f}GB, Reserved: {mem_reserved:.2f}GB")
-				
-		except Exception as e:
-			output_to_terminal_error(f"Error in partial memory cleanup for chunk {chunk_index}: {str(e)}")
-
 	def _cleanup_chunk_memory(self, chunk_index, total_chunks, variables_to_clean):
 		"""
 		Comprehensive memory cleanup for each chunk with windowed processing optimization.
@@ -1619,77 +1581,6 @@ class WanImageToVideoAdvancedSampler:
 			gc.collect()
 			if torch.cuda.is_available():
 				torch.cuda.empty_cache()
-
-	def _set_memory_checkpoint(self, checkpoint_name):
-		"""
-		Set a memory checkpoint for tracking memory usage patterns.
-		
-		Args:
-			checkpoint_name: Name of the checkpoint for logging
-		"""
-		try:
-			if torch.cuda.is_available():
-				allocated = torch.cuda.memory_allocated() / (1024**3)
-				reserved = torch.cuda.memory_reserved() / (1024**3)
-				self._memory_checkpoint = {
-					'name': checkpoint_name,
-					'allocated': allocated,
-					'reserved': reserved,
-					'timestamp': time.time()
-				}
-				output_to_terminal_successful(f"Memory checkpoint '{checkpoint_name}': {allocated:.2f}GB allocated, {reserved:.2f}GB reserved")
-		except Exception as e:
-			output_to_terminal_error(f"Error setting memory checkpoint: {str(e)}")
-
-	def _check_memory_checkpoint(self, current_operation):
-		"""
-		Check memory usage against the last checkpoint.
-		
-		Args:
-			current_operation: Description of current operation
-		"""
-		try:
-			if self._memory_checkpoint and torch.cuda.is_available():
-				current_allocated = torch.cuda.memory_allocated() / (1024**3)
-				current_reserved = torch.cuda.memory_reserved() / (1024**3)
-				
-				allocated_diff = current_allocated - self._memory_checkpoint['allocated']
-				reserved_diff = current_reserved - self._memory_checkpoint['reserved']
-				
-				if allocated_diff > 1.0:  # More than 1GB increase
-					output_to_terminal_successful(f"Memory increase since '{self._memory_checkpoint['name']}': +{allocated_diff:.2f}GB allocated during {current_operation}")
-					
-		except Exception as e:
-			output_to_terminal_error(f"Error checking memory checkpoint: {str(e)}")
-
-	def _optimize_tensor_memory_layout(self, tensor):
-		"""
-		Optimize tensor memory layout for better cache efficiency.
-		
-		Args:
-			tensor: Input tensor to optimize
-			
-		Returns:
-			Optimized tensor with better memory layout
-		"""
-		try:
-			if hasattr(tensor, 'contiguous') and not tensor.is_contiguous():
-				# Make tensor contiguous for better memory access patterns
-				tensor = tensor.contiguous()
-				
-			# For large tensors, consider using half precision if appropriate
-			if hasattr(tensor, 'dtype') and tensor.dtype == torch.float32:
-				total_elements = tensor.numel()
-				if total_elements > 10000000:  # 10M elements threshold
-					# Only convert if it won't significantly impact quality
-					output_to_terminal_successful(f"Converting large tensor to half precision for memory efficiency")
-					tensor = tensor.half()
-					
-			return tensor
-			
-		except Exception as e:
-			output_to_terminal_error(f"Error optimizing tensor memory layout: {str(e)}")
-			return tensor
 
 	def _final_memory_cleanup(self, large_tensors):
 		"""
@@ -1961,7 +1852,7 @@ class WanImageToVideoAdvancedSampler:
 			
 			# 5. CLEAN CLASS INSTANCE VARIABLES THAT MIGHT HAVE CIRCULAR REFS
 			class_cache_attrs = [
-				'_cache_manager', '_memory_bank', '_spectral_blend_cache',
+				'_memory_bank', '_spectral_blend_cache',
 				'_optical_flow_features', '_noise_schedule_cache', '_previous_chunk_latents',
 				'_temporal_features', '_original_clip_vision', '_original_image_reference',
 				'_original_color_stats', '_drift_detection_reference'
@@ -2055,76 +1946,167 @@ class WanImageToVideoAdvancedSampler:
 		global interrupt_processing_mutex
 		with interrupt_processing_mutex:
 			if interrupt_processing:
-				gc.collect()
-				torch.cuda.empty_cache()
-
-				# Use provided local variables or empty dict as fallback
-				if local_vars is None:
-					local_vars = {}
-
-				# Comprehensive circular reference detection and cleanup
-				cleanup_stats = self.comprehensive_circular_reference_cleanup(local_vars)
-				
-				# Additional standard cleanup (backup)
-				self.break_circular_references(local_vars)
-				self.cleanup_local_refs(local_vars)
-				self.enhanced_memory_cleanup(local_vars)
-				mm.unload_all_models()
-				mm.soft_empty_cache()
-
+				self.full_memory_cleanup(local_vars)
 				interrupt_processing = False
 				raise InterruptProcessingException()
-						
-	def _adaptive_tensor_precision(self, tensor, operation_type="general"):
-		"""
-		Adaptively adjust tensor precision based on operation type and memory pressure.
+
+	def full_memory_cleanup(self, local_vars=None):
+		gc.collect()
+		torch.cuda.empty_cache()
+
+		# Use provided local variables or empty dict as fallback
+		if local_vars is None:
+			local_vars = {}
+
+		# Comprehensive circular reference detection and cleanup
+		self.comprehensive_circular_reference_cleanup(local_vars)
 		
-		Args:
-			tensor: Input tensor to potentially convert
-			operation_type: Type of operation ("sampling", "encoding", "general")
-			
-		Returns:
-			Tensor with appropriate precision
+		# Additional standard cleanup (backup)
+		self.break_circular_references(local_vars)
+		self.cleanup_local_refs(local_vars)
+		self.enhanced_memory_cleanup(local_vars)
+		mm.unload_all_models()
+		mm.soft_empty_cache()
+						
+	def create_buffer_managed_conditioning(self, vae, width, height, chunk_length, frame_buffer, overlap_frames=16, use_motion_prediction=True, start_image=None):
 		"""
-		try:
-			# If tensor is None or not a torch tensor, return as-is
-			if tensor is None or not hasattr(tensor, 'dtype'):
-				return tensor
-				
-			# Only convert float32 tensors
-			if tensor.dtype != torch.float32:
-				return tensor
-				
-			# Check current memory pressure
-			if torch.cuda.is_available():
-				try:
-					allocated = torch.cuda.memory_allocated() / (1024**3)  # GB
-					total_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)  # GB
-					memory_pressure = allocated / total_memory
-					
-					# High memory pressure scenarios
-					if memory_pressure > 0.8:  # Using more than 80% of VRAM
-						if operation_type in ["encoding", "general"]:
-							output_to_terminal_successful(f"High memory pressure ({memory_pressure:.1%}), converting tensor to half precision")
-							return tensor.half()
-						elif operation_type == "sampling":
-							# Be more conservative with sampling tensors
-							if memory_pressure > 0.9:  # Only convert at very high pressure
-								output_to_terminal_successful(f"Very high memory pressure ({memory_pressure:.1%}), converting sampling tensor to half precision")
-								return tensor.half()
-					
-					# Check tensor size - convert very large tensors regardless of memory pressure
-					if hasattr(tensor, 'numel'):
-						tensor_size_mb = tensor.numel() * 4 / (1024 * 1024)  # 4 bytes per float32
-						if tensor_size_mb > 500:  # Larger than 500MB
-							output_to_terminal_successful(f"Large tensor ({tensor_size_mb:.1f}MB), converting to half precision")
-							return tensor.half()
-							
-				except Exception as e:
-					output_to_terminal_error(f"Error checking memory pressure: {str(e)}")
-					
-			return tensor
+		Create conditioning using advanced buffer management with strong visual continuity
+		"""
+		# Get overlap data from buffer
+		overlap_frames_data = frame_buffer.get_overlap_frames()
+		
+		# Create full image tensor for the entire chunk
+		image_tensor = torch.ones((chunk_length, height, width, 3)) * 0.5
+		
+		# Encode first to get proper latent dimensions
+		temp_latent = vae.encode(image_tensor[:1, :, :, :3])  # Encode just one frame to get dimensions
+		latent_h, latent_w = temp_latent.shape[3], temp_latent.shape[4]
+		device = temp_latent.device  # Get device from VAE output
+		
+		# Create mask with proper latent spatial dimensions and device
+		mask = torch.ones((1, 1, chunk_length, latent_h, latent_w), device=device)
+		
+		if overlap_frames_data is not None:
+			# Use MORE overlap frames for stronger continuity
+			extended_overlap = min(overlap_frames * 2, overlap_frames_data.shape[0], chunk_length)
 			
-		except Exception as e:
-			output_to_terminal_error(f"Error in adaptive tensor precision: {str(e)}")
-			return tensor
+			# Place overlap frames at the beginning with extended coverage
+			image_tensor[:extended_overlap] = overlap_frames_data[-extended_overlap:]
+			
+			# Create STRONGER conditioning mask
+			mask[:, :, :extended_overlap] = 0.0  # Force use of overlap frames
+			
+			# Create gradual transition zone for smoother blending
+			transition_frames = min(8, chunk_length - extended_overlap)
+			for i in range(transition_frames):
+				frame_idx = extended_overlap + i
+				if frame_idx < chunk_length:
+					# Gradual transition from strict to free
+					alpha = i / transition_frames
+					mask[:, :, frame_idx] = alpha * 0.5  # Partial conditioning
+					
+					# Use motion prediction for transition frames
+					if use_motion_prediction:
+						motion_pred = frame_buffer.get_motion_prediction()
+						if motion_pred is not None:
+							decay_factor = 0.9 ** i
+							base_frame = overlap_frames_data[-1]
+							predicted_frame = torch.clamp(
+								base_frame + motion_pred * decay_factor, 0.0, 1.0
+							)
+							# Blend with existing content
+							image_tensor[frame_idx] = (
+								image_tensor[frame_idx] * alpha + 
+								predicted_frame * (1 - alpha)
+							)
+		
+		# Handle start image override (should be last to take priority)
+		if start_image is not None:
+			image_tensor[0:1] = start_image
+			mask[:, :, 0:1] = 0.0
+		
+		# Apply feature matching for better visual continuity
+		if overlap_frames_data is not None and overlap_frames_data.shape[0] > 4:
+			# Extract visual features from last overlap frame
+			reference_frame = overlap_frames_data[-1]
+			
+			# Get style features from buffer if available
+			style_features = frame_buffer.get_style_features()
+			color_stats = frame_buffer.get_color_stats()
+			
+			# Apply color and luminance matching to free generation area
+			image_tensor = self.apply_color_consistency(
+				image_tensor, reference_frame, extended_overlap, style_features, color_stats
+			)
+		
+		# Encode entire image sequence to latent
+		input_clip_latent = vae.encode(image_tensor[:, :, :, :3])
+		
+		# Ensure mask matches latent temporal dimension (VAE compresses by 4x)
+		latent_frames = input_clip_latent.shape[2]
+		
+		if mask.shape[2] != latent_frames:
+			# Use simple indexing/repetition instead of interpolate for temporal adjustment
+			if mask.shape[2] > latent_frames:
+				# Downsample: take every 4th frame approximately
+				indices = torch.linspace(0, mask.shape[2] - 1, latent_frames).long()
+				mask = mask[:, :, indices, :, :]
+			else:
+				# Upsample: repeat frames
+				repeat_factor = latent_frames // mask.shape[2]
+				remainder = latent_frames % mask.shape[2]
+				mask_repeated = mask.repeat(1, 1, repeat_factor, 1, 1)
+				if remainder > 0:
+					mask_extra = mask[:, :, :remainder, :, :]
+					mask = torch.cat([mask_repeated, mask_extra], dim=2)
+		
+		return input_clip_latent, mask
+	
+	def apply_color_consistency(self, image_tensor, reference_frame, transition_start, style_features=None, color_stats=None):
+		"""
+		Apply enhanced color and style consistency to maintain visual continuity
+		"""
+		# Use style features if available, otherwise extract from reference
+		if style_features is not None and color_stats is not None:
+			ref_mean = color_stats['mean']
+			ref_std = color_stats['std']
+			luma_target = style_features.get('luma_mean', 0.5)
+		else:
+			# Fallback to reference frame
+			ref_mean = reference_frame.mean(dim=[0, 1], keepdim=True)
+			ref_std = reference_frame.std(dim=[0, 1], keepdim=True)
+			ref_luma = (reference_frame[:, :, 0] * 0.299 + 
+					   reference_frame[:, :, 1] * 0.587 + 
+					   reference_frame[:, :, 2] * 0.114)
+			luma_target = ref_luma.mean()
+		
+		# Apply enhanced color matching to transition and free frames
+		for i in range(transition_start, image_tensor.shape[0]):
+			frame = image_tensor[i]
+			frame_mean = frame.mean(dim=[0, 1], keepdim=True)
+			frame_std = frame.std(dim=[0, 1], keepdim=True)
+			
+			# Stronger color transfer with slower decay for better consistency
+			decay = 0.85 ** (i - transition_start)  # Slower decay
+			target_mean = ref_mean * decay + frame_mean * (1 - decay)
+			target_std = ref_std * decay + frame_std * (1 - decay)
+			
+			# Apply color transfer
+			normalized = (frame - frame_mean) / (frame_std + 1e-8)
+			image_tensor[i] = normalized * target_std + target_mean
+			
+			# Apply luminance consistency
+			if style_features is not None:
+				frame_luma = (image_tensor[i][:, :, 0] * 0.299 + 
+							 image_tensor[i][:, :, 1] * 0.587 + 
+							 image_tensor[i][:, :, 2] * 0.114)
+				current_luma = frame_luma.mean()
+				luma_diff = luma_target - current_luma
+				luma_adjustment = luma_diff * decay * 0.3  # Gentle luminance adjustment
+				
+				# Apply luminance correction
+				image_tensor[i] = image_tensor[i] + luma_adjustment
+			
+			image_tensor[i] = torch.clamp(image_tensor[i], 0.0, 1.0)
+		
+		return image_tensor

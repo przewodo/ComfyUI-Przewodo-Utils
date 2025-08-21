@@ -52,17 +52,19 @@ CLIP_DEVICE_LIST = [CLIP_DEVICE_DEFAULT, CLIP_DEVICE_CPU]
 
 WAN_480P = 'Wan 480p'
 WAN_720P = 'Wan 720p'
-WAN_MODELS = [WAN_480P, WAN_720P]
-WAN_MODELS_CONFIG = {
-    WAN_480P: { 'max_side': 832, 'max_pixels': 832 * 480, 'model_name': WAN_480P},
-    WAN_720P: { 'max_side': 1280, 'max_pixels': 1280 * 720, 'model_name': WAN_720P},
-}
-
 SD = 'SD'
 SDXL = 'SDXL'
 FLUX_KONTEXT = 'Flux Kontext'
 FLUX_1D = 'Flux 1D'
 QWEN_IMAGE = 'Qwen Image'
+WAN_2_2 = 'Wan 2.2'
+
+WAN_MODELS = [WAN_480P, WAN_720P, WAN_2_2]
+WAN_MODELS_CONFIG = {
+    WAN_480P: { 'max_side': 832, 'max_pixels': 832 * 480, 'model_name': WAN_480P},
+    WAN_720P: { 'max_side': 1280, 'max_pixels': 1280 * 720, 'model_name': WAN_720P},
+    WAN_2_2: { 'max_side': 1280, 'max_pixels': 1280 * 720, 'model_name': WAN_2_2},
+}
 
 START_IMAGE = "Start Image"
 TEXT_TO_VIDEO = "Text to Video"
