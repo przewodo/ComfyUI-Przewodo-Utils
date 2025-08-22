@@ -428,10 +428,11 @@ class WanImageToVideoAdvancedSampler:
 			torch.cuda.empty_cache()
 
 			# Apply Model Patch Torch Settings
-			working_model_high = self.apply_model_patch_torch_settings(working_model_high)
-			if use_dual_samplers:
-				working_model_low = self.apply_model_patch_torch_settings(working_model_low)
-			self.interrupt_execution(locals())
+			if (wan_model_size != WAN_2_2):
+				working_model_high = self.apply_model_patch_torch_settings(working_model_high)
+				if use_dual_samplers:
+					working_model_low = self.apply_model_patch_torch_settings(working_model_low)
+				self.interrupt_execution(locals())
 
 			# Apply Sage Attention
 			working_model_high = self.apply_sage_attention(sage_attention, working_model_high, sage_attention_mode)
@@ -599,7 +600,7 @@ class WanImageToVideoAdvancedSampler:
 			self.interrupt_execution(locals())
 			
 			if (use_dual_samplers):
-				input_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, noise_seed, total_steps, high_cfg, low_cfg, positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low, input_latent, total_steps_high_cfg, high_denoise, low_denoise)
+				input_latent = self.apply_dual_sampler_processing(model_high_cfg, model_low_cfg, k_sampler, noise_seed, total_steps, high_cfg, low_cfg, positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low, input_latent, total_steps_high_cfg, high_denoise, low_denoise, wan_model_size)
 			else:
 				input_latent = self.apply_single_sampler_processing(model_high_cfg, k_sampler, noise_seed, total_steps, high_cfg, positive_clip_high, negative_clip_high, input_latent, high_denoise)
 			self.interrupt_execution(locals())
@@ -1153,14 +1154,26 @@ class WanImageToVideoAdvancedSampler:
 			
 		return working_model
 
-	def apply_dual_sampler_processing(self, model_high_cfg, model_low_cfg, k_sampler, noise_seed, total_steps, high_cfg, low_cfg, positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low, in_latent, total_steps_high_cfg, high_denoise, low_denoise):
+	def apply_dual_sampler_processing(self, model_high_cfg, model_low_cfg, k_sampler, noise_seed, total_steps, high_cfg, low_cfg, positive_clip_high, negative_clip_high, positive_clip_low, negative_clip_low, in_latent, total_steps_high_cfg, high_denoise, low_denoise, wan_model_size):
 		stop_steps = int(total_steps_high_cfg / 100 * total_steps)
+		high_start = 0
+		high_stop = stop_steps
+		low_start = stop_steps
+		low_stop = total_steps
+
+		if (wan_model_size == WAN_2_2):
+			stop_steps = total_steps // 2
+			total_steps = stop_steps
+			high_start = 0
+			high_stop = stop_steps
+			low_start = 0
+			low_stop = stop_steps
 
 		gc.collect()
 		torch.cuda.empty_cache()
 		
 		output_to_terminal_successful("High CFG KSampler started...")
-		out_latent, = k_sampler.sample(model_high_cfg, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", positive_clip_high, negative_clip_high, in_latent, 0, stop_steps, "enabled", high_denoise)
+		out_latent, = k_sampler.sample(model_high_cfg, "enable", noise_seed, total_steps, high_cfg, "uni_pc", "simple", positive_clip_high, negative_clip_high, in_latent, high_start, high_stop, "enabled", high_denoise)
 		self.interrupt_execution(locals())
 		
 		# Light cleanup between samplers
@@ -1168,7 +1181,7 @@ class WanImageToVideoAdvancedSampler:
 		torch.cuda.empty_cache()
 
 		output_to_terminal_successful("Low CFG KSampler started...")
-		out_latent, = k_sampler.sample(model_low_cfg, "disable", noise_seed, total_steps, low_cfg, "lcm", "simple", positive_clip_low, negative_clip_low, out_latent, stop_steps, total_steps, "enabled", low_denoise)
+		out_latent, = k_sampler.sample(model_low_cfg, "disable", noise_seed, total_steps, low_cfg, "lcm", "simple", positive_clip_low, negative_clip_low, out_latent, low_start, low_stop, "enabled", low_denoise)
 		self.interrupt_execution(locals())
 		
 		# Light cleanup after sampling
