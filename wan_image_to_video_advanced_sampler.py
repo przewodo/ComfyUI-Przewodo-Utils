@@ -617,7 +617,7 @@ class WanImageToVideoAdvancedSampler:
 			chunk_images = self.apply_color_match_to_image(original_image_start, chunk_images, apply_color_match, colorMatch, apply_color_match_strength)
 
 			# Process chunk based on position
-			if chunk_index == 0:
+			if chunk_index == 0 and chunk_index < (total_video_chunks - 1):
 				# First chunk: keep all frames except overlap buffer
 				output_frames = chunk_images[:keep_frames]
 				buffer_frames = chunk_images  # Initialize buffer with full chunk
@@ -626,8 +626,8 @@ class WanImageToVideoAdvancedSampler:
 				frame_buffer.initialize_buffer(buffer_frames, input_latent["samples"])
 			else:
 				# Subsequent chunks: skip overlap, keep new content
-				new_frames = chunk_images[frames_overlap_chunks+1:] if (chunk_index == (total_video_chunks - 1)) else chunk_images[1:]
-				output_frames = new_frames[:keep_frames] if (chunk_index == (total_video_chunks - 1)) else new_frames
+				new_frames = chunk_images[frames_overlap_chunks+1:]
+				output_frames = new_frames[:keep_frames] if (chunk_index < (total_video_chunks - 1)) else chunk_images[:-1]
 				
 				# Update buffer with new frames
 				frame_buffer.add_frames(new_frames, input_latent["samples"][:, :, frames_overlap_chunks+1:])
@@ -666,18 +666,26 @@ class WanImageToVideoAdvancedSampler:
 			positive_clip_high = None
 			positive_clip_low = None
 			negative_clip_high = None
-			negative_clip_low = None			
+			negative_clip_low = None
+			new_frames = None
+			output_frames = None
+			chunk_images = None
 			gc.collect()
 			torch.cuda.empty_cache()
 			self.interrupt_execution(locals())
 
 		output_images = torch.cat(all_output_frames, dim=0)
 
+		# Clear the variable to free memory
+		del all_output_frames
+
 		# Final comprehensive memory cleanup for all chunks
 		self._final_memory_cleanup([input_mask, input_latent, input_clip_latent])
 		
 		# Force cleanup of main models before final processing - be less aggressive
 		# Only break circular references, don't force cleanup active models
+		self.break_circular_references(locals())
+		self.break_circular_references(locals())
 		self.break_circular_references(locals())
 
 		self.interrupt_execution(locals())
