@@ -185,7 +185,8 @@ class WanImageToVideoAdvancedSampler:
 
 		gc.collect()
 		torch.cuda.empty_cache()
-
+		self.full_memory_cleanup(locals())
+		
 		# ================================================================
 		# 📊 PARAMETER LOGGING - Lines 105-207
 		# ================================================================
