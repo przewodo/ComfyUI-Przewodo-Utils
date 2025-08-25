@@ -1010,11 +1010,18 @@ class WanImageToVideoAdvancedSampler:
 			img_large_side = max(new_width, new_height)
 
 			if (wan_large_side < img_large_side):
-				image, image_width, image_height, _ = resizer.resize(image, tmp_width, tmp_height, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
+				_, image_width, image_height, _ = resizer.resize(image, tmp_width, tmp_height, "resize", "lanczos", 8, "0, 0, 0", "center", None, "cpu", None)
 			else:
-				image, image_width, image_height, _ = resizer.resize(image, new_width, new_height, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
+				_, image_width, image_height, _ = resizer.resize(image, new_width, new_height, "resize", "lanczos", 8, "0, 0, 0", "center", None, "cpu", None)
 
-			output_to_terminal_successful(f"{image_type} final size: {image_width}x{image_height}")
+			tmp_image_tensor = torch.ones((1, image_height // 8, image_width // 8, 3)) * 0.5
+			image_width, image_height = tmp_image_tensor.shape[2] * 8, tmp_image_tensor.shape[1] * 8
+
+			image, _, _, _ = resizer.resize(image, image_width, image_width, "resize", "lanczos", 8, "0, 0, 0", "center", None, "cpu", None)
+			
+			output_to_terminal_successful(f"Temp Tensor shape: {tmp_image_tensor.shape}")
+
+			output_to_terminal_successful(f"{image_type} final size: {image_width}x{image_height} | Image Shape: {image.shape}")
 
 			if (chunk_index > 0) and (image_clip_vision_enabled) and (clip_vision is not None):
 				output_to_terminal_successful(f"Encoding CLIP Vision for {image_type}...")
