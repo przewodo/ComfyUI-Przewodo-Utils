@@ -608,9 +608,10 @@ class WanImageToVideoAdvancedSampler:
 			chunk_images = vae.decode(input_latent["samples"])
 			if len(chunk_images.shape) == 5:
 				chunk_images = chunk_images.reshape(-1, chunk_images.shape[-3], chunk_images.shape[-2], chunk_images.shape[-1])
+
 			chunk_images, _, _, _ = self.process_image(original_image_start,
 				chunk_images, False, None, resizer, wan_max_resolution, 
-				None, large_image_side, wan_model_size, chunk_images.shape[2], chunk_images.shape[1], "Chunk Images",
+				None, large_image_side, wan_model_size, image_width, image_height, "Chunk Images",
 				chunk_index
 			)
 
@@ -1008,16 +1009,9 @@ class WanImageToVideoAdvancedSampler:
 			img_large_side = max(new_width, new_height)
 
 			if (wan_large_side < img_large_side):
-				_, image_width, image_height, _ = resizer.resize(image, tmp_width, tmp_height, "resize", "lanczos", 8, "0, 0, 0", "center", None, "cpu", None)
+				image, image_width, image_height, _ = resizer.resize(image, tmp_width, tmp_height, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
 			else:
-				_, image_width, image_height, _ = resizer.resize(image, new_width, new_height, "resize", "lanczos", 8, "0, 0, 0", "center", None, "cpu", None)
-
-			tmp_image_tensor = torch.ones((1, image_height // 8, image_width // 8, 3)) * 0.5
-			image_width, image_height = tmp_image_tensor.shape[2] * 8, tmp_image_tensor.shape[1] * 8
-
-			image, _, _, _ = resizer.resize(image, image_width, image_height, "resize", "lanczos", 8, "0, 0, 0", "center", None, "cpu", None)
-			
-			output_to_terminal_successful(f"Temp Tensor shape: {tmp_image_tensor.shape}")
+				image, image_width, image_height, _ = resizer.resize(image, new_width, new_height, "resize", "lanczos", 2, "0, 0, 0", "center", None, "cpu", None)
 
 			output_to_terminal_successful(f"{image_type} final size: {image_width}x{image_height} | Image Shape: {image.shape}")
 
@@ -2007,6 +2001,26 @@ class WanImageToVideoAdvancedSampler:
 		
 		# Encode first to get proper latent dimensions
 		temp_latent = vae.encode(image_tensor[:1, :, :, :3])  # Encode just one frame to get dimensions
+		
+		# Scale the latent spatial dimensions to target size
+		# Handle 5D tensor (batch, channels, frames, height, width) or 4D tensor (batch, channels, height, width)
+		if len(temp_latent.shape) == 5:
+			# 5D tensor: (batch, channels, frames, height, width)
+			temp_latent = torch.nn.functional.interpolate(
+				temp_latent, 
+				size=(temp_latent.shape[2], height // 8, width // 8),  # (frames, height, width)
+				mode='trilinear', 
+				align_corners=False
+			)
+		else:
+			# 4D tensor: (batch, channels, height, width)
+			temp_latent = torch.nn.functional.interpolate(
+				temp_latent, 
+				size=(height // 8, width // 8), 
+				mode='bilinear', 
+				align_corners=False
+			)
+
 		latent_h, latent_w = temp_latent.shape[3], temp_latent.shape[4]
 		device = temp_latent.device  # Get device from VAE output
 		
@@ -2068,6 +2082,25 @@ class WanImageToVideoAdvancedSampler:
 		
 		# Encode entire image sequence to latent
 		input_clip_latent = vae.encode(image_tensor[:, :, :, :3])
+		
+		# Scale the latent spatial dimensions to target size
+		# Handle 5D tensor (batch, channels, frames, height, width) or 4D tensor (batch, channels, height, width)
+		if len(input_clip_latent.shape) == 5:
+			# 5D tensor: (batch, channels, frames, height, width)
+			input_clip_latent = torch.nn.functional.interpolate(
+				input_clip_latent, 
+				size=(input_clip_latent.shape[2], height // 8, width // 8),  # (frames, height, width)
+				mode='trilinear', 
+				align_corners=False
+			)
+		else:
+			# 4D tensor: (batch, channels, height, width)
+			input_clip_latent = torch.nn.functional.interpolate(
+				input_clip_latent, 
+				size=(height // 8, width // 8), 
+				mode='bilinear', 
+				align_corners=False
+			)
 		
 		# Ensure mask matches latent temporal dimension (VAE compresses by 4x)
 		latent_frames = input_clip_latent.shape[2]
