@@ -185,8 +185,7 @@ class WanImageToVideoAdvancedSampler:
 
 		gc.collect()
 		torch.cuda.empty_cache()
-		self.full_memory_cleanup(locals())
-		
+
 		# ================================================================
 		# 📊 PARAMETER LOGGING - Lines 105-207
 		# ================================================================
@@ -1003,7 +1002,6 @@ class WanImageToVideoAdvancedSampler:
 				new_height = large_image_side
 				new_width = int(large_image_side * aspect_ratio)
 			
-			
 			tmp_width, tmp_height, = wan_max_resolution.run(wan_model_size, image)
 
 			wan_large_side = max(tmp_width, tmp_height)
@@ -1017,7 +1015,7 @@ class WanImageToVideoAdvancedSampler:
 			tmp_image_tensor = torch.ones((1, image_height // 8, image_width // 8, 3)) * 0.5
 			image_width, image_height = tmp_image_tensor.shape[2] * 8, tmp_image_tensor.shape[1] * 8
 
-			image, _, _, _ = resizer.resize(image, image_width, image_width, "resize", "lanczos", 8, "0, 0, 0", "center", None, "cpu", None)
+			image, _, _, _ = resizer.resize(image, image_width, image_height, "resize", "lanczos", 8, "0, 0, 0", "center", None, "cpu", None)
 			
 			output_to_terminal_successful(f"Temp Tensor shape: {tmp_image_tensor.shape}")
 
