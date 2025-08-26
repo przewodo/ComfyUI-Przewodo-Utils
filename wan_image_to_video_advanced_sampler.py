@@ -1996,46 +1996,45 @@ class WanImageToVideoAdvancedSampler:
 		# Get overlap data from buffer
 		overlap_frames_data = frame_buffer.get_overlap_frames()
 		
-		# Create full image tensor for the entire chunk
-		image_tensor = torch.ones((chunk_length, height, width, 3)) * 0.5
-		
-		# Encode first to get proper latent dimensions
-		temp_latent = vae.encode(image_tensor[:1, :, :, :3])  # Encode just one frame to get dimensions
-		
-		# Scale the latent spatial dimensions to target size
-		# Handle 5D tensor (batch, channels, frames, height, width) or 4D tensor (batch, channels, height, width)
-		if len(temp_latent.shape) == 5:
-			# 5D tensor: (batch, channels, frames, height, width)
-			temp_latent = torch.nn.functional.interpolate(
-				temp_latent, 
-				size=(temp_latent.shape[2], height // 8, width // 8),  # (frames, height, width)
-				mode='trilinear', 
-				align_corners=False
-			)
+		# Determine actual image dimensions from available data
+		# Use overlap_frames_data dimensions if available (authoritative source)
+		# Otherwise fall back to provided width/height parameters
+		if overlap_frames_data is not None:
+			actual_height = overlap_frames_data.shape[1]
+			actual_width = overlap_frames_data.shape[2] 
+			device = overlap_frames_data.device
 		else:
-			# 4D tensor: (batch, channels, height, width)
-			temp_latent = torch.nn.functional.interpolate(
-				temp_latent, 
-				size=(height // 8, width // 8), 
-				mode='bilinear', 
-				align_corners=False
-			)
-
-		latent_h, latent_w = temp_latent.shape[3], temp_latent.shape[4]
-		device = temp_latent.device  # Get device from VAE output
+			actual_height = height
+			actual_width = width
+			device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		
-		# Create mask with proper latent spatial dimensions and device
-		mask = torch.ones((1, 1, chunk_length, latent_h, latent_w), device=device)
+		# Create full image tensor for the entire chunk with actual dimensions
+		image_tensor = torch.ones((chunk_length, actual_height, actual_width, 3), device=device) * 0.5
+		# Create initial conditioning mask in image temporal space
+		# We'll adjust this to latent space after VAE encoding
+		image_space_mask = torch.ones((chunk_length,), device=device)
 		
 		if overlap_frames_data is not None:
 			# Use MORE overlap frames for stronger continuity
 			extended_overlap = min(overlap_frames * 2, overlap_frames_data.shape[0], chunk_length)
 			
-			# Place overlap frames at the beginning with extended coverage
-			image_tensor[:extended_overlap] = overlap_frames_data[-extended_overlap:]
+			# Ensure tensor dimensions match before assignment
+			if (overlap_frames_data.shape[1] == actual_height and 
+				overlap_frames_data.shape[2] == actual_width):
+				# Place overlap frames at the beginning with extended coverage
+				image_tensor[:extended_overlap] = overlap_frames_data[-extended_overlap:]
+			else:
+				# Handle dimension mismatch by resizing overlap frames
+				resized_overlap = torch.nn.functional.interpolate(
+					overlap_frames_data[-extended_overlap:].permute(0, 3, 1, 2),  # BHWC -> BCHW
+					size=(actual_height, actual_width),
+					mode='bilinear',
+					align_corners=False
+				).permute(0, 2, 3, 1)  # BCHW -> BHWC
+				image_tensor[:extended_overlap] = resized_overlap
 			
 			# Create STRONGER conditioning mask
-			mask[:, :, :extended_overlap] = 0.0  # Force use of overlap frames
+			image_space_mask[:extended_overlap] = 0.0  # Force use of overlap frames
 			
 			# Create gradual transition zone for smoother blending
 			transition_frames = min(8, chunk_length - extended_overlap)
@@ -2044,17 +2043,32 @@ class WanImageToVideoAdvancedSampler:
 				if frame_idx < chunk_length:
 					# Gradual transition from strict to free
 					alpha = i / transition_frames
-					mask[:, :, frame_idx] = alpha * 0.5  # Partial conditioning
+					image_space_mask[frame_idx] = alpha * 0.5  # Partial conditioning
 					
 					# Use motion prediction for transition frames
 					if use_motion_prediction:
 						motion_pred = frame_buffer.get_motion_prediction()
 						if motion_pred is not None:
 							decay_factor = 0.9 ** i
-							base_frame = overlap_frames_data[-1]
-							predicted_frame = torch.clamp(
-								base_frame + motion_pred * decay_factor, 0.0, 1.0
-							)
+							base_frame = overlap_frames_data[-1] if overlap_frames_data.shape[1] == actual_height else resized_overlap[-1]
+							
+							# Ensure motion prediction has compatible dimensions
+							if motion_pred.shape[0] == actual_height and motion_pred.shape[1] == actual_width:
+								predicted_frame = torch.clamp(
+									base_frame + motion_pred * decay_factor, 0.0, 1.0
+								)
+							else:
+								# Resize motion prediction if needed
+								motion_pred_resized = torch.nn.functional.interpolate(
+									motion_pred.unsqueeze(0).permute(0, 3, 1, 2),  # HWC -> BCHW
+									size=(actual_height, actual_width),
+									mode='bilinear',
+									align_corners=False
+								).squeeze(0).permute(1, 2, 0)  # BCHW -> HWC
+								predicted_frame = torch.clamp(
+									base_frame + motion_pred_resized * decay_factor, 0.0, 1.0
+								)
+							
 							# Blend with existing content
 							image_tensor[frame_idx] = (
 								image_tensor[frame_idx] * alpha + 
@@ -2063,62 +2077,79 @@ class WanImageToVideoAdvancedSampler:
 		
 		# Handle start image override (should be last to take priority)
 		if start_image is not None:
-			image_tensor[0:1] = start_image
-			mask[:, :, 0:1] = 0.0
+			# Ensure start image has compatible dimensions
+			if (start_image.shape[1] == actual_height and 
+				start_image.shape[2] == actual_width):
+				image_tensor[0:1] = start_image
+			else:
+				# Resize start image if needed
+				resized_start = torch.nn.functional.interpolate(
+					start_image.permute(0, 3, 1, 2),  # BHWC -> BCHW
+					size=(actual_height, actual_width),
+					mode='bilinear',
+					align_corners=False
+				).permute(0, 2, 3, 1)  # BCHW -> BHWC
+				image_tensor[0:1] = resized_start
+			
+			image_space_mask[0:1] = 0.0
 		
 		# Apply feature matching for better visual continuity
 		if overlap_frames_data is not None and overlap_frames_data.shape[0] > 4:
 			# Extract visual features from last overlap frame
-			reference_frame = overlap_frames_data[-1]
+			if overlap_frames_data.shape[1] == actual_height:
+				reference_frame = overlap_frames_data[-1]
+			else:
+				# Use resized overlap frame as reference
+				reference_frame = torch.nn.functional.interpolate(
+					overlap_frames_data[-1:].permute(0, 3, 1, 2),  # BHWC -> BCHW
+					size=(actual_height, actual_width),
+					mode='bilinear',
+					align_corners=False
+				).squeeze(0).permute(1, 2, 0)  # BCHW -> HWC
 			
 			# Get style features from buffer if available
 			style_features = frame_buffer.get_style_features()
 			color_stats = frame_buffer.get_color_stats()
 			
 			# Apply color and luminance matching to free generation area
+			extended_overlap = min(overlap_frames * 2, overlap_frames_data.shape[0], chunk_length)
 			image_tensor = self.apply_color_consistency(
 				image_tensor, reference_frame, extended_overlap, style_features, color_stats
 			)
 		
-		# Encode entire image sequence to latent
+		# Now encode entire image sequence to latent using actual dimensions
 		input_clip_latent = vae.encode(image_tensor[:, :, :, :3])
 		
-		# Scale the latent spatial dimensions to target size
-		# Handle 5D tensor (batch, channels, frames, height, width) or 4D tensor (batch, channels, height, width)
+		# Get actual latent dimensions from VAE output
 		if len(input_clip_latent.shape) == 5:
 			# 5D tensor: (batch, channels, frames, height, width)
-			input_clip_latent = torch.nn.functional.interpolate(
-				input_clip_latent, 
-				size=(input_clip_latent.shape[2], height // 8, width // 8),  # (frames, height, width)
-				mode='trilinear', 
-				align_corners=False
-			)
+			latent_frames, latent_h, latent_w = input_clip_latent.shape[2], input_clip_latent.shape[3], input_clip_latent.shape[4]
 		else:
-			# 4D tensor: (batch, channels, height, width)
-			input_clip_latent = torch.nn.functional.interpolate(
-				input_clip_latent, 
-				size=(height // 8, width // 8), 
-				mode='bilinear', 
-				align_corners=False
-			)
+			# 4D tensor: (batch, channels, height, width) - treat as single frame
+			latent_frames, latent_h, latent_w = 1, input_clip_latent.shape[2], input_clip_latent.shape[3]
 		
-		# Ensure mask matches latent temporal dimension (VAE compresses by 4x)
-		latent_frames = input_clip_latent.shape[2]
+		# Create final mask in latent space based on actual VAE output dimensions
+		mask = torch.ones((1, 1, latent_frames, latent_h, latent_w), device=device)
 		
-		if mask.shape[2] != latent_frames:
-			# Use simple indexing/repetition instead of interpolate for temporal adjustment
-			if mask.shape[2] > latent_frames:
-				# Downsample: take every 4th frame approximately
-				indices = torch.linspace(0, mask.shape[2] - 1, latent_frames).long()
-				mask = mask[:, :, indices, :, :]
-			else:
-				# Upsample: repeat frames
-				repeat_factor = latent_frames // mask.shape[2]
-				remainder = latent_frames % mask.shape[2]
-				mask_repeated = mask.repeat(1, 1, repeat_factor, 1, 1)
-				if remainder > 0:
-					mask_extra = mask[:, :, :remainder, :, :]
-					mask = torch.cat([mask_repeated, mask_extra], dim=2)
+		# Map image space mask to latent space mask
+		if latent_frames == chunk_length:
+			# No temporal compression - direct mapping
+			for i in range(latent_frames):
+				mask[:, :, i, :, :] = image_space_mask[i]
+		elif latent_frames < chunk_length:
+			# Temporal compression occurred - map compressed frames
+			compression_ratio = chunk_length / latent_frames
+			for i in range(latent_frames):
+				# Find corresponding image space frame
+				image_frame_idx = int(i * compression_ratio)
+				if image_frame_idx < len(image_space_mask):
+					mask[:, :, i, :, :] = image_space_mask[image_frame_idx]
+		else:
+			# Temporal expansion (unlikely but handle it)
+			expansion_ratio = latent_frames / chunk_length
+			for i in range(latent_frames):
+				image_frame_idx = min(int(i / expansion_ratio), len(image_space_mask) - 1)
+				mask[:, :, i, :, :] = image_space_mask[image_frame_idx]
 		
 		return input_clip_latent, mask
 	
