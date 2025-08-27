@@ -557,8 +557,9 @@ class WanImageToVideoAdvancedSampler:
 				chunk_frames,
 				frame_buffer,
 				frames_overlap_chunks + 1,
-				use_motion_prediction=True,
-				start_image=start_image if chunk_index == 0 else None
+				True,
+				(start_image if chunk_index == 0 else None),
+				chunk_index
 			)
 			'''
 			End creating the latent, mask, and image tensors
@@ -1986,7 +1987,7 @@ class WanImageToVideoAdvancedSampler:
 		mm.unload_all_models()
 		mm.soft_empty_cache()
 						
-	def create_buffer_managed_conditioning(self, vae, image_width, image_height, chunk_frames, frame_buffer, overlap_frames=16, use_motion_prediction=True, start_image=None):
+	def create_buffer_managed_conditioning(self, vae, image_width, image_height, chunk_frames, frame_buffer, overlap_frames, use_motion_prediction, start_image, chunk_index):
 		"""
 		Create conditioning using advanced buffer management with strong visual continuity
 		"""
