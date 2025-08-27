@@ -413,7 +413,7 @@ class WanImageToVideoAdvancedSampler:
 
 		for chunk_index in range(total_video_chunks):
 			chunck_seconds = 5 if (remainder_video_seconds > 5) else remainder_video_seconds
-			chunk_frames = (chunck_seconds * 16) + 1 if (remainder_video_seconds > 5) else (remainder_video_seconds * 16) + 1 + (frames_overlap_chunks if (total_video_chunks > 2) else 0)
+			chunk_frames = (chunck_seconds * 16) + 1 if (remainder_video_seconds > 5) else (remainder_video_seconds * 16) + 1 + (frames_overlap_chunks if (total_video_chunks > 1) else 0)
 			remainder_video_seconds = remainder_video_seconds - 5
 
 			working_model_high = model_high.clone()
