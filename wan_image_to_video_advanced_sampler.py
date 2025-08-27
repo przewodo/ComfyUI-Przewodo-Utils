@@ -413,7 +413,7 @@ class WanImageToVideoAdvancedSampler:
 
 		for chunk_index in range(total_video_chunks):
 			chunck_seconds = 5 if (remainder_video_seconds > 5) else remainder_video_seconds
-			chunk_frames = (chunck_seconds * 16) + 1 + (frames_overlap_chunks if (remainder_video_seconds > 5) else 0)
+			chunk_frames = (chunck_seconds * 16) + 1 if (remainder_video_seconds > 5) else (remainder_video_seconds * 16) + 1 + (frames_overlap_chunks if (total_video_chunks > 2) else 0)
 			remainder_video_seconds = remainder_video_seconds - 5
 
 			working_model_high = model_high.clone()
@@ -549,11 +549,8 @@ class WanImageToVideoAdvancedSampler:
 			else:
 				keep_frames = chunk_frames - frames_overlap_chunks - 1
 
-			input_latent = {}
-			input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8])
-
 			# Create conditioning with buffer management
-			input_clip_latent, input_mask = self.create_buffer_managed_conditioning(
+			input_latent, input_clip_latent, input_mask = self.create_buffer_managed_conditioning(
 				vae,
 				image_width,
 				image_height,
@@ -1989,10 +1986,13 @@ class WanImageToVideoAdvancedSampler:
 		mm.unload_all_models()
 		mm.soft_empty_cache()
 						
-	def create_buffer_managed_conditioning(self, vae, width, height, chunk_length, frame_buffer, overlap_frames=16, use_motion_prediction=True, start_image=None):
+	def create_buffer_managed_conditioning(self, vae, image_width, image_height, chunk_frames, frame_buffer, overlap_frames=16, use_motion_prediction=True, start_image=None):
 		"""
 		Create conditioning using advanced buffer management with strong visual continuity
 		"""
+		input_latent = {}
+		input_latent["samples"] = torch.zeros([1, 16, ((chunk_frames - 1) // 4) + 1, image_height // 8, image_width // 8])
+
 		# Get overlap data from buffer
 		overlap_frames_data = frame_buffer.get_overlap_frames()
 		
@@ -2004,20 +2004,20 @@ class WanImageToVideoAdvancedSampler:
 			actual_width = overlap_frames_data.shape[2] 
 			device = overlap_frames_data.device
 		else:
-			actual_height = height
-			actual_width = width
+			actual_height = image_height
+			actual_width = image_width
 			device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 		
 		# Create full image tensor for the entire chunk with actual dimensions
-		image_tensor = torch.ones((chunk_length, actual_height, actual_width, 3), device=device) * 0.5
+		image_tensor = torch.ones((chunk_frames, actual_height, actual_width, 3), device=device) * 0.5
 		# Create initial conditioning mask in image temporal space
 		# We'll adjust this to latent space after VAE encoding
-		image_space_mask = torch.ones((chunk_length,), device=device)
-		
+		image_space_mask = torch.ones((chunk_frames,), device=device)
+
 		if overlap_frames_data is not None:
 			# Use MORE overlap frames for stronger continuity
-			extended_overlap = min(overlap_frames * 2, overlap_frames_data.shape[0], chunk_length)
-			
+			extended_overlap = min(overlap_frames * 2, overlap_frames_data.shape[0], chunk_frames)
+
 			# Ensure tensor dimensions match before assignment
 			if (overlap_frames_data.shape[1] == actual_height and 
 				overlap_frames_data.shape[2] == actual_width):
@@ -2037,10 +2037,10 @@ class WanImageToVideoAdvancedSampler:
 			image_space_mask[:extended_overlap] = 0.0  # Force use of overlap frames
 			
 			# Create gradual transition zone for smoother blending
-			transition_frames = min(8, chunk_length - extended_overlap)
+			transition_frames = min(8, chunk_frames - extended_overlap)
 			for i in range(transition_frames):
 				frame_idx = extended_overlap + i
-				if frame_idx < chunk_length:
+				if frame_idx < chunk_frames:
 					# Gradual transition from strict to free
 					alpha = i / transition_frames
 					image_space_mask[frame_idx] = alpha * 0.5  # Partial conditioning
@@ -2111,12 +2111,6 @@ class WanImageToVideoAdvancedSampler:
 			style_features = frame_buffer.get_style_features()
 			color_stats = frame_buffer.get_color_stats()
 			
-			# Apply color and luminance matching to free generation area
-			extended_overlap = min(overlap_frames * 2, overlap_frames_data.shape[0], chunk_length)
-			image_tensor = self.apply_color_consistency(
-				image_tensor, reference_frame, extended_overlap, style_features, color_stats
-			)
-		
 		# Now encode entire image sequence to latent using actual dimensions
 		input_clip_latent = vae.encode(image_tensor[:, :, :, :3])
 		
@@ -2132,13 +2126,13 @@ class WanImageToVideoAdvancedSampler:
 		mask = torch.ones((1, 1, latent_frames, latent_h, latent_w), device=device)
 		
 		# Map image space mask to latent space mask
-		if latent_frames == chunk_length:
+		if latent_frames == chunk_frames:
 			# No temporal compression - direct mapping
 			for i in range(latent_frames):
 				mask[:, :, i, :, :] = image_space_mask[i]
-		elif latent_frames < chunk_length:
+		elif latent_frames < chunk_frames:
 			# Temporal compression occurred - map compressed frames
-			compression_ratio = chunk_length / latent_frames
+			compression_ratio = chunk_frames / latent_frames
 			for i in range(latent_frames):
 				# Find corresponding image space frame
 				image_frame_idx = int(i * compression_ratio)
@@ -2146,58 +2140,9 @@ class WanImageToVideoAdvancedSampler:
 					mask[:, :, i, :, :] = image_space_mask[image_frame_idx]
 		else:
 			# Temporal expansion (unlikely but handle it)
-			expansion_ratio = latent_frames / chunk_length
+			expansion_ratio = latent_frames / chunk_frames
 			for i in range(latent_frames):
 				image_frame_idx = min(int(i / expansion_ratio), len(image_space_mask) - 1)
 				mask[:, :, i, :, :] = image_space_mask[image_frame_idx]
 		
-		return input_clip_latent, mask
-	
-	def apply_color_consistency(self, image_tensor, reference_frame, transition_start, style_features=None, color_stats=None):
-		"""
-		Apply enhanced color and style consistency to maintain visual continuity
-		"""
-		# Use style features if available, otherwise extract from reference
-		if style_features is not None and color_stats is not None:
-			ref_mean = color_stats['mean']
-			ref_std = color_stats['std']
-			luma_target = style_features.get('luma_mean', 0.5)
-		else:
-			# Fallback to reference frame
-			ref_mean = reference_frame.mean(dim=[0, 1], keepdim=True)
-			ref_std = reference_frame.std(dim=[0, 1], keepdim=True)
-			ref_luma = (reference_frame[:, :, 0] * 0.299 + 
-					   reference_frame[:, :, 1] * 0.587 + 
-					   reference_frame[:, :, 2] * 0.114)
-			luma_target = ref_luma.mean()
-		
-		# Apply enhanced color matching to transition and free frames
-		for i in range(transition_start, image_tensor.shape[0]):
-			frame = image_tensor[i]
-			frame_mean = frame.mean(dim=[0, 1], keepdim=True)
-			frame_std = frame.std(dim=[0, 1], keepdim=True)
-			
-			# Stronger color transfer with slower decay for better consistency
-			decay = 0.85 ** (i - transition_start)  # Slower decay
-			target_mean = ref_mean * decay + frame_mean * (1 - decay)
-			target_std = ref_std * decay + frame_std * (1 - decay)
-			
-			# Apply color transfer
-			normalized = (frame - frame_mean) / (frame_std + 1e-8)
-			image_tensor[i] = normalized * target_std + target_mean
-			
-			# Apply luminance consistency
-			if style_features is not None:
-				frame_luma = (image_tensor[i][:, :, 0] * 0.299 + 
-							 image_tensor[i][:, :, 1] * 0.587 + 
-							 image_tensor[i][:, :, 2] * 0.114)
-				current_luma = frame_luma.mean()
-				luma_diff = luma_target - current_luma
-				luma_adjustment = luma_diff * decay * 0.3  # Gentle luminance adjustment
-				
-				# Apply luminance correction
-				image_tensor[i] = image_tensor[i] + luma_adjustment
-			
-			image_tensor[i] = torch.clamp(image_tensor[i], 0.0, 1.0)
-		
-		return image_tensor
+		return input_latent, input_clip_latent, mask
