@@ -28,3 +28,7 @@ class SwapAnyCondition:
             return (input_b, input_a,)
         else:
             return (input_a, input_b,)
+            
+    @classmethod
+    def IS_CHANGED(cls, input_a=None, input_b=None, invert_values=True):
+        return (repr(input_a), repr(input_b), invert_values)

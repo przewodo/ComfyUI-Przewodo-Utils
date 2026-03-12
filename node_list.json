@@ -6,6 +6,7 @@
     "przewodo SwapAnyCondition",
     "przewodo SwapAnyComparison",
     "przewodo SwapImageComparison",
+    "przewodo SendFirstValidValue",
     "przewodo WanFirstLastFirstFrameToVideo",
     "przewodo WanImageToVideoAdvancedSampler",
     "przewodo IsInputDisabled",

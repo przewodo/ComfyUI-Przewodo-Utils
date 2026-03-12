@@ -1,6 +1,7 @@
 import math
 import sys
 import os
+import random
 from .core import any_type
 
 class HasInputvalue:
@@ -23,3 +24,7 @@ class HasInputvalue:
             return (False,)
         
         return (True,)
+        
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return (random.getrandbits(64))

@@ -5,6 +5,7 @@ try:
     from .swap_any_condition import *
     from .swap_any_comparison import *
     from .swap_image_comparison import *
+    from .send_first_valid_value import *
     from .wan_get_max_image_resolution_by_aspect_ratio import *
     from .wan_first_last_first_frame_to_video import *
     from .wan_image_to_video_advanced_sampler import *
@@ -19,7 +20,7 @@ try:
     from .wan_video_generation_mode_selector import *
     from .wan_video_vae_decode import *
     from .wan_video_lora_stack import *
-    from .wan_prompt_chunck_stacker import *
+    from .wan_prompt_chunck_stacker import *    
     
 except ImportError:
     output_to_terminal_error("Failed to load Essential nodes")
@@ -33,6 +34,7 @@ NODE_CLASS_MAPPINGS = {
     "przewodo SwapAnyCondition": SwapAnyCondition,
     "przewodo SwapAnyComparison": SwapAnyComparison,
     "przewodo SwapImageComparison": SwapImageComparison,
+    "przewodo SendFirstValidValue": SendFirstValidValue,    
     "przewodo WanFirstLastFirstFrameToVideo": WanFirstLastFirstFrameToVideo,
     "przewodo WanImageToVideoAdvancedSampler": WanImageToVideoAdvancedSampler,
     "przewodo IsInputDisabled": IsInputDisabled,
@@ -57,6 +59,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "przewodo SwapAnyCondition": "Swap any Two values in a condition",
     "przewodo SwapAnyComparison": "Swap any Two values in a comparison",
     "przewodo SwapImageComparison": "Swap Two Images in a comparison",
+    "przewodo SendFirstValidValue": "Send the first valid value from input to the output",    
     "przewodo WanFirstLastFirstFrameToVideo": "WanFirstLastFirstFrameToVideo",
     "przewodo WanImageToVideoAdvancedSampler": "WanImageToVideoAdvancedSampler",    
     "przewodo IsInputDisabled": "IsInputDisabled",
