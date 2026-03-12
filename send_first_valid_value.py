@@ -13,35 +13,30 @@ class SendFirstValidValue:
             "input_b": (any_type, {"default": None }),
             "input_c": (any_type, {"default": None }),
             "input_d": (any_type, {"default": None }),
-            "tick_in": ("INT", {"default": 0}),
         }
         
         return {"optional": optional }
 
-    RETURN_TYPES = (any_type, "INT", "STRING")
-    RETURN_NAMES = ("output", "tick", "debug_text")
+    RETURN_TYPES = (any_type,)
+    RETURN_NAMES = ("output",)
     FUNCTION = "run"
     CATEGORY = "PrzewodoUtils"
     OUTPUT_NODE = True
 
-    def run(self, input_a = None, input_b = None, input_c = None, input_d = None, tick_in=0):
-        tick_out = tick_in + 1
-        debug_text = f"input_a={input_a} | input_b={input_b} | input_c={input_c} | input_d={input_d} | tick={tick_out}"
+    def run(self, input_a = None, input_b = None, input_c = None, input_d = None):
+        value = None
 
         if input_a is not None:
-            return (input_a, tick_out, debug_text,)
-
-        if input_b is not None:
-            return (input_b, tick_out, debug_text,)
-
-        if input_c is not None:
-            return (input_c, tick_out, debug_text,)
-
-        if input_d is not None:
-            return (input_d, tick_out, debug_text,)
+            value = input_a
+        elif input_b is not None:
+            value = input_b
+        elif input_c is not None:
+            value = input_c
+        elif input_d is not None:
+            value = input_d
         
-        return (None, tick_out, debug_text,)
+        return (value,)
 
     @classmethod
-    def IS_CHANGED(cls, input_a=None, input_b=None, input_c=None, input_d=None, tick_out=0):
-        return (repr(input_a), repr(input_b), repr(input_c), repr(input_d), repr(tick_out))
+    def IS_CHANGED(cls, input_a=None, input_b=None, input_c=None, input_d=None):
+        return (repr(input_a), repr(input_b), repr(input_c), repr(input_d))
