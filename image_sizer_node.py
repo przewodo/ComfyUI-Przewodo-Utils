@@ -62,9 +62,9 @@ class ImageSizer:
             FLUX_KONTEXT: 1024 * 1024,
             FLUX_1D: 1536 * 1536,
             QWEN_IMAGE: 3584 * 3584,
-            LTX2_480P: 854 * 480,
-            LTX2_720P: 1280 * 720,
-            LTX2_1080P: 1920 * 1080
+            LTX2_480P: 854 * 854,
+            LTX2_720P: 1280 * 1280,
+            LTX2_1080P: 1920 * 1920
         }
         
         # Calculate the number of total pixels based on model type
@@ -78,23 +78,41 @@ class ImageSizer:
         width = math.sqrt(pixels * aspect_ratio_decimal)
         height = pixels / width
         
-        # Step 3: If model type is QWEN_IMAGE, ensure dimensions are divisible by 28
+        # QWEN_IMAGE: dimensions divisible by 28
         if model_type == QWEN_IMAGE:
-            # Make sure both width and height are divisible by 28 while maintaining proportions
             final_width = int(round(width))
             final_height = int(round(height))
-            
-            # Round to nearest multiple of 28
             final_width = round(final_width / 28) * 28
             final_height = round(final_height / 28) * 28
-            
-            # Ensure we don't get zero dimensions
             if final_width == 0:
                 final_width = 28
             if final_height == 0:
                 final_height = 28
-                
             return (final_width, final_height)
-        
-        # Return the width and height as a tuple of integers for other model types
+
+        # LTX2 models: set smaller side to base, calculate larger side
+        ltx2_bases = {
+            LTX2_480P: 480,
+            LTX2_720P: 720,
+            LTX2_1080P: 1080
+        }
+        if model_type in ltx2_bases:
+            base = ltx2_bases[model_type]
+            if aspect_ratio_width == aspect_ratio_height:
+                final_width = final_height = base
+            elif aspect_ratio_width > aspect_ratio_height:
+                final_height = base
+                final_width = int(round(base * (aspect_ratio_width / aspect_ratio_height)))
+                # Ensure largest side is divisible by 2
+                if final_width % 2 != 0:
+                    final_width += 1
+            else:
+                final_width = base
+                final_height = int(round(base * (aspect_ratio_height / aspect_ratio_width)))
+                # Ensure largest side is divisible by 2
+                if final_height % 2 != 0:
+                    final_height += 1
+            return (final_width, final_height)
+
+        # Other model types: default calculation
         return (int(round(width)), int(round(height)))
