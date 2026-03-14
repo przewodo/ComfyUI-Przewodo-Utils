@@ -62,9 +62,9 @@ class ImageSizer:
             FLUX_KONTEXT: 1024 * 1024,
             FLUX_1D: 1536 * 1536,
             QWEN_IMAGE: 3584 * 3584,
-            LTX2_480P: 854 * 854,
-            LTX2_720P: 1280 * 1280,
-            LTX2_1080P: 1920 * 1920
+            LTX2_480P: 854 * 480,
+            LTX2_720P: 1280 * 720,
+            LTX2_1080P: 1920 * 1080
         }
         
         # Calculate the number of total pixels based on model type

@@ -20,7 +20,8 @@ try:
     from .wan_video_generation_mode_selector import *
     from .wan_video_vae_decode import *
     from .wan_video_lora_stack import *
-    from .wan_prompt_chunck_stacker import *    
+    from .wan_prompt_chunck_stacker import *
+    from .ltx_key_frame_indexes import *
     
 except ImportError:
     output_to_terminal_error("Failed to load Essential nodes")
@@ -35,6 +36,7 @@ NODE_CLASS_MAPPINGS = {
     "przewodo SwapAnyComparison": SwapAnyComparison,
     "przewodo SwapImageComparison": SwapImageComparison,
     "przewodo SendFirstValidValue": SendFirstValidValue,    
+    "przewodo LtxKeyFrameIndexes": LtxKeyFrameIndexes,
     "przewodo WanFirstLastFirstFrameToVideo": WanFirstLastFirstFrameToVideo,
     "przewodo WanImageToVideoAdvancedSampler": WanImageToVideoAdvancedSampler,
     "przewodo IsInputDisabled": IsInputDisabled,
@@ -60,6 +62,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "przewodo SwapAnyComparison": "Swap any Two values in a comparison",
     "przewodo SwapImageComparison": "Swap Two Images in a comparison",
     "przewodo SendFirstValidValue": "Send the first valid value from input to the output",    
+    "przewodo LtxKeyFrameIndexes": "LTX-2 Key Frame Indexes",
     "przewodo WanFirstLastFirstFrameToVideo": "WanFirstLastFirstFrameToVideo",
     "przewodo WanImageToVideoAdvancedSampler": "WanImageToVideoAdvancedSampler",    
     "przewodo IsInputDisabled": "IsInputDisabled",
