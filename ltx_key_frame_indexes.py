@@ -33,4 +33,5 @@ class LtxKeyFrameIndexes:
             indexes_list = [i * step for i in range(num_images - 1)]
             indexes_list.append(calc_frames)
             indexes = ", ".join(str(idx) for idx in indexes_list)
+            
         return (indexes,)
