@@ -9,7 +9,7 @@ class ImageSizer:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model_type": ([SD, SDXL, WAN_480P, WAN_720P, FLUX_KONTEXT, FLUX_1D, QWEN_IMAGE], {"tooltip": "Model type that determines the base resolution and total pixel count. Each model has optimized dimensions: SD (512x512), SDXL (1024x1024), Video 480p (832x480), Video 720p (1280x720), Flux Kontext (1024x1024), Flux 1D (1536x1536)."}),
+                "model_type": ([SD, SDXL, WAN_480P, WAN_720P, FLUX_KONTEXT, FLUX_1D, QWEN_IMAGE, LTX2_480P, LTX2_720P, LTX2_1080P], {"tooltip": "Model type that determines the base resolution and total pixel count. Each model has optimized dimensions: SD (512x512), SDXL (1024x1024), Video 480p (832x480), Video 720p (1280x720), Flux Kontext (1024x1024), Flux 1D (1536x1536)."}),
                 "aspect_ratio_width": ("INT",{
                     "default": 1,
                     "step":1,
@@ -61,7 +61,10 @@ class ImageSizer:
             WAN_720P: 1280 * 720,
             FLUX_KONTEXT: 1024 * 1024,
             FLUX_1D: 1536 * 1536,
-            QWEN_IMAGE: 3584 * 3584
+            QWEN_IMAGE: 3584 * 3584,
+            LTX2_480P: 854 * 854,
+            LTX2_720P: 1280 * 1280,
+            LTX2_1080P: 1920 * 1920
         }
         
         # Calculate the number of total pixels based on model type
