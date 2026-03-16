@@ -32,8 +32,8 @@ class TimeToFrames:
             }
         }
 
-    RETURN_TYPES = ("INT", "INT")
-    RETURN_NAMES = ("total_frames", "total_interpolated_frames")
+    RETURN_TYPES = ("INT", "INT", "FLOAT")
+    RETURN_NAMES = ("total_frames", "total_interpolated_frames", "interpolated_framerate")
 
     FUNCTION = "run"
 
@@ -44,4 +44,4 @@ class TimeToFrames:
         total_frames = int(seconds * framerate) + 1
         
         # Return using ComfyUI's UI result pattern with dimensions for JavaScript extension
-        return (total_frames, int(total_frames * interpolation_scale))
+        return (total_frames, int(total_frames * interpolation_scale), framerate * interpolation_scale)
