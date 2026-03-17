@@ -21,7 +21,7 @@ class TimeToFrames:
                     "display": "number",
                     "tooltip": "Scale factor for interpolation."
                 }),
-                "framerate": ("FLOAT", {
+                "framerate": ("INT", {
                     "default": 24,
                     "min": 16,
                     "max": 90,
@@ -32,8 +32,8 @@ class TimeToFrames:
             }
         }
 
-    RETURN_TYPES = ("INT", "INT", "FLOAT", "FLOAT")
-    RETURN_NAMES = ("total_frames", "total_interpolated_frames", "Framerate", "interpolated_framerate")
+    RETURN_TYPES = ("INT", "INT", "INT", "INT", "INT")
+    RETURN_NAMES = ("Total Frames", "Total Interpolated Frames", "Framerate", "Interpolated Framerate", "Interpolation Scale")
 
     FUNCTION = "run"
 
@@ -44,4 +44,4 @@ class TimeToFrames:
         total_frames = int(seconds * framerate) + 1
         
         # Return using ComfyUI's UI result pattern with dimensions for JavaScript extension
-        return (total_frames, int(total_frames * interpolation_scale), framerate, framerate * interpolation_scale)
+        return (total_frames, int(total_frames * interpolation_scale), framerate, framerate * interpolation_scale, interpolation_scale)
