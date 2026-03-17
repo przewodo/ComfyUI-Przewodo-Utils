@@ -22,10 +22,10 @@ class TimeToFrames:
                     "tooltip": "Scale factor for interpolation."
                 }),
                 "framerate": ("FLOAT", {
-                    "default": 1.0,
-                    "min": 0.01,
-                    "max": 1.0,
-                    "step": 0.01,
+                    "default": 24,
+                    "min": 16,
+                    "max": 90,
+                    "step": 1,
                     "display": "number",
                     "tooltip": "The frame rate at which to calculate frames."
                 })
