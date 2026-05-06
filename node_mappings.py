@@ -23,6 +23,7 @@ try:
     from .wan_prompt_chunck_stacker import *
     from .ltx_key_frame_indexes import *
     from .time_to_frames import *
+    from .ltx_vae_drift_fix import *
     
 except ImportError:
     output_to_terminal_error("Failed to load Essential nodes")
@@ -53,6 +54,7 @@ NODE_CLASS_MAPPINGS = {
     "przewodo WanVideoVaeDecode": WanVideoVaeDecode,
     "przewodo WanVideoLoraStack": WanVideoLoraStack,
     "przewodo WanPromptChunkStacker": WanPromptChunkStacker,
+    "przewodo LTXVAEDriftFix": LTXVAEDriftFix,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -80,4 +82,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "przewodo WanVideoVaeDecode": "WanVideoVaeDecode",
     "przewodo WanVideoLoraStack": "WanVideoLoraStack",
     "przewodo WanPromptChunkStacker": "WanPromptChunkStacker",
-}
+    "przewodo LTXVAEDriftFix": "LTX VAE Drift Fix",}
