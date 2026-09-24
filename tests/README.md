@@ -9,13 +9,8 @@ tests/
 ├── __init__.py                 # Test package initialization
 ├── conftest.py                 # Shared fixtures and configuration
 ├── unit/                       # Unit tests for individual components
-│   ├── test_wan_image_to_video_advanced_sampler.py
 │   ├── test_cache_manager.py
 │   └── test_utility_nodes.py
-├── integration/                # Integration tests
-│   └── test_wan_integration.py
-├── workflows/                  # End-to-end workflow tests
-│   └── test_complete_workflows.py
 └── fixtures/                   # Test data and utilities
     └── test_fixtures.py
 ```
@@ -61,9 +56,6 @@ python run_tests.py all --slow
 ```bash
 # Run all tests
 pytest tests/
-
-# Run specific test file
-pytest tests/unit/test_wan_image_to_video_advanced_sampler.py
 
 # Run with specific markers
 pytest -m "unit and not gpu"

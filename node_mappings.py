@@ -7,8 +7,6 @@ try:
     from .swap_image_comparison import *
     from .send_first_valid_value import *
     from .wan_get_max_image_resolution_by_aspect_ratio import *
-    from .wan_first_last_first_frame_to_video import *
-    from .wan_image_to_video_advanced_sampler import *
     from .is_input_disabled import *
     from .float_if_else import *
     from .has_input_value import *
@@ -20,7 +18,6 @@ try:
     from .wan_video_generation_mode_selector import *
     from .wan_video_vae_decode import *
     from .wan_video_lora_stack import *
-    from .wan_prompt_chunck_stacker import *
     from .ltx_key_frame_indexes import *
     from .time_to_frames import *
     from .ltx_vae_drift_fix import *
@@ -40,8 +37,6 @@ NODE_CLASS_MAPPINGS = {
     "przewodo SendFirstValidValue": SendFirstValidValue,    
     "przewodo LtxKeyFrameIndexes": LtxKeyFrameIndexes,
     "przewodo TimeToFrames": TimeToFrames,
-    "przewodo WanFirstLastFirstFrameToVideo": WanFirstLastFirstFrameToVideo,
-    "przewodo WanImageToVideoAdvancedSampler": WanImageToVideoAdvancedSampler,
     "przewodo IsInputDisabled": IsInputDisabled,
     "przewodo FloatIfElse": FloatIfElse,    
     "przewodo HasInputvalue": HasInputvalue,    
@@ -53,7 +48,6 @@ NODE_CLASS_MAPPINGS = {
     "przewodo WanVideoGenerationModeSelector": WanVideoGenerationModeSelector,
     "przewodo WanVideoVaeDecode": WanVideoVaeDecode,
     "przewodo WanVideoLoraStack": WanVideoLoraStack,
-    "przewodo WanPromptChunkStacker": WanPromptChunkStacker,
     "przewodo LTXVAEDriftFix": LTXVAEDriftFix,
 }
 
@@ -68,8 +62,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "przewodo SendFirstValidValue": "Send the first valid value from input to the output",    
     "przewodo LtxKeyFrameIndexes": "LTX-2 Key Frame Indexes",
     "przewodo TimeToFrames": "Time to Frames",
-    "przewodo WanFirstLastFirstFrameToVideo": "WanFirstLastFirstFrameToVideo",
-    "przewodo WanImageToVideoAdvancedSampler": "WanImageToVideoAdvancedSampler",    
     "przewodo IsInputDisabled": "IsInputDisabled",
     "przewodo FloatIfElse": "FloatIfElse",
     "przewodo HasInputvalue": "HasInputvalue",
@@ -81,5 +73,4 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "przewodo WanVideoGenerationModeSelector": "WanVideoGenerationModeSelector",
     "przewodo WanVideoVaeDecode": "WanVideoVaeDecode",
     "przewodo WanVideoLoraStack": "WanVideoLoraStack",
-    "przewodo WanPromptChunkStacker": "WanPromptChunkStacker",
     "przewodo LTXVAEDriftFix": "LTX VAE Drift Fix",}

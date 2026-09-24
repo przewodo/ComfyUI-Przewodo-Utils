@@ -7,8 +7,6 @@
     "przewodo SwapAnyComparison",
     "przewodo SwapImageComparison",
     "przewodo SendFirstValidValue",
-    "przewodo WanFirstLastFirstFrameToVideo",
-    "przewodo WanImageToVideoAdvancedSampler",
     "przewodo IsInputDisabled",
     "przewodo FloatIfElse",
     "przewodo HasInputvalue",
@@ -19,6 +17,5 @@
     "przewodo DebugLatentShapes",
     "przewodo WanVideoGenerationModeSelector",
     "przewodo WanVideoVaeDecode",
-    "przewodo WanVideoLoraStack",
-    "przewodo WanPromptChunkStacker"
+    "przewodo WanVideoLoraStack"
 ]

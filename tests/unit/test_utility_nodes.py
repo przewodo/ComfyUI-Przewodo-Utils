@@ -135,25 +135,3 @@ class TestWanUtilityNodes:
         except ImportError:
             pytest.skip("WanVideoGenerationModeSelector not available")
     
-    def test_wan_prompt_chunk_stacker(self):
-        """Test WanPromptChunkStacker node."""
-        try:
-            from wan_prompt_chunck_stacker import WanPromptChunckStacker
-            node = WanPromptChunckStacker()
-            
-            # Test INPUT_TYPES structure  
-            input_types = node.INPUT_TYPES()
-            assert "required" in input_types
-            
-            # Test basic stacking functionality
-            result = node.run(
-                positive="test positive",
-                negative="test negative", 
-                chunk_index_start=0,
-                lora_stack=None,
-                prompt_stack=None
-            )
-            assert isinstance(result, tuple)
-            assert len(result) == 1  # Should return a tuple with the prompt stack
-        except ImportError:
-            pytest.skip("WanPromptChunckStacker not available")

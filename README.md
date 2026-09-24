@@ -42,29 +42,6 @@ The **PrzewodoUtils/Wan** category contains specialized nodes for advanced video
 
 #### 🎬 Core Video Generation
 
-**WanImageToVideoAdvancedSampler**
-- **Purpose**: Advanced image-to-video generation with comprehensive quality preservation
-- **Key Features**:
-  - **Multi-Chunk Generation**: Generate videos longer than model limits by sequencing multiple chunks
-  - **Quality Preservation**: Advanced temporal coherence and latent space continuity between chunks
-  - **Dual Sampler Support**: High CFG + Low CFG sampling for superior quality
-  - **TeaCache Integration**: Accelerated inference with intelligent caching
-  - **SageAttention**: Optimized attention computation for memory efficiency
-  - **Skip Layer Guidance**: Enhanced generation quality through selective layer processing
-  - **TAESD Preview**: Fast latent space previews during generation
-  - **Model Support**: GGUF and Diffusion models with multiple weight types
-- **Quality Preservation Features**:
-  - Temporal overlap frames for smooth transitions
-  - Latent space blending between chunks
-  - Artifact reduction with gaussian blur
-  - Color matching for consistency
-  - Multi-frame averaging for continuity
-- **Advanced Options**:
-  - CausVid LoRA integration
-  - Block swap optimization
-  - Model shift for stability
-  - CFG Zero Star optimization
-
 #### 🔧 Video Processing & Enhancement
 
 **WanVideoEnhanceAVideo**
@@ -74,10 +51,6 @@ The **PrzewodoUtils/Wan** category contains specialized nodes for advanced video
 **WanVideoVaeDecode**
 - **Purpose**: Specialized VAE decoding for video latents
 - **Features**: Optimized for video sequences, memory efficient processing
-
-**WanFirstLastFirstFrameToVideo**
-- **Purpose**: Convert start/end frames to video sequences
-- **Features**: Intelligent frame interpolation, smooth transitions
 
 #### 🎯 Specialized Selectors & Utilities
 
@@ -98,10 +71,6 @@ The **PrzewodoUtils/Wan** category contains specialized nodes for advanced video
 **WanVideoLoraStack**
 - **Purpose**: Manage multiple LoRAs for video generation
 - **Features**: Stack management, strength control, selective application
-
-**WanPromptChunkStacker**
-- **Purpose**: Advanced prompt management for multi-chunk generation
-- **Features**: Chunk-specific prompts, automatic prompt cycling, LoRA integration per chunk
 
 ### PrzewodoUtils - General Utilities
 

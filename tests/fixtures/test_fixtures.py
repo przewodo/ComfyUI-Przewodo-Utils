@@ -33,55 +33,6 @@ def create_sample_prompt_stack():
         ("A beautiful landscape in autumn", "blurry, low quality", 2, None),
     ]
 
-def create_basic_workflow_json():
-    """Create a basic workflow JSON for testing."""
-    return {
-        "last_node_id": 3,
-        "last_link_id": 2,
-        "nodes": [
-            {
-                "id": 1,
-                "type": "WanImageToVideoAdvancedSampler",
-                "pos": [100, 100],
-                "size": {"0": 400, "1": 600},
-                "flags": {},
-                "order": 0,
-                "mode": 0,
-                "inputs": [
-                    {"name": "start_image", "type": "IMAGE", "link": 1}
-                ],
-                "outputs": [
-                    {"name": "IMAGE", "type": "IMAGE", "links": [2]},
-                    {"name": "FPS", "type": "FLOAT", "links": None}
-                ],
-                "properties": {
-                    "Node name for S&R": "WanImageToVideoAdvancedSampler"
-                },
-                "widgets_values": [
-                    "test_model.gguf",  # GGUF_High
-                    "None",             # GGUF_Low
-                    "A beautiful video", # positive
-                    "blurry",           # negative
-                    "test_clip.safetensors", # clip
-                    "wan",              # clip_type
-                    "auto",             # clip_device
-                    "test_vae.safetensors",  # vae
-                    True,               # use_tea_cache
-                    15,                 # total_steps
-                    42,                 # noise_seed
-                ]
-            }
-        ],
-        "links": [
-            [1, 0, 0, 1, 0, "IMAGE"],
-            [2, 1, 0, 2, 0, "IMAGE"]
-        ],
-        "groups": [],
-        "config": {},
-        "extra": {},
-        "version": 0.4
-    }
-
 def save_test_fixture(data, filename, fixtures_dir="tests/fixtures"):
     """Save test fixture data to file."""
     fixtures_path = Path(fixtures_dir)
@@ -149,13 +100,6 @@ if __name__ == "__main__":
     save_test_fixture(
         create_sample_prompt_stack(), 
         "sample_prompt_stack.json", 
-        fixtures_dir
-    )
-    
-    # Save sample workflow
-    save_test_fixture(
-        create_basic_workflow_json(), 
-        "basic_workflow.json", 
         fixtures_dir
     )
     
